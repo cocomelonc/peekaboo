@@ -41,7 +41,8 @@ class PeekabooEncryptor():
         for i in range(len(data)):
             current = data[i]
             current_key = key[i % len(key)]
-            output_str += chr(ord(current) ^ ord(current_key))
+            ordd = lambda x: x if isinstance(x, int) else ord(x)
+            output_str += chr(ordd(current) ^ ord(current_key))
 
         return output_str
 
