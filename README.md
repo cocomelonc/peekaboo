@@ -90,8 +90,9 @@ Tested on:
 ![virustotal](./screenshots/11.png?raw=true)
 
 ## TODO
-Compile injector in Kali linux
-Replace msfvenom shell to custom undetectable
+- [ ] Compile injector in Kali linux
+- [ ] Implement custom variations of `GetProcAddress` and `GetModuleHandle` functions 
+- [ ] Replace msfvenom shell to custom undetectable
 
 ## Attention
 This tool is a Proof of Concept and is for Educational Purposes Only!!! Author takes no responsibility of any damage you cause
