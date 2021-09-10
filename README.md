@@ -100,7 +100,7 @@ Tested on:
 1. Attacker machines: Kali linux 2020.1, Windows 10 x64
 2. Victim machine: Windows 7 x64, Windows 10 x64
 3. Payload: windows x64 reverse shell from msfvenom
-4. AV Engines: Kaspersky, Windows Defender, Norton Commander
+4. AV Engines: Kaspersky, Windows Defender, Norton Antivirus Plus
 
 # Virus Total result:
 02 september 2021
