@@ -111,6 +111,7 @@ Tested on:
 
 ## TODO
 - [x] Compile injector in Kali linux
+- [x] XOR + AES [aes branch](https://github.com/cocomelonc/peekaboo/tree/aes)
 - [ ] Implement custom variations of `GetProcAddress` and `GetModuleHandle` functions
 - [ ] Replace msfvenom shell to custom undetectable
 
