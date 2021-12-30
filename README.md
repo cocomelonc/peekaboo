@@ -124,6 +124,12 @@ Tested on:
 
 [https://www.virustotal.com/gui/file/c930b9aeab693d36c68e7bcf6353c7515b8fffc8f9a9233e49e90da49ab5d470/detection](https://www.virustotal.com/gui/file/c930b9aeab693d36c68e7bcf6353c7515b8fffc8f9a9233e49e90da49ab5d470/detection)
 
+30 december 2021 (NT API injector)    
+
+![virtustotal 2](./screenshots/16.png?raw=true)    
+
+[https://www.virustotal.com/gui/file/743f50e92c6ef48d6514e0ce2a255165f83afb1ae66deefd68dac50d80748e55/detection](https://www.virustotal.com/gui/file/743f50e92c6ef48d6514e0ce2a255165f83afb1ae66deefd68dac50d80748e55/detection)    
+
 ## TODO
 - [x] Compile injector in Kali linux
 - [x] XOR + AES [aes branch](https://github.com/cocomelonc/peekaboo/tree/aes)
