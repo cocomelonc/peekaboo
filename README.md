@@ -130,6 +130,14 @@ Tested on:
 
 [https://www.virustotal.com/gui/file/743f50e92c6ef48d6514e0ce2a255165f83afb1ae66deefd68dac50d80748e55/detection](https://www.virustotal.com/gui/file/743f50e92c6ef48d6514e0ce2a255165f83afb1ae66deefd68dac50d80748e55/detection)    
 
+## antiscan.me result:
+
+11 january 2022 (NT API injector)    
+
+![antiscan](./screenshots/antiscan.png?raw=true)    
+
+[https://antiscan.me/scan/new/result?id=rQVfQhoFYgH9](https://antiscan.me/scan/new/result?id=rQVfQhoFYgH9)    
+
 ## TODO
 - [x] Compile injector in Kali linux
 - [x] XOR + AES [aes branch](https://github.com/cocomelonc/peekaboo/tree/aes)
