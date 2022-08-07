@@ -29,7 +29,7 @@ unsigned int s_vp_len = sizeof(s_vp);
 unsigned int s_ct_len = sizeof(s_ct);
 unsigned int s_wfso_len = sizeof(s_wfso);
 unsigned int s_rmm_len = sizeof(s_rmm);
-unsigned int s_k32_len = sizeof(s_32);
+unsigned int s_k32_len = sizeof(s_k32);
 
 // keys
 char my_payload_key[] = "";
