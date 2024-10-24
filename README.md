@@ -114,6 +114,14 @@ Tested on:
 
 [https://antiscan.me/scan/new/result?id=rQVfQhoFYgH9](https://antiscan.me/scan/new/result?id=rQVfQhoFYgH9)    
 
+## websec.nl scanner result:
+
+10 October 2024     
+
+![websec](./screenshots/websec.png?raw=true)     
+
+[https://websec.net/scanner/result/a3583316-cb72-4894-bd22-48241ca79db9](https://websec.net/scanner/result/a3583316-cb72-4894-bd22-48241ca79db9)     
+
 ## TODO
 - [x] Compile injector in Kali linux
 - [x] XOR + AES [aes branch](https://github.com/cocomelonc/peekaboo/tree/aes)
