@@ -1,6 +1,3 @@
-hack.bin
-calc.bin
+*.bin
 *.dll
-peekaboo-enc.cpp
 *.exe
-peekaboo.exe
