@@ -29,9 +29,19 @@ First **malware** module - highly portable C/C++ code designed to build specific
 4. **stealer (malware, agent)** - stealer logic.      
 
 Second, **payloads** module - build-in payloads.     
-5. **payloads** - for simplicity, just messagebox and reverse shell.      
+1. **payloads** - for simplicity, just messagebox and reverse shell.      
 
 Final, `peekaboo.py` builder in Python.     
+
+### demo
+
+Run:    
+
+```bash
+python3 peekaboo.py
+```
+
+![img](./screenshots/2026-01-27_02-45.png)    
 
 ## virus total result:
 02 september 2021
