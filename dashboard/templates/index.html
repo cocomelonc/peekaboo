@@ -6,39 +6,32 @@
 <meta http-equiv="X-UA-Compatible" content="IE=edge">
 <title>peekaboo // dashboard</title>
 <style>
-  /* ── reset & custom properties ── */
   :root {
-    --bg:      #0d0d0d;
-    --bg2:     #141414;
-    --bg3:     #1a1a1a;
-    --border:  #2a2a2a;
-    --green:   #39ff14;
-    --green2:  #00c853;
-    --red:     #ff1744;
-    --yellow:  #ffd600;
-    --blue:    #40c4ff;
-    --text:    #e0e0e0;
-    --dim:     #666;
-    --font:    'Courier New', Courier, monospace;
-    --fs:      32px;
-    --radius:  2px;
-    --gap:     1px;
+    --bg:     #0d0d0d;
+    --bg2:    #141414;
+    --bg3:    #1a1a1a;
+    --border: #2a2a2a;
+    --green:  #39ff14;
+    --green2: #00c853;
+    --red:    #ff1744;
+    --yellow: #ffd600;
+    --blue:   #40c4ff;
+    --purple: #e040fb;
+    --orange: #ff6d00;
+    --text:   #e0e0e0;
+    --dim:    #666;
+    --font:   'Courier New', Courier, monospace;
+    --fs:     32px;
+    --gap:    1px;
+    --radius: 2px;
   }
 
   *, *::before, *::after {
     -webkit-box-sizing: border-box;
     box-sizing: border-box;
-    margin: 0;
-    padding: 0;
+    margin: 0; padding: 0;
   }
-
-  html {
-    -webkit-text-size-adjust: 100%;
-    -ms-text-size-adjust: 100%;
-    text-size-adjust: 100%;
-    scroll-behavior: smooth;
-  }
-
+  html { -webkit-text-size-adjust: 100%; -ms-text-size-adjust: 100%; scroll-behavior: smooth; }
   body {
     background: var(--bg);
     color: var(--text);
@@ -53,445 +46,321 @@
   }
 
   /* ── animations ── */
-  @-webkit-keyframes pulse {
-    0%, 100% { opacity: 1; }
-    50%       { opacity: 0.4; }
-  }
-  @keyframes pulse {
-    0%, 100% { opacity: 1; }
-    50%       { opacity: 0.4; }
-  }
-
-  @-webkit-keyframes spin {
-    to { -webkit-transform: rotate(360deg); transform: rotate(360deg); }
-  }
-  @keyframes spin {
-    to { -webkit-transform: rotate(360deg); transform: rotate(360deg); }
-  }
+  @-webkit-keyframes pulse { 0%,100%{opacity:1} 50%{opacity:.4} }
+  @keyframes pulse          { 0%,100%{opacity:1} 50%{opacity:.4} }
+  @-webkit-keyframes spin   { to{-webkit-transform:rotate(360deg);transform:rotate(360deg)} }
+  @keyframes spin           { to{transform:rotate(360deg)} }
+  @-webkit-keyframes fadeIn { from{opacity:0;-webkit-transform:translateY(6px)} to{opacity:1;-webkit-transform:translateY(0)} }
+  @keyframes fadeIn         { from{opacity:0;transform:translateY(6px)} to{opacity:1;transform:translateY(0)} }
 
   /* ── header ── */
   header {
     background: var(--bg2);
     border-bottom: 1px solid var(--border);
-    padding: clamp(10px, 2vw, 20px) clamp(12px, 3vw, 28px);
-    display: -webkit-box;
-    display: -ms-flexbox;
-    display: flex;
-    -ms-flex-wrap: wrap;
-    flex-wrap: wrap;
-    -webkit-box-align: center;
-    -ms-flex-align: center;
-    align-items: center;
-    gap: clamp(12px, 2vw, 24px);
+    padding: clamp(10px,2vw,18px) clamp(12px,3vw,28px);
+    display: -webkit-box; display: -ms-flexbox; display: flex;
+    -ms-flex-wrap: wrap; flex-wrap: wrap;
+    -webkit-box-align: center; -ms-flex-align: center; align-items: center;
+    gap: clamp(12px,2vw,24px);
   }
+  .logo { color:var(--green); font-size:clamp(12px,1.4vw,20px); line-height:1.3; white-space:pre; text-shadow:0 0 8px var(--green); }
+  .header-meta { display:-webkit-box;display:-ms-flexbox;display:flex; -webkit-box-orient:vertical;-webkit-box-direction:normal;-ms-flex-direction:column;flex-direction:column; gap:4px; min-width:0; }
+  .header-meta h1 { color:var(--green); font-size:clamp(16px,2vw,var(--fs)); letter-spacing:2px; text-transform:uppercase; white-space:nowrap; }
+  .header-meta .sub { color:var(--dim); font-size:clamp(11px,1.2vw,calc(var(--fs)*.6)); white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+  .status-dot { width:clamp(6px,.7vw,10px); height:clamp(6px,.7vw,10px); border-radius:50%; background:var(--green); display:inline-block; margin-right:6px; box-shadow:0 0 6px var(--green); -webkit-animation:pulse 2s infinite; animation:pulse 2s infinite; vertical-align:middle; }
 
-  .logo {
-    color: var(--green);
-    font-size: clamp(14px, 1.8vw, var(--fs));
-    line-height: 1.3;
-    white-space: pre;
-    text-shadow: 0 0 8px var(--green);
-    -webkit-user-select: none;
-    -moz-user-select: none;
-    -ms-user-select: none;
-    user-select: none;
-  }
-
-  .header-meta {
-    display: -webkit-box;
-    display: -ms-flexbox;
-    display: flex;
-    -webkit-box-orient: vertical;
-    -webkit-box-direction: normal;
-    -ms-flex-direction: column;
-    flex-direction: column;
-    gap: 4px;
-    min-width: 0;
-  }
-
-  .header-meta h1 {
-    color: var(--green);
-    font-size: clamp(18px, 2.2vw, var(--fs));
-    letter-spacing: 2px;
-    text-transform: uppercase;
-    white-space: nowrap;
-  }
-
-  .header-meta .sub {
-    color: var(--dim);
-    font-size: clamp(12px, 1.4vw, calc(var(--fs) * 0.7));
-    white-space: nowrap;
-    overflow: hidden;
-    text-overflow: ellipsis;
-  }
-
-  .status-dot {
-    width: clamp(6px, 0.8vw, 10px);
-    height: clamp(6px, 0.8vw, 10px);
-    border-radius: 50%;
-    background: var(--green);
-    display: inline-block;
-    margin-right: 6px;
-    box-shadow: 0 0 6px var(--green);
-    -webkit-animation: pulse 2s infinite;
-    animation: pulse 2s infinite;
-    vertical-align: middle;
-    -ms-flex-negative: 0;
-    flex-shrink: 0;
-  }
-
-  /* ── main grid ── */
-  /*
-   * Desktop  (>1100px) : 3 columns — modules | builder | beacons
-   * Tablet   (640–1100px) : 2 columns — modules | builder, beacons spans full
-   * Mobile   (<640px)  : 1 column — builder, modules, beacons stacked
-   */
-  .main {
-    display: -ms-grid;
-    display: grid;
-    -ms-grid-columns: minmax(200px, 22%) 1fr minmax(240px, 26%);
-    grid-template-columns: minmax(200px, 22%) 1fr minmax(240px, 26%);
-    grid-template-rows: auto;
+  /* ── top grid: 3 columns ── */
+  .main-top {
+    display:-ms-grid; display:grid;
+    -ms-grid-columns: minmax(200px,22%) 1fr minmax(240px,26%);
+    grid-template-columns: minmax(200px,22%) 1fr minmax(240px,26%);
     grid-template-areas: "modules builder beacons";
     gap: var(--gap);
     background: var(--border);
-    min-height: calc(100vh - 120px);
     width: 100%;
   }
+  .panel-modules { -ms-grid-row:1;-ms-grid-column:1; grid-area:modules; }
+  .panel-builder { -ms-grid-row:1;-ms-grid-column:2; grid-area:builder; }
+  .panel-beacons { -ms-grid-row:1;-ms-grid-column:3; grid-area:beacons; }
 
-  .panel-modules  { -ms-grid-row: 1; -ms-grid-column: 1; grid-area: modules; }
-  .panel-builder  { -ms-grid-row: 1; -ms-grid-column: 2; grid-area: builder; }
-  .panel-beacons  { -ms-grid-row: 1; -ms-grid-column: 3; grid-area: beacons; }
+  /* ── bottom grid: C2 Demo | Chat ── */
+  .main-bottom {
+    display:-ms-grid; display:grid;
+    -ms-grid-columns: 1fr 1fr;
+    grid-template-columns: 1fr 1fr;
+    grid-template-areas: "c2demo chat";
+    gap: var(--gap);
+    background: var(--border);
+    width: 100%;
+    margin-top: var(--gap);
+  }
+  .panel-c2demo { -ms-grid-row:1;-ms-grid-column:1; grid-area:c2demo; }
+  .panel-chat   { -ms-grid-row:1;-ms-grid-column:2; grid-area:chat; }
 
+  /* ── panel base ── */
   .panel {
     background: var(--bg);
-    padding: clamp(12px, 1.5vw, 20px);
+    padding: clamp(12px,1.5vw,18px);
     overflow: auto;
     min-width: 0;
-    /* each panel scrolls independently */
-    max-height: calc(100vh - 120px);
+    max-height: clamp(320px,45vh,560px);
     overflow-y: auto;
   }
+  .panel-bottom { max-height: clamp(360px,48vh,600px); }
 
-  /* ── panel title ── */
   .panel-title {
     color: var(--green);
-    font-size: clamp(14px, 1.6vw, var(--fs));
+    font-size: clamp(12px,1.4vw,calc(var(--fs)*.75));
     letter-spacing: 2px;
     text-transform: uppercase;
     border-bottom: 1px solid var(--border);
     padding-bottom: 8px;
     margin-bottom: 12px;
   }
-  .panel-title span {
-    color: var(--dim);
-    font-size: clamp(11px, 1.2vw, calc(var(--fs) * 0.75));
-    margin-left: 6px;
-  }
+  .panel-title span { color:var(--dim); font-size:clamp(10px,1vw,calc(var(--fs)*.55)); margin-left:6px; }
+  .panel-title .badge { font-size:clamp(9px,.9vw,calc(var(--fs)*.45)); padding:2px 6px; border-radius:var(--radius); margin-left:6px; vertical-align:middle; }
+  .badge-green  { background:var(--green2); color:#000; }
+  .badge-yellow { background:var(--yellow); color:#000; }
+  .badge-dim    { background:var(--border); color:var(--dim); }
 
-  /* ── module list ── */
-  .module-group { margin-bottom: 16px; }
-  .module-group-label {
-    color: var(--blue);
-    font-size: clamp(11px, 1.1vw, calc(var(--fs) * 0.65));
-    letter-spacing: 1px;
-    text-transform: uppercase;
-    margin-bottom: 6px;
-  }
-  .module-tag {
-    display: inline-block;
-    background: var(--bg3);
-    border: 1px solid var(--border);
-    color: var(--text);
-    padding: 3px 10px;
-    margin: 2px;
-    font-size: clamp(11px, 1.1vw, calc(var(--fs) * 0.6));
-    border-radius: var(--radius);
-    cursor: default;
-    -webkit-transition: border-color 0.15s, color 0.15s;
-    transition: border-color 0.15s, color 0.15s;
-  }
-  .module-tag:hover { border-color: var(--green); color: var(--green); }
+  /* ── module tags ── */
+  .module-group { margin-bottom:14px; }
+  .module-group-label { color:var(--blue); font-size:clamp(10px,1vw,calc(var(--fs)*.55)); letter-spacing:1px; text-transform:uppercase; margin-bottom:5px; }
+  .module-tag { display:inline-block; background:var(--bg3); border:1px solid var(--border); color:var(--text); padding:3px 8px; margin:2px; font-size:clamp(10px,1vw,calc(var(--fs)*.52)); border-radius:var(--radius); cursor:default; -webkit-transition:border-color .15s,color .15s; transition:border-color .15s,color .15s; }
+  .module-tag:hover { border-color:var(--green); color:var(--green); }
 
-  /* ── builder form ── */
-  .form-row {
-    display: -webkit-box;
-    display: -ms-flexbox;
-    display: flex;
-    -webkit-box-align: center;
-    -ms-flex-align: center;
-    align-items: center;
-    gap: 10px;
-    margin-bottom: 10px;
-    -ms-flex-wrap: wrap;
-    flex-wrap: wrap;
+  /* ── forms ── */
+  .form-row { display:-webkit-box;display:-ms-flexbox;display:flex; -webkit-box-align:center;-ms-flex-align:center;align-items:center; gap:10px; margin-bottom:10px; -ms-flex-wrap:wrap;flex-wrap:wrap; }
+  .form-row label { color:var(--dim); font-size:clamp(11px,1.1vw,calc(var(--fs)*.6)); width:8em; -ms-flex-negative:0;flex-shrink:0; text-align:right; }
+  select, input[type="text"] {
+    background:var(--bg3); border:1px solid var(--border); color:var(--text);
+    font-family:var(--font); font-size:clamp(11px,1.1vw,calc(var(--fs)*.6));
+    padding:6px 10px; -webkit-box-flex:1;-ms-flex:1 1 120px;flex:1 1 120px;
+    min-width:0; outline:none;
+    -webkit-appearance:none; -moz-appearance:none; appearance:none;
+    border-radius:var(--radius);
   }
-  .form-row label {
-    color: var(--dim);
-    font-size: clamp(12px, 1.2vw, calc(var(--fs) * 0.7));
-    width: 8em;
-    -ms-flex-negative: 0;
-    flex-shrink: 0;
-    text-align: right;
-  }
-
-  select,
-  input[type="text"] {
-    background: var(--bg3);
-    border: 1px solid var(--border);
-    color: var(--text);
-    font-family: var(--font);
-    font-size: clamp(12px, 1.2vw, calc(var(--fs) * 0.7));
-    padding: 6px 10px;
-    -webkit-box-flex: 1;
-    -ms-flex: 1 1 120px;
-    flex: 1 1 120px;
-    min-width: 0;
-    outline: none;
-    -webkit-appearance: none;
-    -moz-appearance: none;
-    appearance: none;
-    border-radius: var(--radius);
-  }
-  select:focus, input:focus { border-color: var(--green); }
-  select option { background: var(--bg3); color: var(--text); }
+  select:focus, input:focus { border-color:var(--green); }
+  select option { background:var(--bg3); color:var(--text); }
 
   /* ── buttons ── */
   .btn {
-    background: transparent;
-    border: 1px solid var(--green);
-    color: var(--green);
-    font-family: var(--font);
-    font-size: clamp(12px, 1.2vw, calc(var(--fs) * 0.7));
-    padding: 8px 20px;
-    cursor: pointer;
-    letter-spacing: 1px;
-    text-transform: uppercase;
-    border-radius: var(--radius);
-    -webkit-transition: background 0.15s, color 0.15s;
-    transition: background 0.15s, color 0.15s;
-    white-space: nowrap;
+    background:transparent; border:1px solid var(--green); color:var(--green);
+    font-family:var(--font); font-size:clamp(11px,1.1vw,calc(var(--fs)*.6));
+    padding:8px 18px; cursor:pointer; letter-spacing:1px; text-transform:uppercase;
+    border-radius:var(--radius);
+    -webkit-transition:background .15s,color .15s; transition:background .15s,color .15s;
+    white-space:nowrap;
   }
-  .btn:hover    { background: var(--green); color: var(--bg); }
-  .btn:disabled { border-color: var(--dim); color: var(--dim); cursor: not-allowed; }
-  .btn:disabled:hover { background: transparent; }
+  .btn:hover    { background:var(--green); color:var(--bg); }
+  .btn:disabled { border-color:var(--dim); color:var(--dim); cursor:not-allowed; }
+  .btn:disabled:hover { background:transparent; }
+  .btn-red    { border-color:var(--red);    color:var(--red); }
+  .btn-red:hover    { background:var(--red);    color:var(--bg); }
+  .btn-blue   { border-color:var(--blue);   color:var(--blue); }
+  .btn-blue:hover   { background:var(--blue);   color:var(--bg); }
+  .btn-purple { border-color:var(--purple); color:var(--purple); }
+  .btn-purple:hover { background:var(--purple); color:var(--bg); }
+  .btn-orange { border-color:var(--orange); color:var(--orange); }
+  .btn-orange:hover { background:var(--orange); color:var(--bg); }
+  .btn-row { display:-webkit-box;display:-ms-flexbox;display:flex; gap:8px; margin-top:6px; -ms-flex-wrap:wrap;flex-wrap:wrap; }
 
-  .btn-red  { border-color: var(--red);  color: var(--red); }
-  .btn-red:hover  { background: var(--red);  color: var(--bg); }
-  .btn-blue { border-color: var(--blue); color: var(--blue); }
-  .btn-blue:hover { background: var(--blue); color: var(--bg); }
-
-  /* ── build output terminal ── */
+  /* ── build output ── */
   #build-output {
-    background: var(--bg2);
-    border: 1px solid var(--border);
-    padding: 10px;
-    font-size: clamp(11px, 1vw, calc(var(--fs) * 0.55));
-    line-height: 1.6;
-    min-height: 160px;
-    max-height: clamp(200px, 30vh, 400px);
-    overflow-y: auto;
-    white-space: pre-wrap;
-    word-break: break-all;
-    color: #aaa;
-    margin-top: 12px;
-    border-radius: var(--radius);
+    background:var(--bg2); border:1px solid var(--border); padding:10px;
+    font-size:clamp(10px,.9vw,calc(var(--fs)*.48)); line-height:1.6;
+    min-height:120px; max-height:clamp(160px,22vh,300px);
+    overflow-y:auto; white-space:pre-wrap; word-break:break-all;
+    color:#aaa; margin-top:12px; border-radius:var(--radius);
   }
-  #build-output .ok  { color: var(--green2); }
-  #build-output .err { color: var(--red); }
-  #build-output .inf { color: var(--blue); }
-  #build-output .wrn { color: var(--yellow); }
+  #build-output .ok  { color:var(--green2); }
+  #build-output .err { color:var(--red); }
+  #build-output .inf { color:var(--blue); }
+  #build-output .wrn { color:var(--yellow); }
 
   /* ── build status badge ── */
-  .build-status {
-    display: inline-block;
-    padding: 2px 10px;
-    font-size: clamp(10px, 1vw, calc(var(--fs) * 0.55));
-    border-radius: var(--radius);
-    margin-left: 8px;
-    vertical-align: middle;
-  }
-  .build-status.success { background: #00c853; color: #000; }
-  .build-status.failed  { background: var(--red); color: #fff; }
-  .build-status.running { background: var(--yellow); color: #000; -webkit-animation: pulse 1s infinite; animation: pulse 1s infinite; }
-  .build-status.queued  { background: var(--blue); color: #000; }
-  .build-status.timeout { background: #ff6d00; color: #fff; }
-  .build-status.error   { background: var(--red); color: #fff; }
-  .build-status.idle    { background: var(--border); color: var(--dim); }
+  .build-status { display:inline-block; padding:2px 8px; font-size:clamp(9px,.9vw,calc(var(--fs)*.48)); border-radius:var(--radius); margin-left:6px; vertical-align:middle; }
+  .build-status.success { background:#00c853; color:#000; }
+  .build-status.failed  { background:var(--red); color:#fff; }
+  .build-status.running { background:var(--yellow); color:#000; -webkit-animation:pulse 1s infinite; animation:pulse 1s infinite; }
+  .build-status.queued  { background:var(--blue); color:#000; }
+  .build-status.timeout { background:var(--orange); color:#fff; }
+  .build-status.error   { background:var(--red); color:#fff; }
+  .build-status.idle    { background:var(--border); color:var(--dim); }
 
   /* ── beacon feed ── */
-  .beacon-item {
-    border: 1px solid var(--border);
-    padding: 8px 10px;
-    margin-bottom: 8px;
+  .beacon-item { border:1px solid var(--border); padding:7px 10px; margin-bottom:7px; background:var(--bg2); border-radius:var(--radius); overflow:hidden; -webkit-animation:fadeIn .3s ease; animation:fadeIn .3s ease; }
+  .beacon-item .b-from { color:var(--green); font-size:clamp(10px,1vw,calc(var(--fs)*.52)); }
+  .beacon-item .b-time { color:var(--dim); font-size:clamp(9px,.9vw,calc(var(--fs)*.46)); float:right; }
+  .beacon-item .b-text { margin-top:4px; font-size:clamp(10px,.95vw,calc(var(--fs)*.5)); color:var(--text); max-height:70px; overflow-y:auto; white-space:pre-wrap; word-break:break-word; }
+  .beacon-empty { color:var(--dim); font-size:clamp(11px,1.1vw,calc(var(--fs)*.55)); text-align:center; padding:18px 0; }
+
+  /* ── C2 demo ── */
+  .c2-channel-grid {
+    display:-ms-grid; display:grid;
+    -ms-grid-columns: 1fr 1fr;
+    grid-template-columns: 1fr 1fr;
+    gap: 10px;
+    margin-bottom: 14px;
+  }
+  .c2-card {
     background: var(--bg2);
+    border: 1px solid var(--border);
+    padding: 10px 12px;
     border-radius: var(--radius);
-    overflow: hidden;
+    -webkit-transition: border-color .2s; transition: border-color .2s;
   }
-  .beacon-item .b-from {
-    color: var(--green);
-    font-size: clamp(11px, 1.1vw, calc(var(--fs) * 0.6));
+  .c2-card:hover { border-color: var(--green); }
+  .c2-card .c2-name { font-size:clamp(11px,1.1vw,calc(var(--fs)*.6)); color:var(--text); letter-spacing:1px; text-transform:uppercase; margin-bottom:6px; }
+  .c2-card .c2-status { font-size:clamp(9px,.9vw,calc(var(--fs)*.46)); margin-bottom:8px; }
+  .c2-card .c2-technique { font-size:clamp(9px,.85vw,calc(var(--fs)*.44)); color:var(--dim); margin-top:4px; }
+  .c2-result {
+    background: var(--bg2); border: 1px solid var(--border);
+    padding: 8px 10px; margin-top: 10px;
+    font-size: clamp(10px,.95vw,calc(var(--fs)*.5));
+    white-space: pre-wrap; word-break: break-all;
+    border-radius: var(--radius);
+    max-height: 120px; overflow-y: auto;
+    -webkit-animation: fadeIn .3s ease; animation: fadeIn .3s ease;
   }
-  .beacon-item .b-time {
-    color: var(--dim);
-    font-size: clamp(10px, 1vw, calc(var(--fs) * 0.55));
-    float: right;
-  }
-  .beacon-item .b-text {
-    margin-top: 4px;
-    font-size: clamp(11px, 1vw, calc(var(--fs) * 0.55));
-    color: var(--text);
-    max-height: 80px;
-    overflow-y: auto;
-    white-space: pre-wrap;
-    word-break: break-word;
-  }
-  .beacon-empty {
-    color: var(--dim);
-    font-size: clamp(12px, 1.1vw, calc(var(--fs) * 0.6));
-    text-align: center;
-    padding: 20px 0;
+  .c2-result.ok  { border-color: var(--green2); color: var(--green2); }
+  .c2-result.err { border-color: var(--red);    color: var(--red); }
+
+  #binary-info {
+    font-size: clamp(10px,.95vw,calc(var(--fs)*.5));
+    color: var(--blue);
+    margin-bottom: 10px;
+    padding: 6px 10px;
+    background: var(--bg2);
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
   }
 
-  /* ── build history ── */
-  .history-item {
-    display: -webkit-box;
-    display: -ms-flexbox;
-    display: flex;
-    gap: 8px;
-    -webkit-box-align: center;
-    -ms-flex-align: center;
-    align-items: center;
-    padding: 6px 0;
-    border-bottom: 1px solid var(--border);
-    font-size: clamp(11px, 1vw, calc(var(--fs) * 0.6));
-    -ms-flex-wrap: wrap;
-    flex-wrap: wrap;
+  /* ── chat panel ── */
+  .chat-messages {
+    height: clamp(200px,28vh,380px);
+    overflow-y: auto;
+    padding: 8px;
+    background: var(--bg2);
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    margin-bottom: 10px;
+    display: -webkit-box; display: -ms-flexbox; display: flex;
+    -webkit-box-orient: vertical; -webkit-box-direction: normal;
+    -ms-flex-direction: column; flex-direction: column;
+    gap: 10px;
   }
-  .history-item:last-child { border-bottom: none; }
-  .history-id     { color: var(--yellow); width: 5em; -ms-flex-negative: 0; flex-shrink: 0; }
-  .history-params { color: var(--dim); -webkit-box-flex: 1; -ms-flex: 1; flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; min-width: 0; }
-  .history-time   { color: var(--dim); font-size: clamp(10px, 0.9vw, calc(var(--fs) * 0.5)); -ms-flex-negative: 0; flex-shrink: 0; }
+  .msg { -webkit-animation: fadeIn .25s ease; animation: fadeIn .25s ease; }
+  .msg-user {
+    -ms-flex-item-align: end; align-self: flex-end;
+    background: var(--bg3); border: 1px solid var(--border);
+    padding: 7px 12px; border-radius: var(--radius);
+    max-width: 85%;
+    font-size: clamp(11px,1.05vw,calc(var(--fs)*.58));
+    color: var(--text);
+  }
+  .msg-assistant {
+    -ms-flex-item-align: start; align-self: flex-start;
+    background: #0d1f0d; border: 1px solid #1a3d1a;
+    padding: 7px 12px; border-radius: var(--radius);
+    max-width: 92%;
+    font-size: clamp(11px,1.05vw,calc(var(--fs)*.58));
+    color: var(--text);
+    white-space: pre-wrap; word-break: break-word;
+  }
+  .msg-assistant .msg-label { color: var(--green); font-size: .85em; margin-bottom: 4px; letter-spacing: 1px; }
+  .msg-user .msg-label { color: var(--dim); font-size: .85em; margin-bottom: 4px; letter-spacing: 1px; }
+  .msg-thinking { color: var(--dim); font-style: italic; font-size: .85em; }
+
+  .chat-input-row {
+    display: -webkit-box; display: -ms-flexbox; display: flex;
+    gap: 8px;
+    -webkit-box-align: end; -ms-flex-align: end; align-items: flex-end;
+  }
+  textarea#chat-input {
+    -webkit-box-flex: 1; -ms-flex: 1; flex: 1;
+    background: var(--bg3); border: 1px solid var(--border);
+    color: var(--text); font-family: var(--font);
+    font-size: clamp(11px,1.05vw,calc(var(--fs)*.58));
+    padding: 8px 10px; resize: vertical; min-height: 52px; max-height: 140px;
+    border-radius: var(--radius); outline: none;
+  }
+  textarea#chat-input:focus { border-color: var(--green); }
+
+  .kb-bar {
+    font-size: clamp(9px,.85vw,calc(var(--fs)*.46));
+    color: var(--dim);
+    margin-bottom: 8px;
+    padding: 4px 8px;
+    background: var(--bg2);
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    display: -webkit-box; display: -ms-flexbox; display: flex;
+    -webkit-box-pack: justify; -ms-flex-pack: justify; justify-content: space-between;
+    -webkit-box-align: center; -ms-flex-align: center; align-items: center;
+    -ms-flex-wrap: wrap; flex-wrap: wrap; gap: 6px;
+  }
+
+  /* ── history ── */
+  .history-item { display:-webkit-box;display:-ms-flexbox;display:flex; gap:8px; -webkit-box-align:center;-ms-flex-align:center;align-items:center; padding:6px 0; border-bottom:1px solid var(--border); font-size:clamp(10px,.95vw,calc(var(--fs)*.5)); -ms-flex-wrap:wrap;flex-wrap:wrap; }
+  .history-item:last-child { border-bottom:none; }
+  .history-id     { color:var(--yellow); width:5em; -ms-flex-negative:0;flex-shrink:0; }
+  .history-params { color:var(--dim); -webkit-box-flex:1;-ms-flex:1;flex:1; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; min-width:0; }
+  .history-time   { color:var(--dim); font-size:clamp(9px,.85vw,calc(var(--fs)*.46)); -ms-flex-negative:0;flex-shrink:0; }
+
+  /* ── tabs ── */
+  .tabs { display:-webkit-box;display:-ms-flexbox;display:flex; border-bottom:1px solid var(--border); margin-bottom:12px; -ms-flex-wrap:wrap;flex-wrap:wrap; }
+  .tab { padding:6px 14px; font-size:clamp(11px,1.1vw,calc(var(--fs)*.58)); color:var(--dim); cursor:pointer; border-bottom:2px solid transparent; margin-bottom:-1px; text-transform:uppercase; letter-spacing:1px; -webkit-transition:color .15s;transition:color .15s; white-space:nowrap; }
+  .tab.active  { color:var(--green); border-bottom-color:var(--green); }
+  .tab:hover   { color:var(--text); }
+  .tab-content { display:none; }
+  .tab-content.active { display:block; }
+
+  /* ── misc ── */
+  .spinner { display:inline-block; width:12px; height:12px; border:2px solid var(--border); border-top-color:var(--green); border-radius:50%; -webkit-animation:spin .6s linear infinite; animation:spin .6s linear infinite; vertical-align:middle; margin-right:6px; }
+  .sep { height:1px; background:var(--border); margin:12px 0; }
+  .text-green  { color:var(--green); }
+  .text-dim    { color:var(--dim); }
+  .text-blue   { color:var(--blue); }
+  .text-purple { color:var(--purple); }
+  .dot-ok  { color:var(--green2); }
+  .dot-err { color:var(--red); }
+  .dot-dim { color:var(--dim); }
 
   /* ── bottom bar ── */
   .bottom-bar {
-    background: var(--bg2);
-    border-top: 1px solid var(--border);
-    padding: 6px clamp(12px, 3vw, 28px);
-    font-size: clamp(11px, 1vw, calc(var(--fs) * 0.55));
-    color: var(--dim);
-    display: -webkit-box;
-    display: -ms-flexbox;
-    display: flex;
-    -ms-flex-wrap: wrap;
-    flex-wrap: wrap;
-    gap: clamp(10px, 2vw, 24px);
-    -webkit-box-align: center;
-    -ms-flex-align: center;
-    align-items: center;
+    background:var(--bg2); border-top:1px solid var(--border);
+    padding:6px clamp(12px,3vw,28px);
+    font-size:clamp(10px,.95vw,calc(var(--fs)*.52));
+    color:var(--dim);
+    display:-webkit-box;display:-ms-flexbox;display:flex;
+    -ms-flex-wrap:wrap;flex-wrap:wrap;
+    gap:clamp(10px,2vw,22px);
+    -webkit-box-align:center;-ms-flex-align:center;align-items:center;
   }
-  .bottom-bar span { color: var(--green); }
+  .bottom-bar span { color:var(--green); }
 
-  /* ── tabs ── */
-  .tabs {
-    display: -webkit-box;
-    display: -ms-flexbox;
-    display: flex;
-    gap: 0;
-    border-bottom: 1px solid var(--border);
-    margin-bottom: 12px;
-    -ms-flex-wrap: wrap;
-    flex-wrap: wrap;
-  }
-  .tab {
-    padding: 6px 14px;
-    font-size: clamp(12px, 1.2vw, calc(var(--fs) * 0.65));
-    color: var(--dim);
-    cursor: pointer;
-    border-bottom: 2px solid transparent;
-    margin-bottom: -1px;
-    text-transform: uppercase;
-    letter-spacing: 1px;
-    -webkit-transition: color 0.15s;
-    transition: color 0.15s;
-    white-space: nowrap;
-  }
-  .tab.active  { color: var(--green); border-bottom-color: var(--green); }
-  .tab:hover   { color: var(--text); }
-  .tab-content { display: none; }
-  .tab-content.active { display: block; }
-
-  /* ── misc ── */
-  .spinner {
-    display: inline-block;
-    width: 12px; height: 12px;
-    border: 2px solid var(--border);
-    border-top-color: var(--green);
-    border-radius: 50%;
-    -webkit-animation: spin 0.6s linear infinite;
-    animation: spin 0.6s linear infinite;
-    vertical-align: middle;
-    margin-right: 6px;
-  }
-  .sep { height: 1px; background: var(--border); margin: 12px 0; }
-  .text-green { color: var(--green); }
-  .text-dim   { color: var(--dim); }
-
-  .btn-row {
-    display: -webkit-box;
-    display: -ms-flexbox;
-    display: flex;
-    gap: 8px;
-    margin-top: 6px;
-    -ms-flex-wrap: wrap;
-    flex-wrap: wrap;
-  }
-
-  /* ── responsive: tablet (640px – 1100px) ── */
+  /* ── responsive ── */
   @media screen and (max-width: 1100px) {
-    .main {
-      -ms-grid-columns: 1fr 1fr;
-      grid-template-columns: 1fr 1fr;
-      grid-template-areas:
-        "modules builder"
-        "beacons beacons";
-      min-height: auto;
-    }
-    .panel { max-height: none; }
-    .panel-beacons { -ms-grid-column: 1; -ms-grid-column-span: 2; }
+    .main-top  { -ms-grid-columns:1fr 1fr; grid-template-columns:1fr 1fr; grid-template-areas:"modules builder" "beacons beacons"; }
+    .panel-beacons { -ms-grid-column:1;-ms-grid-column-span:2; }
+    .panel     { max-height: none; }
   }
-
-  /* ── responsive: mobile (<640px) ── */
+  @media screen and (max-width: 768px) {
+    .main-bottom { -ms-grid-columns:1fr; grid-template-columns:1fr; grid-template-areas:"c2demo" "chat"; }
+    .c2-channel-grid { -ms-grid-columns:1fr; grid-template-columns:1fr; }
+  }
   @media screen and (max-width: 640px) {
     :root { --fs: 20px; }
-
-    header { -webkit-box-orient: vertical; -webkit-box-direction: normal; -ms-flex-direction: column; flex-direction: column; -webkit-box-align: start; -ms-flex-align: start; align-items: flex-start; }
-    .logo { font-size: 14px; }
-
-    .main {
-      -ms-grid-columns: 1fr;
-      grid-template-columns: 1fr;
-      grid-template-areas:
-        "builder"
-        "modules"
-        "beacons";
-    }
-    .panel-modules { -ms-grid-row: 2; -ms-grid-column: 1; }
-    .panel-builder { -ms-grid-row: 1; -ms-grid-column: 1; }
-    .panel-beacons { -ms-grid-row: 3; -ms-grid-column: 1; }
-
-    .form-row label { width: 100%; text-align: left; }
-    select, input[type="text"] { -ms-flex: 1 1 100%; flex: 1 1 100%; }
-
-    .bottom-bar { -webkit-box-pack: center; -ms-flex-pack: center; justify-content: center; }
-    #clock { -webkit-box-flex: 0; -ms-flex: none; flex: none; margin-left: 0 !important; width: 100%; text-align: center; }
+    .main-top  { -ms-grid-columns:1fr; grid-template-columns:1fr; grid-template-areas:"builder" "modules" "beacons"; }
+    .form-row label { width:100%; text-align:left; }
+    header { -webkit-box-orient:vertical;-webkit-box-direction:normal;-ms-flex-direction:column;flex-direction:column; -webkit-box-align:start;-ms-flex-align:start;align-items:flex-start; }
+    .logo { font-size:13px; }
+    .bottom-bar { -webkit-box-pack:center;-ms-flex-pack:center;justify-content:center; }
+    #clock { -webkit-box-flex:0;-ms-flex:none;flex:none; margin-left:0 !important; width:100%; text-align:center; }
   }
-
-  /* ── responsive: large screens (>1600px) ── */
   @media screen and (min-width: 1600px) {
-    .main {
-      grid-template-columns: minmax(260px, 20%) 1fr minmax(300px, 24%);
-    }
+    .main-top { grid-template-columns: minmax(240px,20%) 1fr minmax(280px,24%); }
   }
 </style>
 </head>
@@ -500,7 +369,7 @@
 <header>
   <pre class="logo">[=^..^=]
 [=^..^=] PEEKABOO
-[=^..^=] v0.1.0</pre>
+[=^..^=] v0.2.0</pre>
   <div class="header-meta">
     <h1><span class="status-dot"></span>Peekaboo Dashboard</h1>
     <div class="sub">Threat Simulation Framework &nbsp;|&nbsp; DEFCON Demo Labs Singapore 2026</div>
@@ -508,301 +377,584 @@
   </div>
 </header>
 
-<div class="main">
+<!-- ═══════════════════════ TOP ROW ═══════════════════════ -->
+<div class="main-top">
 
-  <!-- ── LEFT: Module Browser ── -->
+  <!-- LEFT: Module Browser -->
   <div class="panel panel-modules">
     <div class="panel-title">Modules <span id="module-count"></span></div>
-
     {% for group, items in modules.items() %}
     <div class="module-group">
       <div class="module-group-label">{{ group }} ({{ items|length }})</div>
-      {% for item in items %}
-      <span class="module-tag">{{ item }}</span>
-      {% else %}
-      <span class="text-dim" style="font-size:0.6em">none found</span>
+      {% for item in items %}<span class="module-tag">{{ item }}</span>
+      {% else %}<span class="text-dim" style="font-size:.6em">none</span>
       {% endfor %}
     </div>
     {% endfor %}
-
     <div class="sep"></div>
-
     <div class="panel-title">Configs</div>
-    {% for cfg in ["telegram_config", "github_config", "bitbucket_config", "virustotal_config"] %}
-    <div style="display:-webkit-box;display:-ms-flexbox;display:flex;-webkit-box-pack:justify;-ms-flex-pack:justify;justify-content:space-between;-webkit-box-align:center;-ms-flex-align:center;align-items:center;margin-bottom:8px;gap:6px;">
-      <span style="font-size:0.65em;color:var(--dim)">{{ cfg.replace('_config','') }}</span>
-      <button class="btn" style="padding:2px 10px;font-size:0.55em;"
-        onclick="showConfig('{{ cfg }}')">view</button>
+    {% for cfg in ["telegram_config","github_config","bitbucket_config","virustotal_config"] %}
+    <div style="display:-webkit-box;display:-ms-flexbox;display:flex;-webkit-box-pack:justify;-ms-flex-pack:justify;justify-content:space-between;-webkit-box-align:center;-ms-flex-align:center;align-items:center;margin-bottom:7px;gap:6px;">
+      <span style="font-size:.6em;color:var(--dim)">{{ cfg.replace('_config','') }}</span>
+      <button class="btn" style="padding:2px 8px;font-size:.52em;" onclick="showConfig('{{ cfg }}')">view</button>
     </div>
     {% endfor %}
-    <pre id="config-preview" style="font-size:0.55em;color:var(--blue);margin-top:8px;white-space:pre-wrap;word-break:break-all;"></pre>
+    <pre id="config-preview" style="font-size:.5em;color:var(--blue);margin-top:8px;white-space:pre-wrap;word-break:break-all;"></pre>
   </div>
 
-  <!-- ── CENTER: Builder + History ── -->
+  <!-- CENTER: Builder + History -->
   <div class="panel panel-builder">
     <div class="tabs">
-      <div class="tab active" onclick="switchTab('builder', this)">Builder</div>
-      <div class="tab" onclick="switchTab('history', this)">Build History</div>
+      <div class="tab active" onclick="switchTab('builder',this)">Builder</div>
+      <div class="tab" onclick="switchTab('history',this)">History</div>
     </div>
 
-    <!-- Builder tab -->
     <div id="tab-builder" class="tab-content active">
       <div class="form-row">
         <label>payload</label>
-        <select id="f-payload">
-          {% for p in modules.payloads %}<option value="{{ p }}" {% if p=='meow' %}selected{% endif %}>{{ p }}</option>{% endfor %}
-        </select>
+        <select id="f-payload">{% for p in modules.payloads %}<option value="{{ p }}"{% if p=='meow' %} selected{% endif %}>{{ p }}</option>{% endfor %}</select>
       </div>
       <div class="form-row">
         <label>encryption</label>
-        <select id="f-encryption">
-          {% for c in modules.crypto %}<option value="{{ c }}" {% if c=='speck' %}selected{% endif %}>{{ c }}</option>{% endfor %}
-        </select>
+        <select id="f-encryption">{% for c in modules.crypto %}<option value="{{ c }}"{% if c=='speck' %} selected{% endif %}>{{ c }}</option>{% endfor %}</select>
       </div>
       <div class="form-row">
-        <label>malware type</label>
-        <select id="f-malware">
-          <option value="injection">injection</option>
-          <option value="stealer">stealer</option>
-        </select>
+        <label>type</label>
+        <select id="f-malware"><option value="injection">injection</option><option value="stealer">stealer</option></select>
       </div>
       <div class="form-row">
         <label>injection</label>
-        <select id="f-injection">
-          {% for i in modules.injection %}<option value="{{ i }}" {% if i=='virtualallocex' %}selected{% endif %}>{{ i }}</option>{% endfor %}
-        </select>
+        <select id="f-injection">{% for i in modules.injection %}<option value="{{ i }}"{% if i=='virtualallocex' %} selected{% endif %}>{{ i }}</option>{% endfor %}</select>
       </div>
       <div class="form-row">
         <label>stealer</label>
-        <select id="f-stealer">
-          {% for s in modules.stealer %}<option value="{{ s }}" {% if s=='telegram' %}selected{% endif %}>{{ s }}</option>{% endfor %}
-        </select>
+        <select id="f-stealer">{% for s in modules.stealer %}<option value="{{ s }}"{% if s=='telegram' %} selected{% endif %}>{{ s }}</option>{% endfor %}</select>
       </div>
-
       <div class="btn-row">
         <button class="btn" id="btn-build" onclick="startBuild()">&#9658; Build</button>
         <button class="btn btn-red" onclick="clearOutput()">&#10005; Clear</button>
       </div>
-
-      <div id="build-status-bar" style="margin-top:10px;font-size:0.65em;color:var(--dim);">
+      <div id="build-status-bar" style="margin-top:8px;font-size:.6em;color:var(--dim);">
         status: <span class="build-status idle">idle</span>
         <span id="current-build-id" style="color:var(--dim);margin-left:8px;"></span>
       </div>
-
       <div id="build-output">// build output will appear here...</div>
     </div>
 
-    <!-- History tab -->
     <div id="tab-history" class="tab-content">
-      <div style="display:-webkit-box;display:-ms-flexbox;display:flex;-webkit-box-pack:justify;-ms-flex-pack:justify;justify-content:space-between;-webkit-box-align:center;-ms-flex-align:center;align-items:center;margin-bottom:10px;gap:8px;flex-wrap:wrap;">
-        <span class="text-dim" style="font-size:0.65em;">recent builds (last 100)</span>
-        <button class="btn btn-blue" style="padding:4px 12px;font-size:0.6em;" onclick="loadHistory()">refresh</button>
+      <div style="display:-webkit-box;display:-ms-flexbox;display:flex;-webkit-box-pack:justify;-ms-flex-pack:justify;justify-content:space-between;margin-bottom:10px;gap:8px;-ms-flex-wrap:wrap;flex-wrap:wrap;">
+        <span class="text-dim" style="font-size:.6em">recent builds (last 100)</span>
+        <button class="btn btn-blue" style="padding:3px 10px;font-size:.55em;" onclick="loadHistory()">refresh</button>
       </div>
       <div id="history-list"><span class="text-dim">loading...</span></div>
     </div>
   </div>
 
-  <!-- ── RIGHT: Beacon Feed ── -->
+  <!-- RIGHT: Beacon Feed -->
   <div class="panel panel-beacons">
-    <div class="panel-title">
-      Beacon Feed
-      <span id="beacon-count"></span>
-    </div>
-    <div style="display:-webkit-box;display:-ms-flexbox;display:flex;gap:8px;margin-bottom:10px;-webkit-box-align:center;-ms-flex-align:center;align-items:center;-ms-flex-wrap:wrap;flex-wrap:wrap;">
-      <button class="btn" style="padding:4px 12px;font-size:0.6em;" onclick="loadBeacons()">&#8635; Refresh</button>
-      <span id="beacon-auto" style="font-size:0.55em;color:var(--dim);"></span>
+    <div class="panel-title">Beacon Feed <span id="beacon-count"></span></div>
+    <div style="display:-webkit-box;display:-ms-flexbox;display:flex;gap:8px;margin-bottom:10px;-ms-flex-wrap:wrap;flex-wrap:wrap;-webkit-box-align:center;-ms-flex-align:center;align-items:center;">
+      <button class="btn" style="padding:3px 10px;font-size:.55em;" onclick="loadBeacons()">&#8635; Refresh</button>
+      <span id="beacon-auto" style="font-size:.5em;color:var(--dim)"></span>
     </div>
     <div id="beacon-list"><span class="beacon-empty">[ waiting for beacons... ]</span></div>
   </div>
 
 </div>
 
+<!-- ═══════════════════════ BOTTOM ROW ═══════════════════════ -->
+<div class="main-bottom">
+
+  <!-- LEFT: C2 Binary Delivery Demo -->
+  <div class="panel panel-c2demo panel-bottom">
+    <div class="panel-title">
+      C2 Binary Delivery
+      <span class="badge badge-yellow">DEMO</span>
+      <span style="font-size:.5em;color:var(--dim);margin-left:8px;">T1102 · T1105</span>
+    </div>
+
+    <div id="binary-info">&#128032; checking for built binary...</div>
+
+    <div class="c2-channel-grid">
+
+      <div class="c2-card" id="card-telegram">
+        <div class="c2-name">&#128236; Telegram</div>
+        <div class="c2-status" id="status-telegram"><span class="dot-dim">&#9679;</span> checking...</div>
+        <button class="btn btn-purple" style="padding:4px 12px;font-size:.55em;width:100%;"
+          onclick="c2Drop('telegram')">Drop via Bot</button>
+        <div class="c2-technique">sendDocument API · bot exfil</div>
+      </div>
+
+      <div class="c2-card" id="card-github">
+        <div class="c2-name">&#128025; GitHub</div>
+        <div class="c2-status" id="status-github"><span class="dot-dim">&#9679;</span> checking...</div>
+        <button class="btn btn-blue" style="padding:4px 12px;font-size:.55em;width:100%;"
+          onclick="c2Drop('github')">Drop to Gist</button>
+        <div class="c2-technique">Gist dead-drop · T1102.001</div>
+      </div>
+
+      <div class="c2-card" id="card-virustotal">
+        <div class="c2-name">&#128202; VirusTotal</div>
+        <div class="c2-status" id="status-virustotal"><span class="dot-dim">&#9679;</span> checking...</div>
+        <button class="btn btn-orange" style="padding:4px 12px;font-size:.55em;width:100%;"
+          onclick="c2Drop('virustotal')">Upload + Scan</button>
+        <div class="c2-technique">VT abuse · detection score</div>
+      </div>
+
+      <div class="c2-card" id="card-bitbucket">
+        <div class="c2-name">&#128736; Bitbucket</div>
+        <div class="c2-status" id="status-bitbucket"><span class="dot-dim">&#9679;</span> checking...</div>
+        <button class="btn" style="padding:4px 12px;font-size:.55em;width:100%;"
+          onclick="c2Drop('bitbucket')">Push to Repo</button>
+        <div class="c2-technique">repo staging · T1102</div>
+      </div>
+
+    </div>
+
+    <div id="c2-result-area"></div>
+  </div>
+
+  <!-- RIGHT: AI Chatbot -->
+  <div class="panel panel-chat panel-bottom">
+    <div class="panel-title">
+      Peekaboo AI
+      <span class="badge {% if kb and kb.status == 'ready' %}badge-green{% else %}badge-dim{% endif %}" id="kb-badge">
+        {% if kb and kb.status == 'ready' %}KB: {{ kb.posts }} posts{% else %}KB: not scraped{% endif %}
+      </span>
+    </div>
+
+    <div class="kb-bar">
+      <span id="kb-info-text">
+        {% if kb and kb.status == 'ready' %}
+          &#128218; {{ kb.posts }} blog posts indexed &nbsp;|&nbsp; {{ kb.blog }}
+        {% else %}
+          &#9888; knowledge base not built yet
+        {% endif %}
+      </span>
+      <button class="btn btn-blue" style="padding:2px 8px;font-size:.5em;" onclick="triggerScrape()">
+        &#8635; Scrape Blog
+      </button>
+    </div>
+
+    <div style="display:-webkit-box;display:-ms-flexbox;display:flex;gap:8px;margin-bottom:10px;-webkit-box-align:center;-ms-flex-align:center;align-items:center;-ms-flex-wrap:wrap;flex-wrap:wrap;">
+      <span style="font-size:.55em;color:var(--dim);">model:</span>
+      <select id="provider-select" onchange="onProviderChange()" style="font-size:.55em;padding:4px 8px;-webkit-box-flex:0;-ms-flex:none;flex:none;width:auto;">
+        <option value="claude">&#128032; Claude (Opus 4.6)</option>
+        <option value="gemini">&#9993; Gemini</option>
+      </select>
+      <span id="provider-status" style="font-size:.5em;color:var(--dim);"></span>
+    </div>
+
+    <div class="chat-messages" id="chat-messages">
+      <div class="msg msg-assistant">
+        <div class="msg-label">&#128032; PEEKABOO AI</div>
+        <div>Hello! I'm your C2 & malware development assistant, powered by Claude and grounded in @cocomelonc's research.<br><br>Ask me anything about:<br>• C2 channels (GitHub, Telegram, Bitbucket, VirusTotal)<br>• Binary delivery &amp; payload dropping<br>• Process injection techniques<br>• AV/EDR bypass &amp; evasion<br>• Detection &amp; MITRE ATT&amp;CK mapping</div>
+      </div>
+    </div>
+
+    <div class="chat-input-row">
+      <textarea id="chat-input" placeholder="Ask about C2 channels, binary delivery, injection techniques..."
+        onkeydown="chatKeydown(event)"></textarea>
+      <button class="btn btn-purple" id="btn-chat-send" onclick="sendChat()" style="padding:10px 16px;font-size:.6em;height:52px;">
+        &#9658; Send
+      </button>
+    </div>
+
+    <div style="margin-top:6px;display:-webkit-box;display:-ms-flexbox;display:flex;gap:8px;-ms-flex-wrap:wrap;flex-wrap:wrap;">
+      <button class="btn" style="padding:3px 10px;font-size:.5em;" onclick="quickAsk('How does GitHub C2 dead-drop work?')">GitHub C2</button>
+      <button class="btn" style="padding:3px 10px;font-size:.5em;" onclick="quickAsk('Explain Telegram bot C2 and binary delivery')">Telegram drop</button>
+      <button class="btn" style="padding:3px 10px;font-size:.5em;" onclick="quickAsk('How does VirtualAllocEx injection work?')">Injection</button>
+      <button class="btn" style="padding:3px 10px;font-size:.5em;" onclick="quickAsk('What MITRE ATT&CK techniques does this framework cover?')">ATT&CK map</button>
+      <button class="btn btn-red" style="padding:3px 10px;font-size:.5em;" onclick="clearChat()">&#10005; Clear</button>
+    </div>
+  </div>
+
+</div>
+
 <div class="bottom-bar">
-  <div>peekaboo framework &nbsp;<span>v0.1.0</span></div>
+  <div>peekaboo &nbsp;<span>v0.2.0</span></div>
   <div>DEFCON Demo Labs &nbsp;<span>Singapore 2026</span></div>
-  <div>by &nbsp;<span>@cocomelonc</span></div>
+  <div>@cocomelonc</div>
   <div id="clock" style="margin-left:auto;"></div>
 </div>
 
 <script>
-  // ── tab switching ──────────────────────────────────────────────────────────
-  function switchTab(name, el) {
-    document.querySelectorAll('.tab').forEach(function(t) { t.classList.remove('active'); });
-    document.querySelectorAll('.tab-content').forEach(function(t) { t.classList.remove('active'); });
-    el.classList.add('active');
-    document.getElementById('tab-' + name).classList.add('active');
-    if (name === 'history') loadHistory();
-  }
+'use strict';
 
-  // ── build ──────────────────────────────────────────────────────────────────
-  var _pollInterval = null;
-  var _currentBuildId = null;
+// ── utils ──────────────────────────────────────────────────────────────────────
+function escapeHtml(s) {
+  return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+}
+function colorize(txt) {
+  txt = escapeHtml(txt);
+  txt = txt.replace(/\033\[[0-9;]*m/g,'');
+  txt = txt.replace(/(successfully\s+\w+)/gi,'<span class="ok">$1</span>');
+  txt = txt.replace(/(error[:\s][^\n]*)/gi,'<span class="err">$1</span>');
+  txt = txt.replace(/(warning[:\s][^\n]*)/gi,'<span class="wrn">$1</span>');
+  txt = txt.replace(/(compiling:[^\n]*)/gi,'<span class="inf">$1</span>');
+  return txt;
+}
 
-  function startBuild() {
-    var params = {
-      payload:    document.getElementById('f-payload').value,
-      encryption: document.getElementById('f-encryption').value,
-      malware:    document.getElementById('f-malware').value,
-      injection:  document.getElementById('f-injection').value,
-      stealer:    document.getElementById('f-stealer').value,
-    };
+// ── tabs ───────────────────────────────────────────────────────────────────────
+function switchTab(name, el) {
+  document.querySelectorAll('.tab').forEach(function(t){t.classList.remove('active');});
+  document.querySelectorAll('.tab-content').forEach(function(t){t.classList.remove('active');});
+  el.classList.add('active');
+  document.getElementById('tab-'+name).classList.add('active');
+  if (name === 'history') loadHistory();
+}
 
-    document.getElementById('btn-build').disabled = true;
-    setStatusBar('queued');
-    setOutput('// queuing build...\n// params: ' + JSON.stringify(params, null, 2));
+// ── builder ────────────────────────────────────────────────────────────────────
+var _pollInterval = null;
+var _currentBuildId = null;
 
-    fetch('/api/build', {
-      method: 'POST',
-      headers: {'Content-Type': 'application/json'},
-      body: JSON.stringify(params)
-    })
-    .then(function(r) { return r.json(); })
-    .then(function(d) {
-      _currentBuildId = d.build_id;
-      document.getElementById('current-build-id').textContent = '#' + _currentBuildId;
-      appendOutput('\n// build id: ' + _currentBuildId + '\n// waiting for compiler...');
-      _pollInterval = setInterval(function() { pollBuild(_currentBuildId); }, 1200);
-    })
-    .catch(function(e) {
-      appendOutput('\n// error: ' + e);
-      setStatusBar('error');
+function startBuild() {
+  var params = {
+    payload:    document.getElementById('f-payload').value,
+    encryption: document.getElementById('f-encryption').value,
+    malware:    document.getElementById('f-malware').value,
+    injection:  document.getElementById('f-injection').value,
+    stealer:    document.getElementById('f-stealer').value,
+  };
+  document.getElementById('btn-build').disabled = true;
+  setStatusBar('queued');
+  setOutput('// queuing build...\n// params: ' + JSON.stringify(params, null, 2));
+
+  fetch('/api/build', {method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify(params)})
+  .then(function(r){return r.json();})
+  .then(function(d){
+    _currentBuildId = d.build_id;
+    document.getElementById('current-build-id').textContent = '#' + _currentBuildId;
+    appendOutput('\n// build id: ' + _currentBuildId + '\n// compiling...');
+    _pollInterval = setInterval(function(){pollBuild(_currentBuildId);}, 1200);
+  })
+  .catch(function(e){
+    appendOutput('\n// error: ' + e);
+    setStatusBar('error');
+    document.getElementById('btn-build').disabled = false;
+  });
+}
+
+function pollBuild(id) {
+  fetch('/api/build/'+id)
+  .then(function(r){return r.json();})
+  .then(function(d){
+    setStatusBar(d.status);
+    if (d.output) renderOutput(d.output);
+    if (d.status !== 'running' && d.status !== 'queued') {
+      clearInterval(_pollInterval); _pollInterval = null;
       document.getElementById('btn-build').disabled = false;
-    });
-  }
+      // refresh binary info after build
+      if (d.status === 'success') { setTimeout(loadBinaryInfo, 1000); }
+    }
+  });
+}
 
-  function pollBuild(id) {
-    fetch('/api/build/' + id)
-    .then(function(r) { return r.json(); })
-    .then(function(d) {
-      setStatusBar(d.status);
-      if (d.output) renderOutput(d.output);
-      if (d.status !== 'running' && d.status !== 'queued') {
-        clearInterval(_pollInterval);
-        _pollInterval = null;
-        document.getElementById('btn-build').disabled = false;
+function setStatusBar(status) {
+  var el = document.querySelector('#build-status-bar .build-status');
+  el.className = 'build-status ' + status;
+  el.textContent = status;
+}
+function setOutput(txt)    { document.getElementById('build-output').innerHTML = colorize(txt); }
+function appendOutput(txt) { var el=document.getElementById('build-output'); el.innerHTML+=colorize(txt); el.scrollTop=el.scrollHeight; }
+function renderOutput(raw) { var el=document.getElementById('build-output'); el.innerHTML=colorize(raw); el.scrollTop=el.scrollHeight; }
+function clearOutput()     { document.getElementById('build-output').innerHTML='// cleared.'; document.getElementById('current-build-id').textContent=''; setStatusBar('idle'); }
+
+// ── beacon feed ────────────────────────────────────────────────────────────────
+function loadBeacons() {
+  document.getElementById('beacon-list').innerHTML='<span class="beacon-empty"><span class="spinner"></span>fetching...</span>';
+  fetch('/api/beacons')
+  .then(function(r){return r.json();})
+  .then(function(d){
+    var list=document.getElementById('beacon-list');
+    if (d.error) { list.innerHTML='<span class="beacon-empty" style="color:var(--yellow)">[!] '+escapeHtml(d.error)+'</span>'; return; }
+    document.getElementById('beacon-count').textContent='('+d.messages.length+')';
+    if (!d.messages.length) { list.innerHTML='<span class="beacon-empty">[ no messages yet ]</span>'; return; }
+    list.innerHTML = d.messages.map(function(m){
+      return '<div class="beacon-item"><span class="b-from">&#128032; '+escapeHtml(String(m.from))+'</span>'
+        +'<span class="b-time">'+new Date(m.date*1000).toLocaleTimeString()+'</span>'
+        +'<div class="b-text">'+escapeHtml(m.text)+'</div></div>';
+    }).join('');
+  })
+  .catch(function(e){ document.getElementById('beacon-list').innerHTML='<span class="beacon-empty" style="color:var(--red)">[!] '+e+'</span>'; });
+}
+setInterval(loadBeacons, 30000);
+document.getElementById('beacon-auto').textContent = 'auto 30s';
+
+// ── history ────────────────────────────────────────────────────────────────────
+function loadHistory() {
+  fetch('/api/logs')
+  .then(function(r){return r.json();})
+  .then(function(logs){
+    var el=document.getElementById('history-list');
+    if (!logs.length){el.innerHTML='<span class="text-dim">no builds yet.</span>';return;}
+    el.innerHTML=logs.slice().reverse().map(function(b){
+      var p=b.params||{};
+      var badge='<span class="build-status '+b.status+'">'+b.status+'</span>';
+      var t=b.created?b.created.slice(0,19).replace('T',' '):'';
+      var detail=[p.encryption,p.injection,p.stealer].filter(Boolean).join(' / ');
+      return '<div class="history-item"><span class="history-id">#'+b.id+'</span>'+badge
+        +'<span class="history-params">'+escapeHtml(detail)+'</span>'
+        +'<span class="history-time">'+t+'</span></div>';
+    }).join('');
+  });
+}
+
+// ── config preview ─────────────────────────────────────────────────────────────
+function showConfig(name) {
+  fetch('/api/config/'+name).then(function(r){return r.json();})
+  .then(function(d){document.getElementById('config-preview').textContent=JSON.stringify(d,null,2);});
+}
+
+// ── C2 binary delivery ─────────────────────────────────────────────────────────
+function loadBinaryInfo() {
+  fetch('/api/c2/binary_info').then(function(r){return r.json();})
+  .then(function(d){
+    var el=document.getElementById('binary-info');
+    if (!d.found) {
+      el.innerHTML='&#9888; no built binary found &mdash; run the builder first';
+      el.style.color='var(--yellow)';
+    } else {
+      var kb=(d.size/1024).toFixed(1);
+      el.innerHTML='&#128025; <strong>'+escapeHtml(d.name)+'</strong>'
+        +' &nbsp;|&nbsp; '+kb+' KB'
+        +' &nbsp;|&nbsp; built: '+escapeHtml(d.modified.slice(0,19).replace('T',' '))
+        +' &nbsp;|&nbsp; <span class="text-green">ready to drop</span>';
+      el.style.color='var(--blue)';
+    }
+  });
+}
+
+function loadC2Status() {
+  fetch('/api/c2/status').then(function(r){return r.json();})
+  .then(function(d){
+    ['telegram','github','virustotal','bitbucket'].forEach(function(ch){
+      var el=document.getElementById('status-'+ch);
+      if (!el) return;
+      var info=d[ch]||{};
+      if (info.ok) {
+        el.innerHTML='<span class="dot-ok">&#9679;</span> online'+(info.name?' &mdash; '+escapeHtml(info.name):'');
+      } else {
+        el.innerHTML='<span class="dot-err">&#9679;</span> '+(info.error?escapeHtml(info.error):'offline');
       }
     });
-  }
+  })
+  .catch(function(){});
+}
 
-  function setStatusBar(status) {
-    var el = document.querySelector('#build-status-bar .build-status');
-    el.className = 'build-status ' + status;
-    el.textContent = status;
-  }
+function c2Drop(channel) {
+  var resultArea=document.getElementById('c2-result-area');
+  resultArea.innerHTML='<div class="c2-result"><span class="spinner"></span>dropping via '+channel+'...</div>';
 
-  function setOutput(txt) {
-    document.getElementById('build-output').innerHTML = colorize(txt);
-  }
+  fetch('/api/c2/deliver/'+channel, {method:'POST', headers:{'Content-Type':'application/json'}, body:'{}'})
+  .then(function(r){return r.json();})
+  .then(function(d){
+    if (d.ok) {
+      var lines=['&#10003; DROP SUCCESSFUL',''];
+      lines.push('channel:   '+d.channel);
+      lines.push('file:      '+d.file);
+      lines.push('size:      '+(d.size/1024).toFixed(1)+' KB');
+      if (d.url)         lines.push('url:       '+d.url);
+      if (d.message_id)  lines.push('msg_id:    '+d.message_id);
+      if (d.gist_id)     lines.push('gist_id:   '+d.gist_id);
+      if (d.analysis_id) lines.push('analysis:  '+d.analysis_id);
+      if (d.technique)   lines.push('technique: '+d.technique);
+      if (d.note)        lines.push('note:      '+d.note);
+      resultArea.innerHTML='<div class="c2-result ok">'+escapeHtml(lines.join('\n'))+'</div>';
+      // refresh beacon feed — telegram drops may show up
+      if (channel==='telegram') setTimeout(loadBeacons,3000);
+    } else {
+      resultArea.innerHTML='<div class="c2-result err">&#10007; ERROR: '+escapeHtml(d.error||'unknown')+'</div>';
+    }
+  })
+  .catch(function(e){
+    resultArea.innerHTML='<div class="c2-result err">&#10007; '+e+'</div>';
+  });
+}
 
-  function appendOutput(txt) {
-    var el = document.getElementById('build-output');
-    el.innerHTML += colorize(txt);
-    el.scrollTop = el.scrollHeight;
-  }
+// ── AI chatbot ─────────────────────────────────────────────────────────────────
+var _chatHistory = [];
+var _chatStreaming = false;
 
-  function renderOutput(raw) {
-    var el = document.getElementById('build-output');
-    el.innerHTML = colorize(raw);
-    el.scrollTop = el.scrollHeight;
-  }
+function scrollChat() {
+  var el=document.getElementById('chat-messages');
+  el.scrollTop=el.scrollHeight;
+}
 
-  function clearOutput() {
-    document.getElementById('build-output').innerHTML = '// cleared.';
-    document.getElementById('current-build-id').textContent = '';
-    setStatusBar('idle');
-  }
+function addMsg(role, text) {
+  var container=document.getElementById('chat-messages');
+  var div=document.createElement('div');
+  div.className='msg msg-'+role;
+  var label=role==='assistant'?'&#128032; PEEKABOO AI':'&#128100; YOU';
+  div.innerHTML='<div class="msg-label">'+label+'</div><div class="msg-body">'+escapeHtml(text)+'</div>';
+  container.appendChild(div);
+  scrollChat();
+  return div.querySelector('.msg-body');
+}
 
-  function colorize(txt) {
-    txt = escapeHtml(txt);
-    txt = txt.replace(/\033\[[0-9;]*m/g, '');
-    txt = txt.replace(/(successfully\s+\w+)/gi, '<span class="ok">$1</span>');
-    txt = txt.replace(/(error[:\s][^\n]*)/gi, '<span class="err">$1</span>');
-    txt = txt.replace(/(warning[:\s][^\n]*)/gi, '<span class="wrn">$1</span>');
-    txt = txt.replace(/(compiling:[^\n]*)/gi, '<span class="inf">$1</span>');
-    return txt;
-  }
+function sendChat() {
+  if (_chatStreaming) return;
+  var input=document.getElementById('chat-input');
+  var text=input.value.trim();
+  if (!text) return;
 
-  function escapeHtml(s) {
-    return s.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
-  }
+  input.value='';
+  _chatHistory.push({role:'user', content:text});
+  addMsg('user', text);
 
-  // ── beacon feed ────────────────────────────────────────────────────────────
-  function loadBeacons() {
-    document.getElementById('beacon-list').innerHTML =
-      '<span class="beacon-empty"><span class="spinner"></span>fetching...</span>';
-    fetch('/api/beacons')
-    .then(function(r) { return r.json(); })
-    .then(function(d) {
-      var list = document.getElementById('beacon-list');
-      if (d.error) {
-        list.innerHTML = '<span class="beacon-empty" style="color:var(--yellow)">[!] ' + escapeHtml(d.error) + '</span>';
-        return;
-      }
-      document.getElementById('beacon-count').textContent = '(' + d.messages.length + ')';
-      if (!d.messages.length) {
-        list.innerHTML = '<span class="beacon-empty">[ no messages yet ]</span>';
-        return;
-      }
-      list.innerHTML = d.messages.map(function(m) {
-        return '<div class="beacon-item">' +
-          '<span class="b-from">&#128032; ' + escapeHtml(String(m.from)) + '</span>' +
-          '<span class="b-time">' + new Date(m.date * 1000).toLocaleTimeString() + '</span>' +
-          '<div class="b-text">' + escapeHtml(m.text) + '</div>' +
-          '</div>';
-      }).join('');
-    })
-    .catch(function(e) {
-      document.getElementById('beacon-list').innerHTML =
-        '<span class="beacon-empty" style="color:var(--red)">[!] ' + e + '</span>';
+  _chatStreaming=true;
+  document.getElementById('btn-chat-send').disabled=true;
+  document.getElementById('btn-chat-send').textContent='...';
+
+  // add streaming response container
+  var container=document.getElementById('chat-messages');
+  var div=document.createElement('div');
+  div.className='msg msg-assistant';
+  div.innerHTML='<div class="msg-label">&#128032; PEEKABOO AI</div><div class="msg-body"><span class="spinner"></span></div>';
+  container.appendChild(div);
+  scrollChat();
+  var bodyEl=div.querySelector('.msg-body');
+  var accumulated='';
+
+  var provider = document.getElementById('provider-select').value;
+  fetch('/api/chat', {
+    method:'POST',
+    headers:{'Content-Type':'application/json'},
+    body:JSON.stringify({messages:_chatHistory, provider:provider})
+  })
+  .then(function(resp){
+    var reader=resp.body.getReader();
+    var decoder=new TextDecoder();
+    bodyEl.innerHTML='';
+
+    function read(){
+      reader.read().then(function(result){
+        if (result.done) { finishChat(accumulated); return; }
+        var chunk=decoder.decode(result.value,{stream:true});
+        chunk.split('\n').forEach(function(line){
+          if (!line.startsWith('data: ')) return;
+          var data=line.slice(6);
+          if (data==='[DONE]') { finishChat(accumulated); return; }
+          try {
+            var obj=JSON.parse(data);
+            if (obj.text) {
+              accumulated+=obj.text;
+              bodyEl.textContent=accumulated;
+              scrollChat();
+            }
+            if (obj.error) {
+              bodyEl.textContent='[!] '+obj.error;
+            }
+          } catch(e){}
+        });
+        read();
+      }).catch(function(e){
+        bodyEl.textContent='[!] stream error: '+e;
+        finishChat(accumulated);
+      });
+    }
+    read();
+  })
+  .catch(function(e){
+    bodyEl.textContent='[!] request failed: '+e;
+    finishChat('');
+  });
+}
+
+function finishChat(text) {
+  if (text) _chatHistory.push({role:'assistant', content:text});
+  _chatStreaming=false;
+  document.getElementById('btn-chat-send').disabled=false;
+  document.getElementById('btn-chat-send').textContent='&#9658; Send';
+  scrollChat();
+}
+
+function quickAsk(question) {
+  document.getElementById('chat-input').value=question;
+  sendChat();
+}
+
+function chatKeydown(e) {
+  if (e.key==='Enter' && !e.shiftKey) { e.preventDefault(); sendChat(); }
+}
+
+function clearChat() {
+  _chatHistory=[];
+  var el=document.getElementById('chat-messages');
+  el.innerHTML='<div class="msg msg-assistant"><div class="msg-label">&#128032; PEEKABOO AI</div>'
+    +'<div class="msg-body">Chat cleared. Ask me anything about C2 channels, injection, or detection!</div></div>';
+}
+
+function loadProviders() {
+  fetch('/api/chat/providers').then(function(r){return r.json();})
+  .then(function(d){
+    var sel = document.getElementById('provider-select');
+    var status = document.getElementById('provider-status');
+    var lines = [];
+    ['claude','gemini'].forEach(function(p){
+      var info = d[p] || {};
+      var dot = info.available ? '<span class="dot-ok">&#9679;</span>' : '<span class="dot-err">&#9679;</span>';
+      lines.push(dot + ' ' + p + (info.model ? ' ('+info.model+')' : ''));
+      // disable option if not available
+      var opt = sel.querySelector('option[value="'+p+'"]');
+      if (opt) opt.disabled = !info.available;
     });
-  }
+    status.innerHTML = lines.join(' &nbsp;|&nbsp; ');
+    // auto-select first available
+    var opts = sel.querySelectorAll('option:not(:disabled)');
+    if (opts.length) sel.value = opts[0].value;
+    onProviderChange();
+  });
+}
 
-  setInterval(loadBeacons, 30000);
-  document.getElementById('beacon-auto').textContent = 'auto 30s';
+function onProviderChange() {
+  var p = document.getElementById('provider-select').value;
+  var labels = {claude:'&#128032; PEEKABOO AI (Claude)', gemini:'&#9993; PEEKABOO AI (Gemini)'};
+  document.querySelectorAll('.msg-assistant .msg-label').forEach(function(el){
+    el.innerHTML = labels[p] || '&#128032; PEEKABOO AI';
+  });
+}
 
-  // ── build history ──────────────────────────────────────────────────────────
-  function loadHistory() {
-    fetch('/api/logs')
-    .then(function(r) { return r.json(); })
-    .then(function(logs) {
-      var el = document.getElementById('history-list');
-      if (!logs.length) { el.innerHTML = '<span class="text-dim">no builds yet.</span>'; return; }
-      el.innerHTML = logs.slice().reverse().map(function(b) {
-        var p = b.params || {};
-        var badge = '<span class="build-status ' + b.status + '">' + b.status + '</span>';
-        var t = b.created ? b.created.slice(0,19).replace('T',' ') : '';
-        var detail = [p.encryption, p.injection, p.stealer].filter(Boolean).join(' / ');
-        return '<div class="history-item">' +
-          '<span class="history-id">#' + b.id + '</span>' +
-          badge +
-          '<span class="history-params">' + escapeHtml(detail) + '</span>' +
-          '<span class="history-time">' + t + '</span>' +
-          '</div>';
-      }).join('');
-    });
-  }
+function triggerScrape() {
+  fetch('/api/chat/scrape',{method:'POST'})
+  .then(function(r){return r.json();})
+  .then(function(d){
+    document.getElementById('kb-info-text').textContent='&#8635; scraping cocomelonc.github.io... check back in ~2 min';
+    setTimeout(refreshKbInfo, 30000);
+  });
+}
 
-  // ── config preview ─────────────────────────────────────────────────────────
-  function showConfig(name) {
-    fetch('/api/config/' + name)
-    .then(function(r) { return r.json(); })
-    .then(function(d) {
-      document.getElementById('config-preview').textContent = JSON.stringify(d, null, 2);
-    });
-  }
+function refreshKbInfo() {
+  fetch('/api/chat/kb_info').then(function(r){return r.json();})
+  .then(function(d){
+    var badge=document.getElementById('kb-badge');
+    if (d.status==='ready') {
+      badge.textContent='KB: '+d.posts+' posts';
+      badge.className='badge badge-green';
+      document.getElementById('kb-info-text').textContent=
+        '\u{1F4DA} '+d.posts+' blog posts indexed | '+d.blog;
+    }
+  });
+}
 
-  // ── clock ──────────────────────────────────────────────────────────────────
-  function tick() {
-    document.getElementById('clock').textContent = new Date().toUTCString();
-  }
-  setInterval(tick, 1000); tick();
+// ── clock ──────────────────────────────────────────────────────────────────────
+function tick() { document.getElementById('clock').textContent=new Date().toUTCString(); }
+setInterval(tick,1000); tick();
 
-  // ── init ───────────────────────────────────────────────────────────────────
-  loadBeacons();
-  loadHistory();
+// ── init ───────────────────────────────────────────────────────────────────────
+loadBeacons();
+loadHistory();
+loadBinaryInfo();
+loadC2Status();
+loadProviders();
 
-  var total = document.querySelectorAll('.module-tag').length;
-  document.getElementById('module-count').textContent = '(' + total + ' total)';
+var total=document.querySelectorAll('.module-tag').length;
+document.getElementById('module-count').textContent='('+total+' total)';
+
+// refresh C2 status every 60s
+setInterval(loadC2Status, 60000);
+// refresh binary info every 15s
+setInterval(loadBinaryInfo, 15000);
 </script>
 </body>
 </html>

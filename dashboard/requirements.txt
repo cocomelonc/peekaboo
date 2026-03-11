@@ -1,2 +1,5 @@
 flask>=2.2
 requests>=2.28
+anthropic>=0.84
+google-genai>=1.0
+beautifulsoup4>=4.12
