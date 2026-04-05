@@ -1,5 +1,5 @@
 {
-  "bitbucket_token_base64": "Y29jb21lbG9ua3pAZ21haWwuY29tOkFUQVRUM3hGZkdGMDFyOUI4M0NOQVE3elpUNVJjX0ptVG4tN2dkNFY3S2I3eE5NTlViZGJidkdEVGNrWDlVU0hsREdQa2l5MHZ1WFgydWlzMW51Y1BIMXBESFBwZktoblc5N0tDUVdlM2tOb2x5NTZ6a0hZUmFuV2hvSUk5cWdiV2k0cXItaU9qS3FxdlJzZ1R1Ni0zQVA0ejJXRmtOazdyZDRRTWYwZ2Z6ZF9FU0ZUbUFwaE8waz1CMzE1MDcwRg==",
+  "bitbucket_token_base64": "token",
   "bitbucket_workspace": "meow-test",
   "bitbucket_repo": "meow-shellcode"
 }

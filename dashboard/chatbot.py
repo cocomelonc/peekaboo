@@ -80,8 +80,8 @@ def _get_gemini_config() -> tuple[str, str]:
             model = data.get("model", GEMINI_MODEL_DEFAULT)
             if key and not key.startswith("AIzaxxx"):
                 return key, model
-        except Exception:
-            pass
+        except Exception as e:
+            print ("get gemini config: ", str(e))
     return os.environ.get("GEMINI_API_KEY", ""), GEMINI_MODEL_DEFAULT
 
 

