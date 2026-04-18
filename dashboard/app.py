@@ -627,7 +627,7 @@ def api_scrape():
 
     t = threading.Thread(target=_scrape, daemon=True)
     t.start()
-    return jsonify({"ok": True, "message": "scraper started — check /api/chat/kb_info for status"})
+    return jsonify({"ok": True, "message": "indexer started — check /api/chat/kb_info for status"})
 
 
 if __name__ == "__main__":

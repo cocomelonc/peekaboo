@@ -1,7 +1,7 @@
 """
 peekaboo AI chatbot
 supports: Claude (Anthropic) and Gemini (Google)
-knowledge base: cocomelonc.github.io blog posts
+knowledge base: ~/hacking/meow local codebase
 focused on: C2 channels, binary delivery, malware dev, threat simulation
 """
 from __future__ import annotations
@@ -19,7 +19,7 @@ GEMINI_MODEL_DEFAULT = "gemini-2.0-flash"
 # ── system prompt ──────────────────────────────────────────────────────────────
 _SYSTEM_BASE = """You are Peekaboo AI — an educational assistant for the Peekaboo Threat Simulation Framework, created by Zhassulan Zhussupov (@cocomelonc).
 
-Your knowledge is grounded in cocomelonc.github.io — a deep-dive blog covering:
+Your knowledge is grounded in the ~/hacking/meow codebase — real, working code covering:
 - **C2 (Command & Control) channels**: GitHub Issues/Comments, Telegram webhooks, Bitbucket, VirusTotal, Discord/Slack abuse
 - **Binary delivery via C2**: how implants receive and execute dropped payloads from C2 servers
 - **Process injection**: VirtualAllocEx, EnumDesktopsA callbacks, APC injection, and more
@@ -50,8 +50,8 @@ Always frame content as **educational and defensive** — help researchers under
 3. Which MITRE ATT&CK techniques apply
 4. How to detect/prevent it in a blue team context
 
-Be direct, technical, and practical. Reference specific blog posts when relevant.
-Avoid vague explanations — give concrete details about APIs, memory layouts, WinAPI calls.
+Be direct, technical, and practical. Reference specific topic directories (e.g. 2021-09-19-injection-1) when relevant.
+Avoid vague explanations — give concrete details about APIs, memory layouts, WinAPI calls, and actual code from the knowledge base.
 """
 
 
@@ -96,14 +96,15 @@ def _load_knowledge_base() -> str:
         if not posts:
             return ""
         lines = [
-            f"\n\n## Knowledge Base: {kb.get('author', '')} blog",
-            f"Source: {kb.get('blog', '')}",
-            f"Posts indexed: {len(posts)}",
+            f"\n\n## Knowledge Base: {kb.get('author', '')}",
+            f"Source: {kb.get('source', '')}",
+            f"Topics indexed: {len(posts)}",
             "---",
         ]
         budget, used = 80_000, 0
         for p in posts:
-            chunk = f"\n### {p['title']}\nURL: {p['url']}\n{p['content']}\n"
+            ref = p.get("ref") or p.get("url", "")
+            chunk = f"\n### {p['title']}\nRef: {ref}\n{p['content']}\n"
             if used + len(chunk) > budget:
                 break
             lines.append(chunk)
@@ -220,14 +221,14 @@ def has_knowledge_base() -> bool:
 
 def kb_info() -> dict:
     if not KB_FILE.exists():
-        return {"status": "not_scraped", "posts": 0}
+        return {"status": "not_indexed", "posts": 0}
     try:
         kb = json.loads(KB_FILE.read_text())
         return {
             "status":     "ready",
             "posts":      kb.get("post_count", 0),
-            "scraped_at": kb.get("scraped_at", ""),
-            "blog":       kb.get("blog", ""),
+            "indexed_at": kb.get("indexed_at", ""),
+            "source":     kb.get("source", ""),
         }
     except Exception:
         return {"status": "error", "posts": 0}

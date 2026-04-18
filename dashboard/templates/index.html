@@ -4,6 +4,7 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>peekaboo // dashboard</title>
+<script src="https://cdn.jsdelivr.net/npm/marked@9/marked.min.js"></script>
 <style>
   :root {
     /* macOS Monterey dark palette */
@@ -458,9 +459,69 @@
     max-width: 88%;
     font-size: 13px;
     color: var(--text2);
-    white-space: pre-wrap;
     word-break: break-word;
   }
+  /* markdown inside assistant messages */
+  .msg-assistant .msg-body h1,
+  .msg-assistant .msg-body h2,
+  .msg-assistant .msg-body h3,
+  .msg-assistant .msg-body h4 {
+    color: var(--text);
+    font-weight: 600;
+    margin: 10px 0 4px;
+    line-height: 1.3;
+  }
+  .msg-assistant .msg-body h1 { font-size: 15px; }
+  .msg-assistant .msg-body h2 { font-size: 14px; color: var(--purple); }
+  .msg-assistant .msg-body h3 { font-size: 13px; color: var(--cyan); }
+  .msg-assistant .msg-body h4 { font-size: 13px; color: var(--blue); }
+  .msg-assistant .msg-body p  { margin: 5px 0; line-height: 1.6; }
+  .msg-assistant .msg-body ul,
+  .msg-assistant .msg-body ol {
+    margin: 5px 0 5px 18px;
+    padding: 0;
+  }
+  .msg-assistant .msg-body li { margin: 2px 0; line-height: 1.5; }
+  .msg-assistant .msg-body code {
+    font-family: var(--mono);
+    font-size: 11.5px;
+    background: var(--bg);
+    border: 1px solid var(--sep);
+    border-radius: 4px;
+    padding: 1px 5px;
+    color: var(--cyan);
+  }
+  .msg-assistant .msg-body pre {
+    background: var(--bg);
+    border: 1px solid var(--sep);
+    border-radius: var(--radius-sm);
+    padding: 10px 12px;
+    margin: 8px 0;
+    overflow-x: auto;
+    line-height: 1.55;
+  }
+  .msg-assistant .msg-body pre code {
+    background: none;
+    border: none;
+    padding: 0;
+    color: var(--green);
+    font-size: 11.5px;
+  }
+  .msg-assistant .msg-body blockquote {
+    border-left: 3px solid var(--purple);
+    margin: 6px 0;
+    padding: 4px 10px;
+    color: var(--dim);
+    font-style: italic;
+  }
+  .msg-assistant .msg-body strong { color: var(--text); font-weight: 600; }
+  .msg-assistant .msg-body em     { color: var(--yellow); font-style: italic; }
+  .msg-assistant .msg-body a      { color: var(--blue); text-decoration: underline; }
+  .msg-assistant .msg-body hr     { border: none; border-top: 1px solid var(--sep); margin: 8px 0; }
+  .msg-assistant .msg-body table  { border-collapse: collapse; font-size: 12px; margin: 6px 0; width: 100%; }
+  .msg-assistant .msg-body th     { background: var(--bg4); color: var(--text); padding: 5px 10px; border: 1px solid var(--sep); text-align: left; }
+  .msg-assistant .msg-body td     { padding: 4px 10px; border: 1px solid var(--sep); color: var(--text2); }
+  .msg-assistant .msg-body tr:nth-child(even) td { background: rgba(255,255,255,0.03); }
   .msg-label { font-size: 11px; font-weight: 600; margin-bottom: 5px; letter-spacing: 0.3px; }
   .msg-user .msg-label     { color: rgba(255,255,255,.7); }
   .msg-assistant .msg-label { color: var(--purple); }
@@ -812,19 +873,19 @@ PEEKABOO</pre>
       <div class="page-header">
         <h2>Peekaboo AI</h2>
         <span class="badge {% if kb and kb.status == 'ready' %}badge-green{% else %}badge-dim{% endif %}" id="kb-badge">
-          {% if kb and kb.status == 'ready' %}KB: {{ kb.posts }} posts{% else %}KB: not scraped{% endif %}
+          {% if kb and kb.status == 'ready' %}KB: {{ kb.posts }} topics{% else %}KB: not indexed{% endif %}
         </span>
       </div>
 
       <div class="kb-bar">
         <span id="kb-info-text">
           {% if kb and kb.status == 'ready' %}
-            📚 {{ kb.posts }} blog posts indexed &nbsp;|&nbsp; {{ kb.blog }}
+            📦 {{ kb.posts }} posts indexed &nbsp;|&nbsp; ~/hacking/cocomelonc.github.io
           {% else %}
-            ⚠️ knowledge base not built yet
+            ⚠️ knowledge base not indexed yet — click to index
           {% endif %}
         </span>
-        <button class="btn btn-blue" style="font-size:12px;padding:5px 12px;" onclick="triggerScrape()">↻ Scrape Blog</button>
+        <button class="btn btn-blue" style="font-size:12px;padding:5px 12px;" onclick="triggerScrape()">↻ Index Codebase</button>
       </div>
 
       <div class="provider-bar">
@@ -1165,16 +1226,16 @@ function sendChat() {
           if (data === '[DONE]') { finishChat(accumulated); return; }
           try {
             var obj = JSON.parse(data);
-            if (obj.text) { accumulated += obj.text; bodyEl.textContent = accumulated; scrollChat(); }
-            if (obj.error) { bodyEl.textContent = '[!] ' + obj.error; }
+            if (obj.text) { accumulated += obj.text; bodyEl.innerHTML = marked.parse(accumulated); scrollChat(); }
+            if (obj.error) { bodyEl.innerHTML = '<span style="color:var(--red)">[!] ' + escapeHtml(obj.error) + '</span>'; }
           } catch(e) {}
         });
         read();
-      }).catch(function(e) { bodyEl.textContent = '[!] stream error: ' + e; finishChat(accumulated); });
+      }).catch(function(e) { bodyEl.innerHTML = '<span style="color:var(--red)">[!] stream error: ' + escapeHtml(String(e)) + '</span>'; finishChat(accumulated); });
     }
     read();
   })
-  .catch(function(e) { bodyEl.textContent = '[!] request failed: ' + e; finishChat(''); });
+  .catch(function(e) { bodyEl.innerHTML = '<span style="color:var(--red)">[!] request failed: ' + escapeHtml(String(e)) + '</span>'; finishChat(''); });
 }
 
 function finishChat(text) {
@@ -1224,7 +1285,7 @@ function onProviderChange() {
 function triggerScrape() {
   fetch('/api/chat/scrape', {method:'POST'}).then(function(r){ return r.json(); })
   .then(function() {
-    document.getElementById('kb-info-text').textContent = '↻ scraping cocomelonc.github.io... check back in ~2 min';
+    document.getElementById('kb-info-text').textContent = '↻ indexing ~/hacking/cocomelonc.github.io/_posts ...';
     setTimeout(refreshKbInfo, 30000);
   });
 }
@@ -1236,7 +1297,7 @@ function refreshKbInfo() {
     if (d.status === 'ready') {
       badge.textContent = 'KB: ' + d.posts + ' posts';
       badge.className = 'badge badge-green';
-      document.getElementById('kb-info-text').textContent = '📚 ' + d.posts + ' blog posts indexed | ' + d.blog;
+      document.getElementById('kb-info-text').textContent = '📦 ' + d.posts + ' posts indexed | ~/hacking/cocomelonc.github.io';
     }
   });
 }
