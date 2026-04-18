@@ -48,5 +48,39 @@
     "created": "2026-04-18T21:07:14.376864",
     "start_time": "2026-04-18T21:07:14.377069",
     "end_time": "2026-04-18T21:07:17.074586"
+  },
+  {
+    "id": "1dadd89d",
+    "params": {
+      "payload": "meow",
+      "encryption": "speck",
+      "malware": "stealer",
+      "injection": "virtualallocex",
+      "stealer": "telegram",
+      "persistence": "registry_run"
+    },
+    "status": "success",
+    "output": "\u001b[1m[=^..^=]\n[=^..^=] #####  ###### #    #         ##         #####   ####   ####\n[=^..^=] #    # #      #   #         #  #        #    # #    # #    #\n[=^..^=] #    # #####  ####   ##### #    # ##### #####  #    # #    #\n[=^..^=] #####  #      #  #         ######       #    # #    # #    #\n[=^..^=] #      #      #   #        #    #       #    # #    # #    #\n[=^..^=] #      ###### #    #       #    #       #####   ####   ####\n[=^..^=]\n[=^..^=] Malware Development Framework (for trainings, education and research)\n[=^..^=] by @cocomelonc - https://cocomelonc.github.io\n\u001b[0m\n\u001b[95m\u001b[1m[=^..^=] init peekaboo builder with params [=^..^=] \u001b[0m\n\u001b[94m[=^..^=] malware: stealer [=^..^=] \u001b[0m\n\u001b[94m[=^..^=] payload: meow [=^..^=] \u001b[0m\n\u001b[94m[=^..^=] encryption: speck [=^..^=] \u001b[0m\n\u001b[94m[=^..^=] injection: virtualallocex [=^..^=] \u001b[0m\n\u001b[94m[=^..^=] stealer: telegram [=^..^=] \u001b[0m\n\u001b[94m[=^..^=] persistence: registry_run [=^..^=] \u001b[0m\n\u001b[92m[=^..^=] compiler: all dependencies found [=^..^=] \u001b[0m\n\u001b[95m\u001b[1m[=^..^=] building stealer: telegram [=^..^=] \u001b[0m\n\u001b[92m[=^..^=] successfully load template: /home/cocomelonc/hacking/peekaboo/malware/stealer/telegram.c [=^..^=] \u001b[0m\n\u001b[92m[=^..^=] successfully load config: /home/cocomelonc/hacking/peekaboo/config/telegram_config.json [=^..^=] \u001b[0m\n\u001b[92m[=^..^=] wrote stealer source: /home/cocomelonc/hacking/peekaboo/malware/stealer/telegram/stealer_final.c [=^..^=] \u001b[0m\n\u001b[94m[=^..^=] compiling: /usr/bin/x86_64-w64-mingw32-gcc -ffunction-sections -fdata-sections -Wno-write-strings -fno-exceptions -fmerge-all-constants -static-libstdc++ -static-libgcc -fpermissive -s -O2 /home/cocomelonc/hacking/peekaboo/malware/stealer/telegram/stealer_final.c -o /home/cocomelonc/hacking/peekaboo/malware/stealer/telegram/peekaboo.exe -lwinhttp -liphlpapi [=^..^=] \u001b[0m\n\u001b[92m[=^..^=] compilation successful [=^..^=] \u001b[0m\n\u001b[1m==========================================================\u001b[0m\n\u001b[95m\u001b[1m[=^..^=] build complete - generated files [=^..^=] \u001b[0m\n\u001b[92m[=^..^=] malware:     /home/cocomelonc/hacking/peekaboo/malware/stealer/telegram/peekaboo.exe [=^..^=] \u001b[0m\n\u001b[1m==========================================================\u001b[0m\n\u001b[1m==========================================================\u001b[0m\n",
+    "returncode": 0,
+    "created": "2026-04-18T21:28:03.339728",
+    "start_time": "2026-04-18T21:28:03.339955",
+    "end_time": "2026-04-18T21:28:04.631331"
+  },
+  {
+    "id": "b79b71f0",
+    "params": {
+      "payload": "meow",
+      "encryption": "speck",
+      "malware": "stealer",
+      "injection": "virtualallocex",
+      "stealer": "telegram",
+      "persistence": "registry_run"
+    },
+    "status": "success",
+    "output": "\u001b[1m[=^..^=]\n[=^..^=] #####  ###### #    #         ##         #####   ####   ####\n[=^..^=] #    # #      #   #         #  #        #    # #    # #    #\n[=^..^=] #    # #####  ####   ##### #    # ##### #####  #    # #    #\n[=^..^=] #####  #      #  #         ######       #    # #    # #    #\n[=^..^=] #      #      #   #        #    #       #    # #    # #    #\n[=^..^=] #      ###### #    #       #    #       #####   ####   ####\n[=^..^=]\n[=^..^=] Malware Development Framework (for trainings, education and research)\n[=^..^=] by @cocomelonc - https://cocomelonc.github.io\n\u001b[0m\n\u001b[95m\u001b[1m[=^..^=] init peekaboo builder with params [=^..^=] \u001b[0m\n\u001b[94m[=^..^=] malware: stealer [=^..^=] \u001b[0m\n\u001b[94m[=^..^=] payload: meow [=^..^=] \u001b[0m\n\u001b[94m[=^..^=] encryption: speck [=^..^=] \u001b[0m\n\u001b[94m[=^..^=] injection: virtualallocex [=^..^=] \u001b[0m\n\u001b[94m[=^..^=] stealer: telegram [=^..^=] \u001b[0m\n\u001b[94m[=^..^=] persistence: registry_run [=^..^=] \u001b[0m\n\u001b[92m[=^..^=] compiler: all dependencies found [=^..^=] \u001b[0m\n\u001b[95m\u001b[1m[=^..^=] building stealer: telegram [=^..^=] \u001b[0m\n\u001b[92m[=^..^=] successfully load template: /home/cocomelonc/hacking/peekaboo/malware/stealer/telegram.c [=^..^=] \u001b[0m\n\u001b[92m[=^..^=] successfully load config: /home/cocomelonc/hacking/peekaboo/config/telegram_config.json [=^..^=] \u001b[0m\n\u001b[92m[=^..^=] wrote stealer source: /home/cocomelonc/hacking/peekaboo/malware/stealer/telegram/stealer_final.c [=^..^=] \u001b[0m\n\u001b[94m[=^..^=] compiling: /usr/bin/x86_64-w64-mingw32-gcc -ffunction-sections -fdata-sections -Wno-write-strings -fno-exceptions -fmerge-all-constants -static-libstdc++ -static-libgcc -fpermissive -s -O2 /home/cocomelonc/hacking/peekaboo/malware/stealer/telegram/stealer_final.c -o /home/cocomelonc/hacking/peekaboo/malware/stealer/telegram/peekaboo.exe -lwinhttp -liphlpapi [=^..^=] \u001b[0m\n\u001b[92m[=^..^=] compilation successful [=^..^=] \u001b[0m\n\u001b[1m==========================================================\u001b[0m\n\u001b[95m\u001b[1m[=^..^=] build complete - generated files [=^..^=] \u001b[0m\n\u001b[92m[=^..^=] malware:     /home/cocomelonc/hacking/peekaboo/malware/stealer/telegram/peekaboo.exe [=^..^=] \u001b[0m\n\u001b[1m==========================================================\u001b[0m\n\u001b[1m==========================================================\u001b[0m\n",
+    "returncode": 0,
+    "created": "2026-04-18T21:30:14.220797",
+    "start_time": "2026-04-18T21:30:14.221080",
+    "end_time": "2026-04-18T21:30:15.446756"
   }
 ]

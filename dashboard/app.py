@@ -167,14 +167,20 @@ def api_build_files(build_id: str):
     if job.get("status") != "success":
         return jsonify({"files": []})
     params = job.get("params", {})
-    injection = params.get("injection", "virtualallocex")
-    persistence = params.get("persistence", "none")
-    out_dir = MALWARE_DIR / "injection" / injection
+    malware_type = params.get("malware", "injection")
+    persistence  = params.get("persistence", "none")
+
+    if malware_type == "stealer":
+        stealer = params.get("stealer", "telegram")
+        out_dir = MALWARE_DIR / "stealer" / stealer
+    else:
+        out_dir = MALWARE_DIR / "injection" / params.get("injection", "virtualallocex")
+
     files = []
     peekaboo = out_dir / "peekaboo.exe"
     if peekaboo.exists():
         files.append({"name": "peekaboo.exe", "size": peekaboo.stat().st_size})
-    if persistence != "none":
+    if malware_type != "stealer" and persistence != "none":
         pers_exe = out_dir / "persistence.exe"
         if pers_exe.exists():
             files.append({"name": "persistence.exe", "size": pers_exe.stat().st_size,
@@ -194,8 +200,11 @@ def api_build_download(build_id: str, filename: str):
     if job.get("status") != "success":
         return jsonify({"error": "build not successful"}), 400
     params = job.get("params", {})
-    injection = params.get("injection", "virtualallocex")
-    file_path = MALWARE_DIR / "injection" / injection / filename
+    if params.get("malware") == "stealer":
+        out_dir = MALWARE_DIR / "stealer" / params.get("stealer", "telegram")
+    else:
+        out_dir = MALWARE_DIR / "injection" / params.get("injection", "virtualallocex")
+    file_path = out_dir / filename
     if not file_path.exists():
         return jsonify({"error": f"{filename} not found"}), 404
     return send_file(file_path, as_attachment=True, download_name=filename,
