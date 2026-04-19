@@ -654,7 +654,10 @@ def api_chat():
     def generate():
         try:
             for chunk in stream_chat(messages, provider=provider):
-                yield f"data: {json.dumps({'text': chunk})}\n\n"
+                if isinstance(chunk, dict):
+                    yield f"data: {json.dumps(chunk)}\n\n"
+                else:
+                    yield f"data: {json.dumps({'text': chunk})}\n\n"
         except Exception as e:
             yield f"data: {json.dumps({'error': str(e)})}\n\n"
         finally:
@@ -807,6 +810,29 @@ def api_malpedia_search():
     actors   = _malpedia.find_actor(q)   if kind in ("all", "actor")  else []
     families = _malpedia.find_family(q)  if kind in ("all", "family") else []
     return jsonify({"actors": actors[:50], "families": families[:50]})
+
+
+@app.route("/api/semantic/status")
+def api_semantic_status():
+    try:
+        from semantic import available, _EMB_CACHE
+        emb_count = 0
+        if _EMB_CACHE.exists():
+            import json as _json
+            emb_count = len(_json.loads(_EMB_CACHE.read_text()))
+        return jsonify({"available": available(), "embedded_posts": emb_count})
+    except Exception as e:
+        return jsonify({"available": False, "error": str(e)})
+
+
+@app.route("/api/semantic/rebuild", methods=["POST"])
+def api_semantic_rebuild():
+    try:
+        from semantic import build_post_embeddings
+        ok = build_post_embeddings(force=True)
+        return jsonify({"ok": ok})
+    except Exception as e:
+        return jsonify({"ok": False, "error": str(e)}), 500
 
 
 if __name__ == "__main__":

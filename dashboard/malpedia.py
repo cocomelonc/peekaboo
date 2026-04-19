@@ -5,7 +5,6 @@ https://malpedia.caad.fkie.fraunhofer.de
 """
 from __future__ import annotations
 import json
-import re
 from pathlib import Path
 
 _BASE          = Path(__file__).parent.parent
@@ -200,95 +199,50 @@ def find_family(needle: str) -> list[str]:
         needle_l = needle.lower()
         return [f for f in list_families() if needle_l in f.lower()]
 
-# related blog post matching
+# ── semantic related post matching via local Ollama embeddings ──────────────
 
-_LIBRARY_CACHE = _BASE / "data" / "library_cache.json"
+def _actor_query(actor: dict) -> str:
+    parts = [actor.get("name", actor.get("id", ""))]
+    parts += actor.get("synonyms", [])[:6]
+    country = actor.get("country", "")
+    if country:
+        parts.append(country)
+    desc = (actor.get("description") or "").strip()[:300]
+    if desc:
+        parts.append(desc)
+    targets = actor.get("targets", [])[:4]
+    if targets:
+        parts.append("targets: " + ", ".join(targets))
+    fam_ids = [f["id"] for f in actor.get("families", [])[:8]]
+    if fam_ids:
+        parts.append("malware: " + " ".join(fam_ids))
+    return " | ".join(p for p in parts if p)
 
 
-def _load_library() -> list[dict]:
+def _family_query(family: dict) -> str:
+    parts = [family.get("name", family.get("id", ""))]
+    parts += family.get("alt_names", [])[:6]
+    desc = (family.get("description") or "").strip()[:300]
+    if desc:
+        parts.append(desc)
+    attrs = family.get("attribution", [])[:4]
+    if attrs:
+        parts.append("attributed to: " + ", ".join(attrs))
+    return " | ".join(p for p in parts if p)
+
+
+def _match_posts(query: str, max_results: int = 8) -> list[dict]:
     try:
-        if _LIBRARY_CACHE.exists():
-            return json.loads(_LIBRARY_CACHE.read_text())
-    except Exception:
-        pass
-    return []
-
-
-def _tokenize(text: str) -> set[str]:
-    return set(re.sub(r'[^a-z0-9]', ' ', text.lower()).split())
+        from semantic import find_related_posts
+        return find_related_posts(query, max_results=max_results)
+    except Exception as e:
+        print(f"[malpedia] semantic match error: {e}")
+        return []
 
 
 def _match_posts_for_actor(actor: dict, max_results: int = 8) -> list[dict]:
-    posts = _load_library()
-    if not posts:
-        return []
-
-    name_words = _tokenize(actor.get("name", actor.get("id", "")))
-    synonyms   = [s.lower() for s in actor.get("synonyms", [])]
-
-    scored: list[tuple[int, dict]] = []
-    for post in posts:
-        score = 0
-        title_l = post.get("title", "").lower()
-        slug_l  = post.get("slug", "").lower()
-
-        # exact actor name words in title
-        title_words = _tokenize(title_l)
-        overlap = name_words & title_words
-        if len(overlap) >= 2:
-            score += len(overlap) * 3
-        elif len(overlap) == 1 and len(name_words) == 1:
-            score += 2
-
-        # any synonym substring in title or slug
-        for syn in synonyms:
-            if len(syn) >= 4 and (syn in title_l or syn in slug_l):
-                score += 4
-                break
-
-        if score > 0:
-            scored.append((score, post))
-
-    scored.sort(key=lambda x: (-x[0], x[1]["date"]), reverse=False)
-    return [_slim_post(p) for _, p in scored[:max_results]]
+    return _match_posts(_actor_query(actor), max_results)
 
 
 def _match_posts_for_family(family: dict, max_results: int = 8) -> list[dict]:
-    posts = _load_library()
-    if not posts:
-        return []
-
-    names = [family.get("name", family.get("id", ""))]
-    names += family.get("alt_names", [])
-    # strip platform prefix like "win.", "linux.", "osx."
-    clean = []
-    for n in names:
-        parts = n.split(".", 1)
-        clean.append(parts[-1] if len(parts) == 2 else n)
-    names = list(set(n.lower() for n in names + clean if n and len(n) >= 3))
-
-    scored: list[tuple[int, dict]] = []
-    for post in posts:
-        score = 0
-        title_l = post.get("title", "").lower()
-        slug_l  = post.get("slug", "").lower()
-        for name in names:
-            if name in title_l:
-                score += 5
-            elif name in slug_l:
-                score += 3
-        if score > 0:
-            scored.append((score, post))
-
-    scored.sort(key=lambda x: (-x[0], x[1]["date"]), reverse=False)
-    return [_slim_post(p) for _, p in scored[:max_results]]
-
-
-def _slim_post(post: dict) -> dict:
-    return {
-        "title":      post.get("title", ""),
-        "date":       post.get("date", ""),
-        "blog_url":   post.get("blog_url", ""),
-        "category":   post.get("category", ""),
-        "attack_ids": post.get("attack_ids", []),
-    }
+    return _match_posts(_family_query(family), max_results)

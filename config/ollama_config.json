@@ -1,0 +1,6 @@
+{
+  "base_url": "http://localhost:11434",
+  "model": "qwen3:4b",
+  "temperature": 0.6,
+  "context_posts": 6
+}

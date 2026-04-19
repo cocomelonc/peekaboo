@@ -1,12 +1,13 @@
 """
 peekaboo AI chatbot
-supports: Claude (Anthropic) and Gemini (Google)
-knowledge base: ~/hacking/meow local codebase
+supports: Claude (Anthropic), Gemini (Google), local Ollama (RAG)
+knowledge base: ~/hacking/meow local codebase + semantic post index
 focused on: C2 channels, binary delivery, malware dev, threat simulation
 """
 from __future__ import annotations
 import json
 import os
+import urllib.request
 from pathlib import Path
 from typing import Generator
 
@@ -15,6 +16,7 @@ CONFIG_DIR = Path(__file__).parent.parent / "config"
 
 CLAUDE_MODEL = "claude-opus-4-6"
 GEMINI_MODEL_DEFAULT = "gemini-2.0-flash"
+OLLAMA_MODEL_DEFAULT = "qwen3:4b"
 
 # ── system prompt ──────────────────────────────────────────────────────────────
 _SYSTEM_BASE = """You are Peekaboo AI - an educational assistant for the Peekaboo Threat Simulation Framework, created by Zhassulan Zhussupov (@cocomelonc).
@@ -83,6 +85,22 @@ def _get_gemini_config() -> tuple[str, str]:
         except Exception as e:
             print ("get gemini config: ", str(e))
     return os.environ.get("GEMINI_API_KEY", ""), GEMINI_MODEL_DEFAULT
+
+
+def _get_ollama_config() -> dict:
+    cfg_path = CONFIG_DIR / "ollama_config.json"
+    defaults = {
+        "base_url":      "http://localhost:11434",
+        "model":         OLLAMA_MODEL_DEFAULT,
+        "temperature":   0.6,
+        "context_posts": 6,
+    }
+    if cfg_path.exists():
+        try:
+            defaults.update(json.loads(cfg_path.read_text()))
+        except Exception:
+            pass
+    return defaults
 
 
 # ── knowledge base ─────────────────────────────────────────────────────────────
@@ -201,16 +219,188 @@ def _stream_gemini(messages: list[dict]) -> Generator[str, None, None]:
             yield f"[!] Gemini error: {e}"
 
 
+# ── Ollama RAG streaming ───────────────────────────────────────────────────────
+
+def _rag_context(question: str, n: int = 6) -> str:
+    """Retrieve top-n relevant posts via semantic search, return formatted context block."""
+    try:
+        import sys, os
+        sys.path.insert(0, os.path.dirname(__file__))
+        from semantic import find_related_posts
+        posts = find_related_posts(question, max_results=n)
+    except Exception as e:
+        print(f"[ollama] rag retrieval error: {e}")
+        return ""
+
+    if not posts:
+        return ""
+
+    blocks = []
+    for p in posts:
+        title    = p.get("title", "")
+        url      = p.get("blog_url", "")
+        cat      = p.get("category", "")
+        aids     = ", ".join(p.get("attack_ids", []))
+        score    = p.get("score", 0)
+        # try to get the code snippet from library cache
+        snippet  = _get_snippet_for_post(p)
+        block = f"### {title}\n- URL: {url}\n- Category: {cat}"
+        if aids:
+            block += f"\n- ATT&CK: {aids}"
+        block += f"\n- Relevance: {score:.0%}"
+        if snippet:
+            block += f"\n\n```c\n{snippet}\n```"
+        blocks.append(block)
+
+    return "\n\n".join(blocks)
+
+
+_library_cache: list[dict] | None = None
+
+def _get_library() -> list[dict]:
+    global _library_cache
+    if _library_cache is not None:
+        return _library_cache
+    lc = Path(__file__).parent.parent / "data" / "library_cache.json"
+    if lc.exists():
+        try:
+            _library_cache = json.loads(lc.read_text())
+            return _library_cache
+        except Exception:
+            pass
+    _library_cache = []
+    return _library_cache
+
+
+def _get_snippet_for_post(post: dict) -> str:
+    """Look up a code snippet from library_cache by slug."""
+    slug = post.get("slug") or post.get("title", "")
+    if not slug:
+        return ""
+    for entry in _get_library():
+        if entry.get("slug") == slug:
+            snip = entry.get("snippet", "")
+            if snip:
+                lines = snip.splitlines()[:35]
+                return "\n".join(lines)
+    return ""
+
+
+def _build_ollama_system(context: str) -> str:
+    # /no_think disables qwen3 extended thinking mode
+    base = "/no_think\n\n" + _SYSTEM_BASE
+    if context:
+        base += f"""
+
+## Retrieved knowledge base context (most relevant to this question):
+
+{context}
+
+Use this context to give precise, code-grounded answers. Reference blog URLs when citing examples.
+"""
+    return base
+
+
+def _stream_ollama(messages: list[dict]) -> Generator[str, None, None]:
+    cfg = _get_ollama_config()
+    base_url = cfg["base_url"].rstrip("/")
+    model    = cfg["model"]
+    temp     = cfg.get("temperature", 0.6)
+    n_ctx    = cfg.get("context_posts", 6)
+
+    # RAG: embed the latest user message to retrieve context
+    last_user = next(
+        (m["content"] for m in reversed(messages) if m.get("role") == "user"), ""
+    )
+    context = _rag_context(last_user, n=n_ctx) if last_user else ""
+
+    system_prompt = _build_ollama_system(context)
+
+    payload = json.dumps({
+        "model":   model,
+        "stream":  True,
+        "think":   False,          # disable extended thinking for qwen3
+        "options": {"temperature": temp, "num_predict": 2048},
+        "messages": [{"role": "system", "content": system_prompt}] + messages,
+    }).encode()
+
+    url = f"{base_url}/api/chat"
+    try:
+        req = urllib.request.Request(
+            url, data=payload,
+            headers={"Content-Type": "application/json"},
+            method="POST",
+        )
+        with urllib.request.urlopen(req, timeout=300) as resp:
+            # qwen3 emits thinking tokens ending with </think> before the real answer
+            tokens: list[str] = []
+            past_think = False
+            emitted_thinking_event = False
+            for raw_line in resp:
+                line = raw_line.decode("utf-8").strip()
+                if not line:
+                    continue
+                try:
+                    chunk = json.loads(line)
+                    token = chunk.get("message", {}).get("content", "")
+                    if token:
+                        if past_think:
+                            yield token
+                        else:
+                            if not emitted_thinking_event:
+                                yield {"thinking": True}
+                                emitted_thinking_event = True
+                            tokens.append(token)
+                            joined = "".join(tokens)
+                            if "</think>" in joined:
+                                past_think = True
+                                yield {"thinking": False}
+                                after = joined.split("</think>", 1)[1]
+                                tokens = []
+                                if after:
+                                    yield after
+                    if chunk.get("done"):
+                        if not past_think:
+                            if emitted_thinking_event:
+                                yield {"thinking": False}
+                            yield "".join(tokens)
+                        break
+                except json.JSONDecodeError:
+                    continue
+    except urllib.error.URLError as e:
+        yield f"[!] Ollama connection error: {e}. Is Ollama running?"
+    except Exception as e:
+        yield f"[!] Ollama error: {e}"
+
+
+def _ollama_available() -> tuple[bool, str]:
+    cfg = _get_ollama_config()
+    base_url = cfg["base_url"].rstrip("/")
+    model    = cfg["model"]
+    try:
+        req = urllib.request.Request(f"{base_url}/api/tags", method="GET")
+        with urllib.request.urlopen(req, timeout=3) as resp:
+            data = json.loads(resp.read())
+            names = [m["name"] for m in data.get("models", [])]
+            if any(model.split(":")[0] in n for n in names):
+                return True, model
+            return False, f"{model} not pulled"
+    except Exception:
+        return False, "ollama offline"
+
+
 # ── public interface ───────────────────────────────────────────────────────────
 
 def stream_chat(messages: list[dict], provider: str = "claude") -> Generator[str, None, None]:
     """
     Stream a chat response.
-    provider: "claude" | "gemini"
+    provider: "claude" | "gemini" | "ollama"
     messages: [{role, content}, ...]
     """
     if provider == "gemini":
         yield from _stream_gemini(messages)
+    elif provider == "ollama":
+        yield from _stream_ollama(messages)
     else:
         yield from _stream_claude(messages)
 
@@ -238,6 +428,7 @@ def providers_status() -> dict:
     """Check which providers are configured."""
     claude_key = _get_anthropic_key()
     gemini_key, gemini_model = _get_gemini_config()
+    ollama_ok, ollama_model  = _ollama_available()
     return {
         "claude": {
             "available": bool(claude_key),
@@ -246,5 +437,9 @@ def providers_status() -> dict:
         "gemini": {
             "available": bool(gemini_key),
             "model":     gemini_model,
+        },
+        "ollama": {
+            "available": ollama_ok,
+            "model":     ollama_model,
         },
     }

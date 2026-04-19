@@ -1199,6 +1199,7 @@ PEEKABOO</pre>
         <select id="provider-select" onchange="onProviderChange()" style="flex:none;width:auto;font-size:13px;padding:6px 10px;">
           <option value="claude">🐱 Claude (Opus 4.6)</option>
           <option value="gemini">✉️ Gemini</option>
+          <option value="ollama">🦙 Local AI (Ollama)</option>
         </select>
         <span id="provider-status" style="font-size:12px;color:var(--dim);"></span>
       </div>
@@ -1212,7 +1213,7 @@ PEEKABOO</pre>
         </div>
         <div style="padding:14px 14px 10px;">
           <div class="chat-input-row">
-            <textarea id="chat-input" placeholder="Ask about C2 channels, binary delivery, injection techniques..." onkeydown="chatKeydown(event)"></textarea>
+            <textarea id="chat-input" placeholder="Ask about C2 channels, injection, evasion, persistence... (Local AI has full RAG over 200 posts)" onkeydown="chatKeydown(event)"></textarea>
             <button class="btn btn-primary" id="btn-chat-send" onclick="sendChat()" style="padding:12px 18px;height:54px;">▶ Send</button>
           </div>
           <div class="quick-btns">
@@ -1666,7 +1667,15 @@ function sendChat() {
           if (data === '[DONE]') { finishChat(accumulated); return; }
           try {
             var obj = JSON.parse(data);
-            if (obj.text) { accumulated += obj.text; bodyEl.innerHTML = marked.parse(accumulated); scrollChat(); }
+            if (obj.thinking === true) {
+              bodyEl.innerHTML = '<span class="spinner"></span> <span style="color:var(--dim);font-size:12px;">thinking...</span>';
+            } else if (obj.thinking === false) {
+              bodyEl.innerHTML = '';
+            } else if (obj.text) {
+              accumulated += obj.text;
+              bodyEl.innerHTML = marked.parse(accumulated);
+              scrollChat();
+            }
             if (obj.error) { bodyEl.innerHTML = '<span style="color:var(--red)">[!] ' + escapeHtml(obj.error) + '</span>'; }
           } catch(e) {}
         });
@@ -1700,7 +1709,7 @@ function loadProviders() {
     var sel = document.getElementById('provider-select');
     var status = document.getElementById('provider-status');
     var lines = [];
-    ['claude','gemini'].forEach(function(p) {
+    ['claude','gemini','ollama'].forEach(function(p) {
       var info = d[p] || {};
       var dot = info.available ? '<span class="dot-ok">●</span>' : '<span class="dot-err">●</span>';
       lines.push(dot + ' ' + p + (info.model ? ' (' + info.model + ')' : ''));
@@ -1716,7 +1725,7 @@ function loadProviders() {
 
 function onProviderChange() {
   var p = document.getElementById('provider-select').value;
-  var labels = {claude:'🐱 PEEKABOO AI (Claude)', gemini:'✉️ PEEKABOO AI (Gemini)'};
+  var labels = {claude:'🐱 PEEKABOO AI (Claude)', gemini:'✉️ PEEKABOO AI (Gemini)', ollama:'🦙 PEEKABOO AI (Local)'};
   document.querySelectorAll('.msg-assistant .msg-label').forEach(function(el) {
     el.innerHTML = labels[p] || '🐱 PEEKABOO AI';
   });
@@ -2032,6 +2041,16 @@ function initMalpedia() {
   if (_malpInit) return;
   _malpInit = true;
 
+  fetch('/api/semantic/status').then(function(r){ return r.json(); })
+  .then(function(d) {
+    var note = document.getElementById('malp-status-note');
+    if (d.available) {
+      note.innerHTML += ' <span style="color:var(--green);">● semantic</span> ' + d.embedded_posts + ' posts indexed';
+    } else {
+      note.innerHTML += ' <span style="color:var(--yellow);">● ollama offline</span>';
+    }
+  }).catch(function(){});
+
   fetch('/api/malpedia/status').then(function(r){ return r.json(); })
   .then(function(d) {
     var note = document.getElementById('malp-status-note');
@@ -2196,8 +2215,9 @@ function renderRelatedPosts(posts) {
     var aids = (p.attack_ids || []).slice(0,3).map(function(a){
       return '<span class="malp-chip" style="font-size:10px;padding:1px 5px;">' + escapeHtml(a) + '</span>';
     }).join('');
+    var score = p.score ? ' <span style="color:var(--green);font-size:10px;">' + Math.round(p.score*100) + '%</span>' : '';
     return '<li class="malp-rpost">'
-      + '<a href="' + escapeHtml(p.blog_url) + '" target="_blank">' + escapeHtml(p.title) + '</a>'
+      + '<a href="' + escapeHtml(p.blog_url) + '" target="_blank">' + escapeHtml(p.title) + '</a>' + score
       + '<span class="malp-rpost-meta">' + escapeHtml(p.date) + (aids ? ' &nbsp;' + aids : '') + '</span>'
       + '</li>';
   }).join('');
