@@ -4,3 +4,4 @@ anthropic>=0.84
 google-genai>=1.0
 beautifulsoup4>=4.12
 mitreattack-python>=3.0
+malpediaclient>=0.3

@@ -801,6 +801,140 @@
     color: var(--dim);
   }
 
+  /* ── malpedia ── */
+  .malp-layout {
+    display: grid;
+    grid-template-columns: 280px 1fr;
+    gap: 16px;
+    align-items: start;
+  }
+  .malp-list-wrap {
+    background: var(--bg2);
+    border: 1px solid var(--sep);
+    border-radius: var(--radius);
+    overflow: hidden;
+  }
+  .malp-search {
+    display: flex;
+    gap: 0;
+    border-bottom: 1px solid var(--sep);
+  }
+  .malp-search input {
+    flex: 1;
+    background: var(--bg3);
+    border: none;
+    border-radius: 0;
+    padding: 9px 12px;
+    font-size: 13px;
+    color: var(--text);
+    outline: none;
+  }
+  .malp-list {
+    max-height: calc(100vh - 280px);
+    overflow-y: auto;
+  }
+  .malp-item {
+    padding: 8px 12px;
+    font-size: 12px;
+    font-family: var(--mono);
+    color: var(--text2);
+    cursor: pointer;
+    border-bottom: 1px solid var(--sep);
+    transition: background .12s, color .12s;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+  .malp-item:hover { background: rgba(255,255,255,.05); color: var(--text); }
+  .malp-item.active { background: rgba(191,90,242,.15); color: var(--purple); }
+  .malp-count {
+    font-size: 11px;
+    color: var(--dim);
+    padding: 6px 12px;
+    border-bottom: 1px solid var(--sep);
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+  }
+  .malp-detail {
+    background: var(--bg2);
+    border: 1px solid var(--sep);
+    border-radius: var(--radius);
+    padding: 20px;
+    min-height: 200px;
+  }
+  .malp-detail-title {
+    font-size: 18px;
+    font-weight: 700;
+    color: var(--text);
+    margin-bottom: 6px;
+  }
+  .malp-detail-id {
+    font-family: var(--mono);
+    font-size: 11px;
+    color: var(--dim);
+    margin-bottom: 14px;
+  }
+  .malp-meta-row {
+    display: flex;
+    gap: 8px;
+    flex-wrap: wrap;
+    margin-bottom: 12px;
+  }
+  .malp-chip {
+    font-size: 11px;
+    padding: 3px 10px;
+    border-radius: 14px;
+    border: 1px solid var(--sep);
+    background: var(--bg3);
+    color: var(--text2);
+  }
+  .malp-chip.country { border-color: var(--blue); color: var(--blue); background: rgba(10,132,255,.1); }
+  .malp-chip.family  { border-color: var(--purple); color: var(--purple); background: rgba(191,90,242,.1); cursor:pointer; }
+  .malp-chip.family:hover { background: rgba(191,90,242,.22); }
+  .malp-chip.actor   { border-color: var(--orange); color: var(--orange); background: rgba(255,159,10,.1); cursor:pointer; }
+  .malp-desc {
+    font-size: 13px;
+    color: var(--text2);
+    line-height: 1.6;
+    margin-bottom: 14px;
+    max-height: 120px;
+    overflow-y: auto;
+  }
+  .malp-section-label {
+    font-size: 11px;
+    font-weight: 600;
+    color: var(--dim);
+    text-transform: uppercase;
+    letter-spacing: .5px;
+    margin: 14px 0 6px;
+  }
+  .malp-url-list {
+    list-style: none;
+    margin: 0; padding: 0;
+  }
+  .malp-url-list li {
+    margin-bottom: 4px;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+  .malp-url-list a {
+    font-size: 12px;
+    color: var(--blue);
+    text-decoration: none;
+  }
+  .malp-url-list a:hover { text-decoration: underline; }
+  .malp-placeholder {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    min-height: 200px;
+    color: var(--dim);
+    font-size: 14px;
+  }
+  @media (max-width: 900px) { .malp-layout { grid-template-columns: 1fr; } }
+
   /* ── responsive ── */
   @media (max-width: 900px) {
     .page-grid-2, .page-grid-3 { grid-template-columns: 1fr; }
@@ -861,6 +995,9 @@ PEEKABOO</pre>
       </div>
       <div class="nav-item" onclick="showPage('mitre',this)" data-page="mitre">
         <span class="nav-icon">🎯</span><span>ATT&amp;CK</span>
+      </div>
+      <div class="nav-item" onclick="showPage('malpedia',this)" data-page="malpedia">
+        <span class="nav-icon">🕵️</span><span>Malpedia</span>
       </div>
     </div>
 
@@ -1120,6 +1257,54 @@ PEEKABOO</pre>
       </div>
     </div>
 
+    <!-- ══ PAGE: Malpedia ══ -->
+    <div class="page" id="page-malpedia">
+      <div class="page-header">
+        <h2>Malpedia</h2>
+        <span class="badge badge-blue">threat intelligence</span>
+        <span style="font-size:12px;color:var(--dim);margin-left:4px;" id="malp-status-note"></span>
+      </div>
+
+      <div class="mitre-tabs" style="margin-bottom:16px;">
+        <div class="mitre-tab active" onclick="setMalpView(this,'actors')">🎭 Actors <span id="malp-actor-count" style="font-size:10px;opacity:.6;"></span></div>
+        <div class="mitre-tab"        onclick="setMalpView(this,'families')">🦠 Families <span id="malp-family-count" style="font-size:10px;opacity:.6;"></span></div>
+      </div>
+
+      <!-- actors view -->
+      <div id="malp-view-actors" class="malp-layout">
+        <div class="malp-list-wrap">
+          <div class="malp-search">
+            <input id="malp-actor-search" type="text" placeholder="search actors..." oninput="filterMalpList('actor')">
+          </div>
+          <div class="malp-count">
+            <span id="malp-actor-list-count"></span>
+            <button class="btn" style="font-size:10px;padding:2px 8px;" onclick="refreshMalpData('actors')">↻</button>
+          </div>
+          <div class="malp-list" id="malp-actor-list"></div>
+        </div>
+        <div class="malp-detail" id="malp-actor-detail">
+          <div class="malp-placeholder">← select an actor</div>
+        </div>
+      </div>
+
+      <!-- families view -->
+      <div id="malp-view-families" class="malp-layout" style="display:none;">
+        <div class="malp-list-wrap">
+          <div class="malp-search">
+            <input id="malp-family-search" type="text" placeholder="search families..." oninput="filterMalpList('family')">
+          </div>
+          <div class="malp-count">
+            <span id="malp-family-list-count"></span>
+            <button class="btn" style="font-size:10px;padding:2px 8px;" onclick="refreshMalpData('families')">↻</button>
+          </div>
+          <div class="malp-list" id="malp-family-list"></div>
+        </div>
+        <div class="malp-detail" id="malp-family-detail">
+          <div class="malp-placeholder">← select a family</div>
+        </div>
+      </div>
+    </div>
+
     <!-- ══ PAGE: Modules ══ -->
     <div class="page" id="page-modules">
       <div class="page-header">
@@ -1168,6 +1353,7 @@ var _pageTitles = {
   chat:     'AI Chat',
   modules:  'Modules',
   mitre:    'MITRE ATT\u0026CK',
+  malpedia: 'Malpedia',
 };
 
 function showPage(name, navEl) {
@@ -1182,6 +1368,7 @@ function showPage(name, navEl) {
   if (name === 'beacons')  loadBeacons();
   if (name === 'delivery') { loadBinaryInfo(); loadC2Status(); }
   if (name === 'mitre')    initMitre();
+  if (name === 'malpedia') initMalpedia();
 }
 
 // ── utils ──────────────────────────────────────────────────────────────────────
@@ -1811,6 +1998,194 @@ function copySnippet(uid) {
   var el = document.getElementById(uid);
   if (!el) return;
   navigator.clipboard.writeText(el.textContent).catch(function(){});
+}
+
+// ── Malpedia ──────────────────────────────────────────────────────────────────
+var _malpInit    = false;
+var _malpView    = 'actors';
+var _allActors   = [];
+var _allFamilies = [];
+
+function initMalpedia() {
+  if (_malpInit) return;
+  _malpInit = true;
+
+  fetch('/api/malpedia/status').then(function(r){ return r.json(); })
+  .then(function(d) {
+    var note = document.getElementById('malp-status-note');
+    if (d.ok) {
+      note.innerHTML = '<span class="dot-ok">●</span> v' + d.version
+        + (d.authenticated ? ' · authenticated' : ' · anonymous');
+    } else {
+      note.innerHTML = '<span class="dot-err">●</span> ' + escapeHtml(d.error || 'unavailable');
+    }
+  }).catch(function(){});
+
+  loadMalpActors();
+  loadMalpFamilies();
+}
+
+function setMalpView(el, view) {
+  document.querySelectorAll('#page-malpedia .mitre-tab').forEach(function(t){ t.classList.remove('active'); });
+  el.classList.add('active');
+  _malpView = view;
+  document.getElementById('malp-view-actors').style.display   = view === 'actors'   ? '' : 'none';
+  document.getElementById('malp-view-families').style.display = view === 'families' ? '' : 'none';
+}
+
+function loadMalpActors(refresh) {
+  var url = '/api/malpedia/actors' + (refresh ? '?refresh=1' : '');
+  document.getElementById('malp-actor-list').innerHTML =
+    '<div class="malp-item" style="color:var(--dim);cursor:default;"><span class="spinner"></span> loading...</div>';
+  fetch(url).then(function(r){ return r.json(); })
+  .then(function(actors) {
+    _allActors = actors;
+    document.getElementById('malp-actor-count').textContent = '(' + actors.length + ')';
+    renderMalpList('actor', actors);
+  }).catch(function(e){
+    document.getElementById('malp-actor-list').innerHTML =
+      '<div class="malp-item" style="color:var(--red);">error: ' + escapeHtml(String(e)) + '</div>';
+  });
+}
+
+function loadMalpFamilies(refresh) {
+  var url = '/api/malpedia/families' + (refresh ? '?refresh=1' : '');
+  document.getElementById('malp-family-list').innerHTML =
+    '<div class="malp-item" style="color:var(--dim);cursor:default;"><span class="spinner"></span> loading...</div>';
+  fetch(url).then(function(r){ return r.json(); })
+  .then(function(fams) {
+    _allFamilies = fams;
+    document.getElementById('malp-family-count').textContent = '(' + fams.length + ')';
+    renderMalpList('family', fams);
+  }).catch(function(){});
+}
+
+function renderMalpList(type, items) {
+  var listEl  = document.getElementById('malp-' + type + '-list');
+  var countEl = document.getElementById('malp-' + type + '-list-count');
+  countEl.textContent = items.length + ' ' + (type === 'actor' ? 'actors' : 'families');
+  if (!items.length) {
+    listEl.innerHTML = '<div class="malp-item" style="color:var(--dim);cursor:default;">no results</div>';
+    return;
+  }
+  listEl.innerHTML = items.map(function(id) {
+    return '<div class="malp-item" onclick="loadMalp' + (type === 'actor' ? 'Actor' : 'Family') + '(\'' + escapeHtml(id) + '\',this)">'
+      + escapeHtml(id) + '</div>';
+  }).join('');
+}
+
+function filterMalpList(type) {
+  var q     = document.getElementById('malp-' + type + '-search').value.toLowerCase().trim();
+  var all   = type === 'actor' ? _allActors : _allFamilies;
+  var items = q ? all.filter(function(id){ return id.toLowerCase().indexOf(q) !== -1; }) : all;
+  renderMalpList(type, items);
+}
+
+function refreshMalpData(what) {
+  if (what === 'actors')   loadMalpActors(true);
+  if (what === 'families') loadMalpFamilies(true);
+}
+
+function loadMalpActor(id, el) {
+  document.querySelectorAll('#malp-actor-list .malp-item').forEach(function(i){ i.classList.remove('active'); });
+  if (el) el.classList.add('active');
+  var det = document.getElementById('malp-actor-detail');
+  det.innerHTML = '<div class="malp-placeholder"><span class="spinner"></span> loading ' + escapeHtml(id) + '...</div>';
+  fetch('/api/malpedia/actor/' + encodeURIComponent(id))
+  .then(function(r){ return r.json(); })
+  .then(function(d) {
+    if (d.error) { det.innerHTML = '<div class="malp-placeholder" style="color:var(--red);">' + escapeHtml(d.error) + '</div>'; return; }
+    det.innerHTML = renderActorDetail(d);
+  }).catch(function(e){
+    det.innerHTML = '<div class="malp-placeholder" style="color:var(--red);">error: ' + escapeHtml(String(e)) + '</div>';
+  });
+}
+
+function loadMalpFamily(id, el) {
+  document.querySelectorAll('#malp-family-list .malp-item').forEach(function(i){ i.classList.remove('active'); });
+  if (el) el.classList.add('active');
+  var det = document.getElementById('malp-family-detail');
+  det.innerHTML = '<div class="malp-placeholder"><span class="spinner"></span> loading ' + escapeHtml(id) + '...</div>';
+  fetch('/api/malpedia/family/' + encodeURIComponent(id))
+  .then(function(r){ return r.json(); })
+  .then(function(d) {
+    if (d.error) { det.innerHTML = '<div class="malp-placeholder" style="color:var(--red);">' + escapeHtml(d.error) + '</div>'; return; }
+    det.innerHTML = renderFamilyDetail(d);
+  }).catch(function(e){
+    det.innerHTML = '<div class="malp-placeholder" style="color:var(--red);">error: ' + escapeHtml(String(e)) + '</div>';
+  });
+}
+
+function renderActorDetail(d) {
+  var synonyms = (d.synonyms || []).map(function(s){
+    return '<span class="malp-chip">' + escapeHtml(s) + '</span>';
+  }).join('');
+  var targets = (d.targets || []).map(function(t){
+    return '<span class="malp-chip">' + escapeHtml(t) + '</span>';
+  }).join('');
+  var victims = (d.victims || []).slice(0,8).map(function(v){
+    return '<span class="malp-chip">' + escapeHtml(v) + '</span>';
+  }).join('');
+  var families = (d.families || []).map(function(f){
+    return '<span class="malp-chip family" onclick="jumpToFamily(\'' + escapeHtml(f.id) + '\')">' + escapeHtml(f.id) + '</span>';
+  }).join('');
+  var refs = (d.refs || []).slice(0,8).map(function(url){
+    return '<li><a href="' + escapeHtml(url) + '" target="_blank">' + escapeHtml(url) + '</a></li>';
+  }).join('');
+
+  return '<div class="malp-detail-title">' + escapeHtml(d.name || d.id) + '</div>'
+    + '<div class="malp-detail-id">' + escapeHtml(d.id) + ' &nbsp;·&nbsp; ' + escapeHtml(d.uuid || '') + '</div>'
+    + '<div class="malp-meta-row">'
+    + (d.country ? '<span class="malp-chip country">🌍 ' + escapeHtml(d.country) + '</span>' : '')
+    + (d.incident_type ? '<span class="malp-chip">' + escapeHtml(d.incident_type) + '</span>' : '')
+    + '</div>'
+    + (synonyms ? '<div class="malp-section-label">Also known as</div><div class="malp-meta-row">' + synonyms + '</div>' : '')
+    + (d.description ? '<div class="malp-section-label">Description</div><div class="malp-desc">' + escapeHtml(d.description) + '</div>' : '')
+    + (targets ? '<div class="malp-section-label">Target sectors</div><div class="malp-meta-row">' + targets + '</div>' : '')
+    + (victims ? '<div class="malp-section-label">Suspected victims</div><div class="malp-meta-row">' + victims + '</div>' : '')
+    + (families ? '<div class="malp-section-label">Malware families (' + d.families.length + ')</div><div class="malp-meta-row" style="max-height:140px;overflow-y:auto;">' + families + '</div>' : '')
+    + (refs ? '<div class="malp-section-label">References</div><ul class="malp-url-list">' + refs + '</ul>' : '');
+}
+
+function renderFamilyDetail(d) {
+  var alts = (d.alt_names || []).map(function(a){
+    return '<span class="malp-chip">' + escapeHtml(a) + '</span>';
+  }).join('');
+  var attrs = (d.attribution || []).map(function(a){
+    return '<span class="malp-chip actor" onclick="jumpToActor(\'' + escapeHtml(a) + '\')">' + escapeHtml(a) + '</span>';
+  }).join('');
+  var urls = (d.urls || []).slice(0,10).map(function(url){
+    return '<li><a href="' + escapeHtml(url) + '" target="_blank">' + escapeHtml(url) + '</a></li>';
+  }).join('');
+
+  return '<div class="malp-detail-title">' + escapeHtml(d.name || d.id) + '</div>'
+    + '<div class="malp-detail-id">' + escapeHtml(d.id) + (d.updated ? ' &nbsp;·&nbsp; updated: ' + escapeHtml(d.updated) : '') + '</div>'
+    + (alts ? '<div class="malp-section-label">Also known as</div><div class="malp-meta-row">' + alts + '</div>' : '')
+    + (d.description ? '<div class="malp-section-label">Description</div><div class="malp-desc">' + escapeHtml(d.description) + '</div>' : '<div class="malp-desc" style="color:var(--dim);font-style:italic;">no description available</div>')
+    + (attrs ? '<div class="malp-section-label">Attribution</div><div class="malp-meta-row">' + attrs + '</div>' : '')
+    + (urls ? '<div class="malp-section-label">Reports &amp; references (' + d.urls.length + ')</div><ul class="malp-url-list">' + urls + '</ul>' : '');
+}
+
+function jumpToFamily(id) {
+  setMalpView(document.querySelector('#page-malpedia .mitre-tab:nth-child(2)'), 'families');
+  var search = document.getElementById('malp-family-search');
+  search.value = id;
+  filterMalpList('family');
+  setTimeout(function(){
+    var item = document.querySelector('#malp-family-list .malp-item');
+    if (item) { item.click(); }
+  }, 100);
+}
+
+function jumpToActor(id) {
+  setMalpView(document.querySelector('#page-malpedia .mitre-tab:nth-child(1)'), 'actors');
+  var search = document.getElementById('malp-actor-search');
+  search.value = id;
+  filterMalpList('actor');
+  setTimeout(function(){
+    var item = document.querySelector('#malp-actor-list .malp-item');
+    if (item) { item.click(); }
+  }, 100);
 }
 
 // ── clock ──────────────────────────────────────────────────────────────────────

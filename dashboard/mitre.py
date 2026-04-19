@@ -87,30 +87,58 @@ PEEKABOO_MODULES: dict[str, dict] = {
 
 # slug keyword → (category, fallback_attack_id)
 _SLUG_RULES: list[tuple[str, str, str | None]] = [
-    (r"injection|inject",           "injection",     "T1055"),
-    (r"dll.hijack|dllhijack",       "injection",     "T1574.001"),
-    (r"malware.pers|pers-\d",       "persistence",   "T1547"),
-    (r"mac.+pers|pers.+mac",        "persistence",   None),
-    (r"av.evasion|evasion",         "evasion",       "T1027"),
-    (r"cryptography|crypto",        "cryptography",  "T1027"),
-    (r"hooking",                    "hooking",       "T1056"),
-    (r"shellcod",                   "shellcoding",   "T1059"),
-    (r"token.theft|token",          "privesc",       "T1134"),
-    (r"syscall",                    "syscalls",      "T1106"),
-    (r"reverse.shell",              "c2",            "T1059"),
-    (r"pivoting",                   "network",       "T1090"),
-    (r"linux.hack|linux",           "linux",         None),
-    (r"malware.mac|mac.malware|mac","macos",         None),
-    (r"android",                    "android",       None),
-    (r"malware.trick|trick",        "tricks",        None),
-    (r"malware.analysis|analysis",  "analysis",      None),
-    (r"mem.forensic|forensic",      "analysis",      None),
-    (r"inline.asm|asm",             "evasion",       "T1027"),
-    (r"overflow",                   "exploitation",  "T1203"),
-    (r"shellcod",                   "shellcoding",   "T1059"),
-    (r"hvck",                       "tricks",        None),
-    (r"rev.c|simple.rev",           "c2",            "T1059"),
+    (r"injection|inject",           "injection",       "T1055"),
+    (r"dll.hijack|dllhijack",       "injection",       "T1574.001"),
+    (r"malware.pers|pers-\d",       "persistence",     "T1547"),
+    (r"mac.+pers|pers.+mac",        "persistence",     None),
+    (r"av.evasion|evasion",         "evasion",         "T1027"),
+    (r"cryptography|crypto",        "cryptography",    "T1027"),
+    (r"hooking",                    "hooking",         "T1056"),
+    (r"shellcod",                   "shellcoding",     "T1059"),
+    (r"token.theft|token",          "privesc",         "T1134"),
+    (r"syscall",                    "syscalls",        "T1106"),
+    (r"reverse.shell",              "c2",              "T1059"),
+    (r"pivoting",                   "network",         "T1090"),
+    (r"linux.hack|linux",           "linux",           None),
+    (r"malware.mac|mac.malware|mac","macos",           None),
+    (r"android",                    "android",         None),
+    (r"malware.trick|trick",        "tricks",          None),
+    (r"malware.analysis|analysis",  "analysis",        None),
+    (r"mem.forensic|forensic",      "analysis",        None),
+    (r"inline.asm|asm",             "evasion",         "T1027"),
+    (r"overflow",                   "exploitation",    "T1203"),
+    (r"hvck",                       "tricks",          None),
+    (r"rev.c|simple.rev",           "c2",              "T1059"),
 ]
+
+# explicit ATT&CK ID → canonical category (overrides slug-inferred category)
+_AID_CATEGORY: dict[str, str] = {
+    "T1003": "credential-access",
+    "T1012": "discovery",
+    "T1027": "evasion",
+    "T1041": "c2",
+    "T1053": "persistence",
+    "T1055": "injection",
+    "T1056": "hooking",
+    "T1059": "execution",
+    "T1071": "c2",
+    "T1082": "discovery",
+    "T1090": "network",
+    "T1102": "c2",
+    "T1106": "syscalls",
+    "T1112": "evasion",
+    "T1115": "tricks",
+    "T1134": "privesc",
+    "T1183": "persistence",
+    "T1204": "execution",
+    "T1543": "persistence",
+    "T1546": "persistence",
+    "T1547": "persistence",
+    "T1562": "evasion",
+    "T1564": "evasion",
+    "T1574": "injection",
+    "T1622": "evasion",
+}
 
 _ATTACK_RE = re.compile(r'\bT1\d{3}(?:\.\d{3})?\b')
 
@@ -187,6 +215,12 @@ def build_library_cache() -> list[dict]:
 
         category, slug_aid = _category_from_slug(slug)
         attack_ids = body_aids if body_aids else ([slug_aid] if slug_aid else [])
+
+        # explicit ATT&CK IDs in body override slug-inferred category
+        if body_aids:
+            base_id = body_aids[0].split(".")[0]
+            category = _AID_CATEGORY.get(body_aids[0],
+                       _AID_CATEGORY.get(base_id, category))
 
         src_path   = _find_meow_source(date_str)
         blog_url   = _blog_url(date_str, slug, fm_cats)

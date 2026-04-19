@@ -34,6 +34,12 @@ try:
 except ImportError:
     HAS_MITRE = False
 
+try:
+    import malpedia as _malpedia
+    HAS_MALPEDIA = True
+except ImportError:
+    HAS_MALPEDIA = False
+
 app = Flask(__name__)
 
 BASE_DIR    = Path(__file__).parent.parent
@@ -262,7 +268,7 @@ def api_logs():
 @app.route("/api/config/<name>")
 def api_config(name: str):
     safe = {"telegram_config", "github_config", "bitbucket_config", "virustotal_config",
-            "anthropic_config", "gemini_config"}
+            "anthropic_config", "gemini_config", "malpedia_config"}
     if name not in safe:
         return jsonify({"error": "unknown config"}), 400
     cfg = _load_config(name)
@@ -749,6 +755,58 @@ def api_mitre_techniques(stix_id: str):
         return jsonify({"error": "mitre module not available"}), 503
     category = request.args.get("category", "all")
     return jsonify(get_group_techniques(stix_id, category))
+
+
+# ── Malpedia routes ────────────────────────────────────────────────────────────
+
+@app.route("/api/malpedia/status")
+def api_malpedia_status():
+    if not HAS_MALPEDIA:
+        return jsonify({"ok": False, "error": "malpedia module not available"}), 503
+    return jsonify(_malpedia.get_status())
+
+
+@app.route("/api/malpedia/actors")
+def api_malpedia_actors():
+    if not HAS_MALPEDIA:
+        return jsonify([]), 503
+    refresh = request.args.get("refresh") == "1"
+    return jsonify(_malpedia.list_actors(force_refresh=refresh))
+
+
+@app.route("/api/malpedia/actor/<actor_id>")
+def api_malpedia_actor(actor_id: str):
+    if not HAS_MALPEDIA:
+        return jsonify({"error": "unavailable"}), 503
+    return jsonify(_malpedia.get_actor(actor_id))
+
+
+@app.route("/api/malpedia/families")
+def api_malpedia_families():
+    if not HAS_MALPEDIA:
+        return jsonify([]), 503
+    refresh = request.args.get("refresh") == "1"
+    return jsonify(_malpedia.list_families(force_refresh=refresh))
+
+
+@app.route("/api/malpedia/family/<path:family_id>")
+def api_malpedia_family(family_id: str):
+    if not HAS_MALPEDIA:
+        return jsonify({"error": "unavailable"}), 503
+    return jsonify(_malpedia.get_family(family_id))
+
+
+@app.route("/api/malpedia/search")
+def api_malpedia_search():
+    if not HAS_MALPEDIA:
+        return jsonify({"actors": [], "families": []}), 503
+    q    = request.args.get("q", "").strip()
+    kind = request.args.get("type", "all")
+    if not q:
+        return jsonify({"actors": [], "families": []})
+    actors   = _malpedia.find_actor(q)   if kind in ("all", "actor")  else []
+    families = _malpedia.find_family(q)  if kind in ("all", "family") else []
+    return jsonify({"actors": actors[:50], "families": families[:50]})
 
 
 if __name__ == "__main__":
