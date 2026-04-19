@@ -5,6 +5,10 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>peekaboo // dashboard</title>
 <script src="https://cdn.jsdelivr.net/npm/marked@9/marked.min.js"></script>
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/highlight.js@11/styles/atom-one-dark.min.css">
+<script src="https://cdn.jsdelivr.net/npm/highlight.js@11/lib/core.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/highlight.js@11/lib/languages/c.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/highlight.js@11/lib/languages/cpp.min.js"></script>
 <style>
   :root {
     /* macOS Monterey dark palette */
@@ -665,6 +669,138 @@
     color: var(--dim);
   }
 
+  /* ── mitre ── */
+  .mitre-toolbar {
+    display: flex;
+    gap: 10px;
+    align-items: center;
+    margin-bottom: 18px;
+    flex-wrap: wrap;
+  }
+  .mitre-toolbar select { flex: 1; min-width: 200px; max-width: 360px; }
+  .mitre-tabs {
+    display: flex;
+    gap: 4px;
+    margin-bottom: 18px;
+    border-bottom: 1px solid var(--sep);
+    padding-bottom: 0;
+  }
+  .mitre-tab {
+    padding: 7px 16px;
+    font-size: 13px;
+    font-weight: 500;
+    color: var(--dim);
+    cursor: pointer;
+    border-bottom: 2px solid transparent;
+    transition: color .15s, border-color .15s;
+    user-select: none;
+    margin-bottom: -1px;
+  }
+  .mitre-tab:hover { color: var(--text); }
+  .mitre-tab.active { color: var(--purple); border-bottom-color: var(--purple); }
+  .mitre-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(340px, 1fr));
+    gap: 14px;
+  }
+  .tech-card {
+    background: var(--bg2);
+    border: 1px solid var(--sep);
+    border-radius: var(--radius);
+    overflow: hidden;
+    animation: fadeIn .25s ease;
+    transition: border-color .2s;
+  }
+  .tech-card:hover { border-color: var(--purple); }
+  .tech-card-impl { border-color: rgba(48,209,88,.3); }
+  .tech-card-impl:hover { border-color: var(--green); }
+  .copy-snip-btn {
+    position: absolute;
+    top: 6px; right: 8px;
+    background: var(--bg4);
+    border: 1px solid var(--sep);
+    color: var(--dim);
+    font-size: 13px;
+    padding: 2px 7px;
+    border-radius: 4px;
+    cursor: pointer;
+    z-index: 2;
+    transition: color .15s, background .15s;
+  }
+  .copy-snip-btn:hover { color: var(--text); background: var(--bg3); }
+  .tech-card-head {
+    padding: 12px 14px 10px;
+    border-bottom: 1px solid var(--sep);
+    display: flex;
+    align-items: flex-start;
+    gap: 10px;
+  }
+  .tech-id {
+    font-family: var(--mono);
+    font-size: 11px;
+    font-weight: 700;
+    background: rgba(191,90,242,.18);
+    color: var(--purple);
+    padding: 3px 8px;
+    border-radius: 5px;
+    white-space: nowrap;
+    flex-shrink: 0;
+  }
+  .tech-id.cat-injection  { background: rgba(10,132,255,.15);  color: var(--blue); }
+  .tech-id.cat-persistence{ background: rgba(48,209,88,.15);   color: var(--green); }
+  .tech-id.cat-c2         { background: rgba(255,159,10,.15);  color: var(--orange); }
+  .tech-id.cat-other      { background: var(--bg3);             color: var(--dim); }
+  .tech-name { font-size: 13px; font-weight: 600; color: var(--text); line-height: 1.3; }
+  .tech-tactics {
+    display: flex;
+    gap: 4px;
+    flex-wrap: wrap;
+    padding: 6px 14px 8px;
+    border-bottom: 1px solid var(--sep);
+  }
+  .tactic-pill {
+    font-size: 10px;
+    padding: 2px 7px;
+    border-radius: 10px;
+    background: var(--bg3);
+    color: var(--dim);
+    border: 1px solid var(--sep);
+  }
+  .tech-desc {
+    font-size: 12px;
+    color: var(--text2);
+    line-height: 1.5;
+    padding: 8px 14px;
+    border-bottom: 1px solid var(--sep);
+  }
+  .tech-snippet {
+    background: #282c34;
+    font-size: 11px;
+    line-height: 1.5;
+    max-height: 200px;
+    overflow-y: auto;
+    margin: 0;
+  }
+  .tech-snippet code { font-family: var(--mono) !important; }
+  .tech-footer {
+    padding: 8px 14px;
+    display: flex;
+    gap: 8px;
+    align-items: center;
+    flex-wrap: wrap;
+  }
+  .mitre-empty {
+    text-align: center;
+    padding: 48px 0;
+    color: var(--dim);
+    font-size: 14px;
+  }
+  .mitre-loading {
+    text-align: center;
+    padding: 36px 0;
+    color: var(--dim);
+  }
+
   /* ── responsive ── */
   @media (max-width: 900px) {
     .page-grid-2, .page-grid-3 { grid-template-columns: 1fr; }
@@ -722,6 +858,9 @@ PEEKABOO</pre>
       </div>
       <div class="nav-item" onclick="showPage('modules',this)" data-page="modules">
         <span class="nav-icon">📦</span><span>Modules</span>
+      </div>
+      <div class="nav-item" onclick="showPage('mitre',this)" data-page="mitre">
+        <span class="nav-icon">🎯</span><span>ATT&amp;CK</span>
       </div>
     </div>
 
@@ -928,6 +1067,59 @@ PEEKABOO</pre>
       </div>
     </div>
 
+    <!-- ══ PAGE: MITRE ATT&CK / R&D ══ -->
+    <div class="page" id="page-mitre">
+      <div class="page-header">
+        <h2>R&amp;D / Threat Emulation</h2>
+        <span class="badge badge-purple">MITRE ATT&amp;CK</span>
+        <span style="font-size:12px;color:var(--dim);margin-left:4px;" id="mitre-avail-note"></span>
+      </div>
+
+      <!-- stats bar -->
+      <div style="display:flex;gap:12px;margin-bottom:18px;flex-wrap:wrap;" id="mitre-stats"></div>
+
+      <!-- view selector -->
+      <div class="mitre-tabs" style="margin-bottom:0;border-bottom:none;gap:0;">
+        <div class="mitre-tab active" onclick="setMitreView(this,'library')" style="padding:8px 20px;font-size:13px;">📚 Technique Library</div>
+        <div class="mitre-tab"        onclick="setMitreView(this,'apt')"     style="padding:8px 20px;font-size:13px;">🎯 APT Group Mapping</div>
+      </div>
+
+      <!-- ── VIEW: Library ── -->
+      <div id="mitre-view-library" class="card" style="border-top-left-radius:0;margin-top:0;">
+        <div style="display:flex;align-items:center;gap:10px;margin-bottom:16px;flex-wrap:wrap;">
+          <span style="font-size:12px;color:var(--dim);font-weight:600;text-transform:uppercase;letter-spacing:.5px;">Filter:</span>
+          <div class="mitre-tabs" style="border:none;margin:0;padding:0;gap:4px;flex-wrap:wrap;" id="lib-cat-tabs">
+            <div class="mitre-tab active" onclick="setLibCat(this,'all')">All</div>
+          </div>
+          <button class="btn" style="font-size:11px;padding:4px 10px;margin-left:auto;" onclick="rebuildLibrary()">↻ Rebuild Index</button>
+        </div>
+        <div id="lib-content">
+          <div class="mitre-loading"><span class="spinner"></span> loading technique library...</div>
+        </div>
+      </div>
+
+      <!-- ── VIEW: APT ── -->
+      <div id="mitre-view-apt" class="card" style="border-top-left-radius:0;margin-top:0;display:none;">
+        <div class="mitre-toolbar" style="margin-bottom:14px;">
+          <select id="mitre-group-select" onchange="onMitreGroupChange()">
+            <option value="">— select APT group —</option>
+          </select>
+          <button class="btn btn-blue" style="font-size:12px;padding:6px 14px;" onclick="loadMitreGroups()">↻ Groups</button>
+          <span id="mitre-group-count" style="font-size:12px;color:var(--dim);"></span>
+        </div>
+        <div class="mitre-tabs" style="border-bottom:1px solid var(--sep);margin-bottom:16px;" id="apt-cat-tabs">
+          <div class="mitre-tab active" onclick="setAptCat(this,'all')">All</div>
+          <div class="mitre-tab" onclick="setAptCat(this,'injection')">Injection</div>
+          <div class="mitre-tab" onclick="setAptCat(this,'persistence')">Persistence</div>
+          <div class="mitre-tab" onclick="setAptCat(this,'c2')">C2</div>
+          <div class="mitre-tab" onclick="setAptCat(this,'other')">Other</div>
+        </div>
+        <div id="apt-content">
+          <div class="mitre-empty">Select an APT group above to map techniques</div>
+        </div>
+      </div>
+    </div>
+
     <!-- ══ PAGE: Modules ══ -->
     <div class="page" id="page-modules">
       <div class="page-header">
@@ -975,6 +1167,7 @@ var _pageTitles = {
   delivery: 'C2 Binary Delivery',
   chat:     'AI Chat',
   modules:  'Modules',
+  mitre:    'MITRE ATT\u0026CK',
 };
 
 function showPage(name, navEl) {
@@ -988,6 +1181,7 @@ function showPage(name, navEl) {
   if (name === 'history')  loadHistory();
   if (name === 'beacons')  loadBeacons();
   if (name === 'delivery') { loadBinaryInfo(); loadC2Status(); }
+  if (name === 'mitre')    initMitre();
 }
 
 // ── utils ──────────────────────────────────────────────────────────────────────
@@ -1337,6 +1531,286 @@ function refreshKbInfo() {
       document.getElementById('kb-info-text').textContent = '📦 ' + d.posts + ' posts indexed | ~/hacking/cocomelonc.github.io';
     }
   });
+}
+
+// ── MITRE ATT&CK / R&D ────────────────────────────────────────────────────────
+var _mitreInitialized = false;
+var _libTechs  = [];
+var _libCat    = 'all';
+var _aptCat    = 'all';
+var _aptGroups = [];
+
+function initMitre() {
+  if (_mitreInitialized) return;
+  _mitreInitialized = true;
+  fetch('/api/mitre/available').then(function(r){ return r.json(); })
+  .then(function(d) {
+    var note = document.getElementById('mitre-avail-note');
+    if (d.available) {
+      note.innerHTML = '<span class="dot-ok">●</span> STIX loaded';
+    } else {
+      note.innerHTML = '<span class="dot-err">●</span> STIX not found';
+    }
+    loadLibrary();
+    loadMitreGroups();
+  }).catch(function(){ loadLibrary(); loadMitreGroups(); });
+}
+
+// ── view toggle ────────────────────────────────────────────────────────────────
+function setMitreView(el, view) {
+  document.querySelectorAll('#page-mitre > .mitre-tabs .mitre-tab').forEach(function(t){ t.classList.remove('active'); });
+  el.classList.add('active');
+  document.getElementById('mitre-view-library').style.display = view === 'library' ? '' : 'none';
+  document.getElementById('mitre-view-apt').style.display     = view === 'apt'     ? '' : 'none';
+}
+
+// ── technique library (full blog scan) ────────────────────────────────────────
+function loadLibrary() {
+  var el = document.getElementById('lib-content');
+  el.innerHTML = '<div class="mitre-loading"><span class="spinner"></span> loading 200 posts...</div>';
+
+  Promise.all([
+    fetch('/api/mitre/library').then(function(r){ return r.json(); }),
+    fetch('/api/mitre/library/categories').then(function(r){ return r.json(); })
+  ]).then(function(results) {
+    _libTechs = results[0];
+    var cats  = results[1];
+    renderStats(_libTechs, cats);
+    buildLibCatTabs(cats);
+    renderLibrary(_libTechs, _libCat);
+  }).catch(function(e) {
+    el.innerHTML = '<div class="mitre-empty" style="color:var(--red)">Error: ' + escapeHtml(String(e)) + '</div>';
+  });
+}
+
+function renderStats(entries, cats) {
+  var withSrc  = entries.filter(function(e){ return e.snippet; }).length;
+  var withAid  = entries.filter(function(e){ return e.attack_ids && e.attack_ids.length; }).length;
+  var withImpl = entries.filter(function(e){ return e.implemented; }).length;
+  var html = statChip(entries.length + ' posts',           'var(--purple)')
+           + statChip(withSrc  + ' with source',           'var(--cyan)')
+           + statChip(withAid  + ' ATT\u0026CK mapped',    'var(--blue)')
+           + statChip(withImpl + ' in peekaboo',           'var(--green)');
+  document.getElementById('mitre-stats').innerHTML = html;
+}
+
+function statChip(label, color) {
+  return '<span style="background:' + color + '22;border:1px solid ' + color + '55;color:' + color
+    + ';font-size:12px;font-weight:600;padding:4px 12px;border-radius:20px;">' + label + '</span>';
+}
+
+var _CAT_COLORS = {
+  injection:'var(--blue)', persistence:'var(--green)', evasion:'var(--yellow)',
+  cryptography:'var(--cyan)', c2:'var(--orange)', tricks:'var(--purple)',
+  macos:'var(--pink)', linux:'var(--green)', android:'var(--blue)',
+  privesc:'var(--red)', shellcoding:'var(--cyan)', hooking:'var(--yellow)',
+  syscalls:'var(--purple)', exploitation:'var(--red)', network:'var(--blue)',
+  analysis:'var(--dim)', other:'var(--dim)',
+};
+
+function buildLibCatTabs(cats) {
+  var container = document.getElementById('lib-cat-tabs');
+  var html = '<div class="mitre-tab active" onclick="setLibCat(this,\'all\')">All</div>';
+  cats.forEach(function(pair) {
+    var cat = pair[0], n = pair[1];
+    html += '<div class="mitre-tab" onclick="setLibCat(this,\'' + cat + '\')">'
+          + cat + ' <span style="opacity:.6;font-size:10px;">(' + n + ')</span></div>';
+  });
+  container.innerHTML = html;
+}
+
+function setLibCat(el, cat) {
+  document.querySelectorAll('#lib-cat-tabs .mitre-tab').forEach(function(t){ t.classList.remove('active'); });
+  el.classList.add('active');
+  _libCat = cat;
+  renderLibrary(_libTechs, cat);
+}
+
+function renderLibrary(entries, cat) {
+  var filtered = cat === 'all' ? entries : entries.filter(function(e){ return e.category === cat; });
+  var el = document.getElementById('lib-content');
+  if (!filtered.length) {
+    el.innerHTML = '<div class="mitre-empty">No posts in this category</div>';
+    return;
+  }
+  el.innerHTML = '<div class="mitre-grid">' + filtered.map(libCardHtml).join('') + '</div>';
+}
+
+function libCardHtml(e) {
+  var color    = _CAT_COLORS[e.category] || 'var(--dim)';
+  var aidBadges = (e.attack_ids || []).map(function(aid) {
+    return '<span style="font-family:var(--mono);font-size:10px;background:rgba(10,132,255,.15);color:var(--blue);border:1px solid rgba(10,132,255,.3);padding:2px 6px;border-radius:4px;">' + escapeHtml(aid) + '</span>';
+  }).join(' ');
+
+  var snippetHtml = '';
+  if (e.snippet) {
+    var uid  = 'snip-' + e.slug.replace(/[^a-z0-9]/g, '-');
+    var lang = (e.src_path && e.src_path.indexOf('.cpp') >= 0) ? 'cpp' : 'c';
+    var highlighted;
+    try { highlighted = hljs.highlight(e.snippet, {language: lang}).value; }
+    catch(err) { highlighted = escapeHtml(e.snippet); }
+    snippetHtml =
+      '<div style="position:relative;">'
+      + '<button class="copy-snip-btn" onclick="copySnippet(\'' + uid + '\')" title="copy">⎘</button>'
+      + '<pre class="tech-snippet" id="' + uid + '"><code class="language-' + lang + '">' + highlighted + '</code></pre>'
+      + '</div>';
+  }
+
+  var implBadge = e.implemented
+    ? '<span class="badge badge-green" style="font-size:10px;">✓ peekaboo</span>' : '';
+  var modBadge = e.module
+    ? '<span class="badge badge-dim" style="font-size:10px;font-family:var(--mono);">' + escapeHtml(e.module) + '</span>' : '';
+  var srcFile = e.src_path ? e.src_path.split('/').pop() : '';
+  var srcBadge = srcFile
+    ? '<span style="font-size:10px;color:var(--dim);font-family:var(--mono);">' + escapeHtml(srcFile) + '</span>' : '';
+
+  return '<div class="tech-card' + (e.implemented ? ' tech-card-impl' : '') + '">'
+    + '<div class="tech-card-head" style="flex-wrap:wrap;gap:6px;">'
+    + '<span style="font-family:var(--mono);font-size:10px;color:var(--dim);">' + escapeHtml(e.date) + '</span>'
+    + '<span class="tech-name" style="flex:1;">' + escapeHtml(e.title) + '</span>'
+    + '</div>'
+    + '<div class="tech-tactics" style="flex-wrap:wrap;gap:4px;">'
+    + '<span style="font-size:10px;background:' + color + '22;color:' + color + ';border:1px solid ' + color + '44;padding:2px 7px;border-radius:10px;">' + escapeHtml(e.category) + '</span>'
+    + aidBadges
+    + '</div>'
+    + snippetHtml
+    + '<div class="tech-footer">'
+    + '<a class="btn btn-blue" style="font-size:11px;padding:4px 10px;" href="' + escapeHtml(e.blog_url) + '" target="_blank">📖 blog</a>'
+    + srcBadge + modBadge + implBadge
+    + '</div>'
+    + '</div>';
+}
+
+// ── APT group mapping ──────────────────────────────────────────────────────────
+function loadMitreGroups() {
+  var sel = document.getElementById('mitre-group-select');
+  sel.innerHTML = '<option value="">loading groups...</option>';
+  fetch('/api/mitre/groups').then(function(r){ return r.json(); })
+  .then(function(groups) {
+    _aptGroups = groups;
+    sel.innerHTML = '<option value="">— select APT group (' + groups.length + ') —</option>';
+    groups.forEach(function(g) {
+      var opt = document.createElement('option');
+      opt.value = g.id;
+      var aliases = g.aliases && g.aliases.length ? ' · ' + g.aliases.slice(0,2).join(', ') : '';
+      opt.textContent = g.name + aliases;
+      sel.appendChild(opt);
+    });
+    document.getElementById('mitre-group-count').textContent = groups.length + ' groups';
+  }).catch(function() {
+    sel.innerHTML = '<option value="">error loading groups</option>';
+  });
+}
+
+function onMitreGroupChange() {
+  var stixId = document.getElementById('mitre-group-select').value;
+  if (!stixId) {
+    document.getElementById('apt-content').innerHTML =
+      '<div class="mitre-empty">Select an APT group above to map techniques</div>';
+    return;
+  }
+  loadAptTechniques(stixId, _aptCat);
+}
+
+function setAptCat(el, cat) {
+  document.querySelectorAll('#apt-cat-tabs .mitre-tab').forEach(function(t){ t.classList.remove('active'); });
+  el.classList.add('active');
+  _aptCat = cat;
+  var stixId = document.getElementById('mitre-group-select').value;
+  if (stixId) loadAptTechniques(stixId, cat);
+}
+
+function loadAptTechniques(stixId, cat) {
+  var el = document.getElementById('apt-content');
+  el.innerHTML = '<div class="mitre-loading"><span class="spinner"></span> loading techniques...</div>';
+  fetch('/api/mitre/group/' + encodeURIComponent(stixId) + '/techniques?category=' + cat)
+  .then(function(r){ return r.json(); })
+  .then(function(techs) { renderAptTechs(techs); })
+  .catch(function(e) {
+    el.innerHTML = '<div class="mitre-empty" style="color:var(--red)">Error: ' + escapeHtml(String(e)) + '</div>';
+  });
+}
+
+function renderAptTechs(techs) {
+  var el = document.getElementById('apt-content');
+  if (!techs.length) {
+    el.innerHTML = '<div class="mitre-empty">No techniques found for this group / category</div>';
+    return;
+  }
+  var withEx  = techs.filter(function(t){ return t.has_example; });
+  var without = techs.filter(function(t){ return !t.has_example; });
+  var html = '';
+  if (withEx.length) {
+    html += '<div style="font-size:11px;font-weight:600;color:var(--green);text-transform:uppercase;letter-spacing:.5px;margin-bottom:10px;">'
+          + '✓ peekaboo examples (' + withEx.length + ')</div>';
+    html += '<div class="mitre-grid" style="margin-bottom:20px;">' + withEx.map(techCardHtml).join('') + '</div>';
+  }
+  if (without.length) {
+    html += '<div style="font-size:11px;font-weight:600;color:var(--dim);text-transform:uppercase;letter-spacing:.5px;margin-bottom:10px;">'
+          + '○ other techniques (' + without.length + ')</div>';
+    html += '<div class="mitre-grid">' + without.map(techCardHtml).join('') + '</div>';
+  }
+  el.innerHTML = html;
+}
+
+// ── shared card renderer ───────────────────────────────────────────────────────
+function techCardHtml(t) {
+  var catCls  = 'cat-' + (t.category || 'other');
+  var tactics = (t.tactics || []).map(function(tac){
+    return '<span class="tactic-pill">' + escapeHtml(tac) + '</span>';
+  }).join('');
+
+  var snippetHtml = '';
+  if (t.snippet) {
+    var lang = (t.module && t.module.indexOf('cpp') >= 0) ? 'cpp' : 'c';
+    var uid  = 'snip-' + t.attack_id.replace(/\./g,'-');
+    var highlighted;
+    try { highlighted = hljs.highlight(t.snippet, {language: lang}).value; }
+    catch(e) { highlighted = escapeHtml(t.snippet); }
+    snippetHtml =
+      '<div style="position:relative;">'
+      + '<button class="copy-snip-btn" onclick="copySnippet(\'' + uid + '\')" title="copy">⎘</button>'
+      + '<pre class="tech-snippet" id="' + uid + '"><code class="language-' + lang + '">' + highlighted + '</code></pre>'
+      + '</div>';
+  }
+
+  var blogBtn = t.blog_url
+    ? '<a class="btn btn-blue" style="font-size:11px;padding:4px 10px;" href="' + escapeHtml(t.blog_url) + '" target="_blank">📖 blog post</a>'
+    : '';
+  var modBadge = t.module
+    ? '<span class="badge badge-dim" style="font-size:10px;font-family:var(--mono);">' + escapeHtml(t.module) + '</span>'
+    : '';
+  var exBadge = t.has_example
+    ? '<span class="badge badge-green" style="font-size:10px;">✓ implemented</span>'
+    : '';
+
+  return '<div class="tech-card' + (t.has_example ? ' tech-card-impl' : '') + '">'
+    + '<div class="tech-card-head">'
+    + '<span class="tech-id ' + catCls + '">' + escapeHtml(t.attack_id) + '</span>'
+    + '<span class="tech-name">' + escapeHtml(t.name) + '</span>'
+    + '</div>'
+    + (tactics ? '<div class="tech-tactics">' + tactics + '</div>' : '')
+    + (t.description ? '<div class="tech-desc">' + escapeHtml(t.description) + '</div>' : '')
+    + snippetHtml
+    + '<div class="tech-footer">' + blogBtn + modBadge + exBadge + '</div>'
+    + '</div>';
+}
+
+function rebuildLibrary() {
+  fetch('/api/mitre/library/rebuild', {method:'POST'}).then(function(r){ return r.json(); })
+  .then(function(d) {
+    if (d.ok) {
+      document.getElementById('lib-content').innerHTML =
+        '<div class="mitre-loading"><span class="spinner"></span> rebuilding index from blog posts...</div>';
+      setTimeout(function(){ _mitreInitialized = false; _libTechs = []; initMitre(); }, 4000);
+    }
+  });
+}
+
+function copySnippet(uid) {
+  var el = document.getElementById(uid);
+  if (!el) return;
+  navigator.clipboard.writeText(el.textContent).catch(function(){});
 }
 
 // ── clock ──────────────────────────────────────────────────────────────────────

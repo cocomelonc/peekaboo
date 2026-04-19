@@ -27,6 +27,13 @@ except ImportError:
     HAS_CHATBOT = False
     def providers_status(): return {}
 
+try:
+    from mitre import (get_groups, get_group_techniques, get_all_techniques,
+                       get_library, build_library_cache, available as mitre_available)
+    HAS_MITRE = True
+except ImportError:
+    HAS_MITRE = False
+
 app = Flask(__name__)
 
 BASE_DIR    = Path(__file__).parent.parent
@@ -682,6 +689,66 @@ def api_scrape():
     t = threading.Thread(target=_scrape, daemon=True)
     t.start()
     return jsonify({"ok": True, "message": "indexer started - check /api/chat/kb_info for status"})
+
+
+# ── MITRE ATT&CK routes ───────────────────────────────────────────────────────
+
+@app.route("/api/mitre/available")
+def api_mitre_available():
+    return jsonify({"available": HAS_MITRE and mitre_available() if HAS_MITRE else False})
+
+
+@app.route("/api/mitre/groups")
+def api_mitre_groups():
+    if not HAS_MITRE:
+        return jsonify({"error": "mitre module not available"}), 503
+    if not mitre_available():
+        return jsonify({"error": "STIX bundle not found"}), 503
+    return jsonify(get_groups())
+
+
+@app.route("/api/mitre/techniques")
+def api_mitre_all_techniques():
+    if not HAS_MITRE:
+        return jsonify({"error": "mitre module not available"}), 503
+    return jsonify(get_all_techniques())
+
+
+@app.route("/api/mitre/library")
+def api_mitre_library():
+    if not HAS_MITRE:
+        return jsonify({"error": "mitre module not available"}), 503
+    category = request.args.get("category", "all")
+    return jsonify(get_library(category))
+
+
+@app.route("/api/mitre/library/rebuild", methods=["POST"])
+def api_mitre_library_rebuild():
+    if not HAS_MITRE:
+        return jsonify({"error": "mitre module not available"}), 503
+    def _rebuild():
+        build_library_cache()
+    threading.Thread(target=_rebuild, daemon=True).start()
+    return jsonify({"ok": True, "message": "rebuilding library cache in background"})
+
+
+@app.route("/api/mitre/library/categories")
+def api_mitre_library_cats():
+    if not HAS_MITRE:
+        return jsonify([])
+    entries = get_library()
+    cats: dict[str, int] = {}
+    for e in entries:
+        cats[e["category"]] = cats.get(e["category"], 0) + 1
+    return jsonify(sorted(cats.items(), key=lambda x: -x[1]))
+
+
+@app.route("/api/mitre/group/<stix_id>/techniques")
+def api_mitre_techniques(stix_id: str):
+    if not HAS_MITRE:
+        return jsonify({"error": "mitre module not available"}), 503
+    category = request.args.get("category", "all")
+    return jsonify(get_group_techniques(stix_id, category))
 
 
 if __name__ == "__main__":

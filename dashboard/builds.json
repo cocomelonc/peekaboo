@@ -82,5 +82,22 @@
     "created": "2026-04-18T21:30:14.220797",
     "start_time": "2026-04-18T21:30:14.221080",
     "end_time": "2026-04-18T21:30:15.446756"
+  },
+  {
+    "id": "f357455a",
+    "params": {
+      "payload": "meow",
+      "encryption": "speck",
+      "malware": "stealer",
+      "injection": "enumdesktopsa",
+      "stealer": "virustotal",
+      "persistence": "registry_run"
+    },
+    "status": "success",
+    "output": "\u001b[1m[=^..^=]\n[=^..^=] #####  ###### #    #         ##         #####   ####   ####\n[=^..^=] #    # #      #   #         #  #        #    # #    # #    #\n[=^..^=] #    # #####  ####   ##### #    # ##### #####  #    # #    #\n[=^..^=] #####  #      #  #         ######       #    # #    # #    #\n[=^..^=] #      #      #   #        #    #       #    # #    # #    #\n[=^..^=] #      ###### #    #       #    #       #####   ####   ####\n[=^..^=]\n[=^..^=] Malware Development Framework (for trainings, education and research)\n[=^..^=] by @cocomelonc - https://cocomelonc.github.io\n\u001b[0m\n\u001b[95m\u001b[1m[=^..^=] init peekaboo builder with params [=^..^=] \u001b[0m\n\u001b[94m[=^..^=] malware: stealer [=^..^=] \u001b[0m\n\u001b[94m[=^..^=] payload: meow [=^..^=] \u001b[0m\n\u001b[94m[=^..^=] encryption: speck [=^..^=] \u001b[0m\n\u001b[94m[=^..^=] injection: enumdesktopsa [=^..^=] \u001b[0m\n\u001b[94m[=^..^=] stealer: virustotal [=^..^=] \u001b[0m\n\u001b[94m[=^..^=] persistence: registry_run [=^..^=] \u001b[0m\n\u001b[92m[=^..^=] compiler: all dependencies found [=^..^=] \u001b[0m\n\u001b[95m\u001b[1m[=^..^=] building stealer: virustotal [=^..^=] \u001b[0m\n\u001b[92m[=^..^=] successfully load template: /home/cocomelonc/hacking/peekaboo/malware/stealer/virustotal.c [=^..^=] \u001b[0m\n\u001b[92m[=^..^=] successfully load config: /home/cocomelonc/hacking/peekaboo/config/virustotal_config.json [=^..^=] \u001b[0m\n\u001b[92m[=^..^=] wrote stealer source: /home/cocomelonc/hacking/peekaboo/malware/stealer/virustotal/stealer_final.c [=^..^=] \u001b[0m\n\u001b[94m[=^..^=] compiling: /usr/bin/x86_64-w64-mingw32-gcc -ffunction-sections -fdata-sections -Wno-write-strings -fno-exceptions -fmerge-all-constants -static-libstdc++ -static-libgcc -fpermissive -s -O2 /home/cocomelonc/hacking/peekaboo/malware/stealer/virustotal/stealer_final.c -o /home/cocomelonc/hacking/peekaboo/malware/stealer/virustotal/peekaboo.exe -lwinhttp -liphlpapi [=^..^=] \u001b[0m\n\u001b[92m[=^..^=] compilation successful [=^..^=] \u001b[0m\n\u001b[1m==========================================================\u001b[0m\n\u001b[95m\u001b[1m[=^..^=] build complete - generated files [=^..^=] \u001b[0m\n\u001b[92m[=^..^=] malware:     /home/cocomelonc/hacking/peekaboo/malware/stealer/virustotal/peekaboo.exe [=^..^=] \u001b[0m\n\u001b[1m==========================================================\u001b[0m\n\u001b[1m==========================================================\u001b[0m\n",
+    "returncode": 0,
+    "created": "2026-04-18T22:07:23.829897",
+    "start_time": "2026-04-18T22:07:23.830175",
+    "end_time": "2026-04-18T22:07:24.937310"
   }
 ]

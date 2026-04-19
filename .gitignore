@@ -2,3 +2,4 @@
 *.dll
 *.exe
 dashboard/__pycache__/
+data/enterprise-attack.json
