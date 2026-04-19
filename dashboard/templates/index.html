@@ -925,6 +925,28 @@
     text-decoration: none;
   }
   .malp-url-list a:hover { text-decoration: underline; }
+  .malp-rpost-list {
+    list-style: none;
+    margin: 0; padding: 0;
+  }
+  .malp-rpost {
+    padding: 6px 0;
+    border-bottom: 1px solid var(--sep);
+  }
+  .malp-rpost:last-child { border-bottom: none; }
+  .malp-rpost a {
+    color: var(--cyan);
+    text-decoration: none;
+    font-size: 13px;
+    display: block;
+  }
+  .malp-rpost a:hover { text-decoration: underline; }
+  .malp-rpost-meta {
+    display: block;
+    font-size: 11px;
+    color: var(--dim);
+    margin-top: 2px;
+  }
   .malp-placeholder {
     display: flex;
     align-items: center;
@@ -2144,7 +2166,8 @@ function renderActorDetail(d) {
     + (targets ? '<div class="malp-section-label">Target sectors</div><div class="malp-meta-row">' + targets + '</div>' : '')
     + (victims ? '<div class="malp-section-label">Suspected victims</div><div class="malp-meta-row">' + victims + '</div>' : '')
     + (families ? '<div class="malp-section-label">Malware families (' + d.families.length + ')</div><div class="malp-meta-row" style="max-height:140px;overflow-y:auto;">' + families + '</div>' : '')
-    + (refs ? '<div class="malp-section-label">References</div><ul class="malp-url-list">' + refs + '</ul>' : '');
+    + (refs ? '<div class="malp-section-label">References</div><ul class="malp-url-list">' + refs + '</ul>' : '')
+    + renderRelatedPosts(d.related_posts);
 }
 
 function renderFamilyDetail(d) {
@@ -2163,7 +2186,23 @@ function renderFamilyDetail(d) {
     + (alts ? '<div class="malp-section-label">Also known as</div><div class="malp-meta-row">' + alts + '</div>' : '')
     + (d.description ? '<div class="malp-section-label">Description</div><div class="malp-desc">' + escapeHtml(d.description) + '</div>' : '<div class="malp-desc" style="color:var(--dim);font-style:italic;">no description available</div>')
     + (attrs ? '<div class="malp-section-label">Attribution</div><div class="malp-meta-row">' + attrs + '</div>' : '')
-    + (urls ? '<div class="malp-section-label">Reports &amp; references (' + d.urls.length + ')</div><ul class="malp-url-list">' + urls + '</ul>' : '');
+    + (urls ? '<div class="malp-section-label">Reports &amp; references (' + d.urls.length + ')</div><ul class="malp-url-list">' + urls + '</ul>' : '')
+    + renderRelatedPosts(d.related_posts);
+}
+
+function renderRelatedPosts(posts) {
+  if (!posts || !posts.length) return '';
+  var items = posts.map(function(p) {
+    var aids = (p.attack_ids || []).slice(0,3).map(function(a){
+      return '<span class="malp-chip" style="font-size:10px;padding:1px 5px;">' + escapeHtml(a) + '</span>';
+    }).join('');
+    return '<li class="malp-rpost">'
+      + '<a href="' + escapeHtml(p.blog_url) + '" target="_blank">' + escapeHtml(p.title) + '</a>'
+      + '<span class="malp-rpost-meta">' + escapeHtml(p.date) + (aids ? ' &nbsp;' + aids : '') + '</span>'
+      + '</li>';
+  }).join('');
+  return '<div class="malp-section-label">Related research (' + posts.length + ')</div>'
+    + '<ul class="malp-rpost-list">' + items + '</ul>';
 }
 
 function jumpToFamily(id) {

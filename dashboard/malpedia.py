@@ -5,6 +5,7 @@ https://malpedia.caad.fkie.fraunhofer.de
 """
 from __future__ import annotations
 import json
+import re
 from pathlib import Path
 
 _BASE          = Path(__file__).parent.parent
@@ -109,7 +110,7 @@ def get_actor(actor_id: str) -> dict:
     try:
         raw  = c.get_actor(actor_id)
         meta = raw.get("meta", {})
-        return {
+        actor = {
             "id":           actor_id,
             "name":         raw.get("value", actor_id),
             "uuid":         raw.get("uuid", ""),
@@ -123,6 +124,8 @@ def get_actor(actor_id: str) -> dict:
             "families":     _format_actor_families(raw.get("families", {})),
             "related":      [r.get("dest-uuid", "") for r in raw.get("related", [])],
         }
+        actor["related_posts"] = _match_posts_for_actor(actor)
+        return actor
     except Exception as e:
         return {"error": str(e)}
 
@@ -143,7 +146,7 @@ def get_family(family_id: str) -> dict:
         return {"error": "client unavailable"}
     try:
         raw = c.get_family(family_id)
-        return {
+        family = {
             "id":          family_id,
             "name":        raw.get("common_name", family_id),
             "uuid":        raw.get("uuid", ""),
@@ -154,6 +157,8 @@ def get_family(family_id: str) -> dict:
             "urls":        raw.get("urls", [])[:10],
             "notes":       raw.get("notes", [])[:5],
         }
+        family["related_posts"] = _match_posts_for_family(family)
+        return family
     except Exception as e:
         return {"error": str(e)}
 
@@ -194,3 +199,96 @@ def find_family(needle: str) -> list[str]:
         print(f"[malpedia] find_family error: {e}")
         needle_l = needle.lower()
         return [f for f in list_families() if needle_l in f.lower()]
+
+# related blog post matching
+
+_LIBRARY_CACHE = _BASE / "data" / "library_cache.json"
+
+
+def _load_library() -> list[dict]:
+    try:
+        if _LIBRARY_CACHE.exists():
+            return json.loads(_LIBRARY_CACHE.read_text())
+    except Exception:
+        pass
+    return []
+
+
+def _tokenize(text: str) -> set[str]:
+    return set(re.sub(r'[^a-z0-9]', ' ', text.lower()).split())
+
+
+def _match_posts_for_actor(actor: dict, max_results: int = 8) -> list[dict]:
+    posts = _load_library()
+    if not posts:
+        return []
+
+    name_words = _tokenize(actor.get("name", actor.get("id", "")))
+    synonyms   = [s.lower() for s in actor.get("synonyms", [])]
+
+    scored: list[tuple[int, dict]] = []
+    for post in posts:
+        score = 0
+        title_l = post.get("title", "").lower()
+        slug_l  = post.get("slug", "").lower()
+
+        # exact actor name words in title
+        title_words = _tokenize(title_l)
+        overlap = name_words & title_words
+        if len(overlap) >= 2:
+            score += len(overlap) * 3
+        elif len(overlap) == 1 and len(name_words) == 1:
+            score += 2
+
+        # any synonym substring in title or slug
+        for syn in synonyms:
+            if len(syn) >= 4 and (syn in title_l or syn in slug_l):
+                score += 4
+                break
+
+        if score > 0:
+            scored.append((score, post))
+
+    scored.sort(key=lambda x: (-x[0], x[1]["date"]), reverse=False)
+    return [_slim_post(p) for _, p in scored[:max_results]]
+
+
+def _match_posts_for_family(family: dict, max_results: int = 8) -> list[dict]:
+    posts = _load_library()
+    if not posts:
+        return []
+
+    names = [family.get("name", family.get("id", ""))]
+    names += family.get("alt_names", [])
+    # strip platform prefix like "win.", "linux.", "osx."
+    clean = []
+    for n in names:
+        parts = n.split(".", 1)
+        clean.append(parts[-1] if len(parts) == 2 else n)
+    names = list(set(n.lower() for n in names + clean if n and len(n) >= 3))
+
+    scored: list[tuple[int, dict]] = []
+    for post in posts:
+        score = 0
+        title_l = post.get("title", "").lower()
+        slug_l  = post.get("slug", "").lower()
+        for name in names:
+            if name in title_l:
+                score += 5
+            elif name in slug_l:
+                score += 3
+        if score > 0:
+            scored.append((score, post))
+
+    scored.sort(key=lambda x: (-x[0], x[1]["date"]), reverse=False)
+    return [_slim_post(p) for _, p in scored[:max_results]]
+
+
+def _slim_post(post: dict) -> dict:
+    return {
+        "title":      post.get("title", ""),
+        "date":       post.get("date", ""),
+        "blog_url":   post.get("blog_url", ""),
+        "category":   post.get("category", ""),
+        "attack_ids": post.get("attack_ids", []),
+    }
