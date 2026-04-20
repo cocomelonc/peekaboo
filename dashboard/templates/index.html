@@ -1262,7 +1262,7 @@ PEEKABOO</pre>
       <div id="mitre-view-apt" class="card" style="border-top-left-radius:0;margin-top:0;display:none;">
         <div class="mitre-toolbar" style="margin-bottom:14px;">
           <select id="mitre-group-select" onchange="onMitreGroupChange()">
-            <option value="">— select APT group —</option>
+            <option value="">- select APT group -</option>
           </select>
           <button class="btn btn-blue" style="font-size:12px;padding:6px 14px;" onclick="loadMitreGroups()">↻ Groups</button>
           <span id="mitre-group-count" style="font-size:12px;color:var(--dim);"></span>
@@ -1906,7 +1906,7 @@ function loadMitreGroups() {
   fetch('/api/mitre/groups').then(function(r){ return r.json(); })
   .then(function(groups) {
     _aptGroups = groups;
-    sel.innerHTML = '<option value="">— select APT group (' + groups.length + ') —</option>';
+    sel.innerHTML = '<option value="">- select APT group (' + groups.length + ') -</option>';
     groups.forEach(function(g) {
       var opt = document.createElement('option');
       opt.value = g.id;

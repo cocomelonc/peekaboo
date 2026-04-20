@@ -1,6 +1,6 @@
 """
 peekaboo semantic matching via local Ollama embeddings
-no hardcoded rules — pure cosine similarity on nomic-embed-text
+no hardcoded rules - pure cosine similarity on nomic-embed-text
 """
 from __future__ import annotations
 import json
