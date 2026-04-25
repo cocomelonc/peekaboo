@@ -265,21 +265,51 @@ def api_logs():
         return jsonify([])
 
 
+_SAFE_CONFIGS = {
+    "telegram_config", "github_config", "bitbucket_config", "virustotal_config",
+    "anthropic_config", "gemini_config", "malpedia_config",
+    "azure_config", "angelcam_config", "ollama_config",
+}
+_SECRET_KEYS = {
+    "bot_token", "github_token", "api_key", "api_token",
+    "bitbucket_token_base64", "vt_api_key", "azure_pat",
+}
+
+
 @app.route("/api/config/<name>")
 def api_config(name: str):
-    safe = {"telegram_config", "github_config", "bitbucket_config", "virustotal_config",
-            "anthropic_config", "gemini_config", "malpedia_config"}
-    if name not in safe:
+    if name not in _SAFE_CONFIGS:
         return jsonify({"error": "unknown config"}), 400
     cfg = _load_config(name)
     if cfg is None:
         return jsonify({"error": "not found"}), 404
-    for key in ("bot_token", "github_token", "api_key", "password",
-                "bitbucket_token_base64", "vt_api_key"):
-        if key in cfg:
-            v = str(cfg[key])
-            cfg[key] = v[:8] + "***" if len(v) > 8 else "***"
-    return jsonify(cfg)
+    masked = dict(cfg)
+    for key in _SECRET_KEYS:
+        if key in masked and masked[key]:
+            v = str(masked[key])
+            masked[key] = v[:4] + "***" if len(v) > 4 else "***"
+    return jsonify(masked)
+
+
+@app.route("/api/config/<name>", methods=["POST"])
+def api_config_save(name: str):
+    if name not in _SAFE_CONFIGS:
+        return jsonify({"error": "unknown config"}), 400
+    data = request.get_json(silent=True) or {}
+    cfg_path = CONFIG_DIR / f"{name}.json"
+    existing = {}
+    if cfg_path.exists():
+        try:
+            existing = json.loads(cfg_path.read_text())
+        except Exception:
+            pass
+    # merge: keep existing secret values when the new value is masked (ends with ***)
+    for k, v in data.items():
+        if isinstance(v, str) and v.endswith("***"):
+            data[k] = existing.get(k, "")
+    existing.update(data)
+    cfg_path.write_text(json.dumps(existing, indent=2))
+    return jsonify({"ok": True})
 
 
 # ── C2 binary delivery routes ──────────────────────────────────────────────────

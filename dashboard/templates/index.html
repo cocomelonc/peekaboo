@@ -635,22 +635,11 @@
     gap: 6px;
   }
 
-  /* ── config preview ── */
-  #config-preview {
-    font-family: var(--mono);
-    font-size: 11px;
-    color: var(--cyan);
-    margin-top: 10px;
-    white-space: pre-wrap;
-    word-break: break-all;
-    background: var(--bg);
-    border: 1px solid var(--sep);
-    border-radius: var(--radius-sm);
-    padding: 10px;
-    min-height: 40px;
-    display: none;
+  /* ── config editor inputs ── */
+  #cfg-fields input:focus {
+    outline: none;
+    border-color: var(--blue);
   }
-  #config-preview.visible { display: block; }
 
   /* ── page header ── */
   .page-header {
@@ -1350,13 +1339,25 @@ PEEKABOO</pre>
 
         <div class="card">
           <div class="card-title"><span class="icon">🔑</span> Configs</div>
-          {% for cfg in ["telegram_config","github_config","bitbucket_config","virustotal_config"] %}
-          <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:10px;gap:8px;">
+          <div id="cfg-btn-list">
+          {% for cfg in ["telegram_config","github_config","bitbucket_config","virustotal_config","azure_config","angelcam_config","ollama_config","anthropic_config","gemini_config","malpedia_config"] %}
+          <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px;gap:8px;">
             <span style="font-size:13px;color:var(--text2);">{{ cfg.replace('_config','') }}</span>
-            <button class="btn btn-blue" style="padding:4px 12px;font-size:12px;" onclick="showConfig('{{ cfg }}')">view</button>
+            <button class="btn btn-blue" style="padding:4px 12px;font-size:12px;" onclick="openCfgEditor('{{ cfg }}')">edit</button>
           </div>
           {% endfor %}
-          <pre id="config-preview"></pre>
+          </div>
+          <div id="cfg-editor" style="display:none;margin-top:12px;">
+            <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:10px;">
+              <strong id="cfg-editor-title" style="font-size:13px;color:var(--cyan);"></strong>
+              <button class="btn" style="padding:3px 10px;font-size:11px;" onclick="closeCfgEditor()">✕ close</button>
+            </div>
+            <div id="cfg-fields"></div>
+            <div style="margin-top:12px;display:flex;gap:8px;">
+              <button class="btn btn-primary" style="font-size:12px;padding:6px 16px;" onclick="saveCfg()">💾 Save</button>
+              <span id="cfg-save-status" style="font-size:12px;color:var(--dim);align-self:center;"></span>
+            </div>
+          </div>
         </div>
       </div>
     </div>
@@ -1537,12 +1538,114 @@ function loadHistory() {
 }
 
 // ── config ─────────────────────────────────────────────────────────────────────
-function showConfig(name) {
-  var el = document.getElementById('config-preview');
+// ── config editor ──────────────────────────────────────────────────────────────
+var _cfgCurrent = null;
+
+var _cfgSchema = {
+  telegram_config:  [
+    {k:'bot_token',  label:'Bot Token',  type:'password', ph:'123456:AAF...'},
+    {k:'chat_id',    label:'Chat ID',    type:'text',     ph:'-100123456789'},
+  ],
+  github_config: [
+    {k:'github_token',           label:'Classic Token',  type:'password', ph:'ghp_...'},
+    {k:'repo_owner',             label:'Repo Owner',     type:'text',     ph:'cocomelonc'},
+    {k:'repo_name',              label:'Repo Name',      type:'text',     ph:'hack1'},
+    {k:'issue_number',           label:'Issue Number',   type:'text',     ph:'1'},
+  ],
+  bitbucket_config: [
+    {k:'bitbucket_token_base64', label:'Token Base64',   type:'password', ph:'base64(user:token)'},
+    {k:'bitbucket_workspace',    label:'Workspace',      type:'text',     ph:'myworkspace'},
+    {k:'bitbucket_repo',         label:'Repo Name',      type:'text',     ph:'myrepo'},
+  ],
+  virustotal_config: [
+    {k:'vt_api_key', label:'API Key',  type:'password', ph:'VT API key'},
+    {k:'file_id',    label:'File ID',  type:'text',     ph:'file hash or ID'},
+  ],
+  azure_config: [
+    {k:'azure_org',     label:'Organization', type:'text',     ph:'myorg'},
+    {k:'azure_project', label:'Project',      type:'text',     ph:'myproject'},
+    {k:'azure_pat',     label:'PAT Token',    type:'password', ph:'personal access token'},
+  ],
+  angelcam_config: [
+    {k:'api_key', label:'Personal Access Token', type:'password', ph:'angelcam PAT'},
+  ],
+  ollama_config: [
+    {k:'base_url',      label:'Base URL',       type:'text',   ph:'http://localhost:11434'},
+    {k:'model',         label:'Model',          type:'text',   ph:'qwen3:4b'},
+    {k:'temperature',   label:'Temperature',    type:'text',   ph:'0.6'},
+    {k:'context_posts', label:'Context Posts',  type:'text',   ph:'6'},
+  ],
+  anthropic_config: [
+    {k:'api_key', label:'API Key', type:'password', ph:'sk-ant-...'},
+  ],
+  gemini_config: [
+    {k:'api_key', label:'API Key', type:'password', ph:'AIza...'},
+    {k:'model',   label:'Model',   type:'text',     ph:'gemini-2.0-flash'},
+  ],
+  malpedia_config: [
+    {k:'api_token', label:'API Token', type:'password', ph:'(leave empty for anonymous)'},
+  ],
+};
+
+function openCfgEditor(name) {
+  _cfgCurrent = name;
+  document.getElementById('cfg-editor-title').textContent = name.replace('_config','') + ' config';
+  document.getElementById('cfg-save-status').textContent = '';
+  document.getElementById('cfg-editor').style.display = '';
+  document.getElementById('cfg-fields').innerHTML = '<span style="color:var(--dim);font-size:12px;">loading...</span>';
   fetch('/api/config/' + name).then(function(r){ return r.json(); })
+  .then(function(data) {
+    var schema = _cfgSchema[name] || Object.keys(data).map(function(k){
+      return {k:k, label:k, type:'text', ph:''};
+    });
+    var html = '';
+    schema.forEach(function(f) {
+      var val = (data[f.k] !== undefined && data[f.k] !== null) ? String(data[f.k]) : '';
+      html += '<div style="margin-bottom:10px;">'
+        + '<label style="display:block;font-size:11px;color:var(--dim);margin-bottom:4px;">' + escapeHtml(f.label) + '</label>'
+        + '<input id="cfg-field-' + escapeHtml(f.k) + '" type="' + f.type + '" '
+        + 'data-key="' + escapeHtml(f.k) + '" '
+        + 'value="' + escapeHtml(val) + '" '
+        + 'placeholder="' + escapeHtml(f.ph) + '" '
+        + 'autocomplete="off" spellcheck="false" '
+        + 'style="width:100%;background:var(--bg);border:1px solid var(--sep);border-radius:var(--radius-sm);'
+        + 'color:var(--text);padding:6px 9px;font-size:12px;font-family:var(--mono);">'
+        + '</div>';
+    });
+    document.getElementById('cfg-fields').innerHTML = html;
+  });
+}
+
+function closeCfgEditor() {
+  _cfgCurrent = null;
+  document.getElementById('cfg-editor').style.display = 'none';
+  document.getElementById('cfg-fields').innerHTML = '';
+}
+
+function saveCfg() {
+  if (!_cfgCurrent) return;
+  var fields = document.getElementById('cfg-fields').querySelectorAll('[data-key]');
+  var payload = {};
+  fields.forEach(function(f){ payload[f.dataset.key] = f.value; });
+  var status = document.getElementById('cfg-save-status');
+  status.textContent = 'saving...';
+  fetch('/api/config/' + _cfgCurrent, {
+    method: 'POST',
+    headers: {'Content-Type':'application/json'},
+    body: JSON.stringify(payload),
+  }).then(function(r){ return r.json(); })
   .then(function(d) {
-    el.textContent = JSON.stringify(d, null, 2);
-    el.classList.add('visible');
+    if (d.ok) {
+      status.style.color = 'var(--green)';
+      status.textContent = '✓ saved';
+      setTimeout(function(){ status.textContent = ''; }, 2000);
+    } else {
+      status.style.color = 'var(--red)';
+      status.textContent = d.error || 'error';
+    }
+  }).catch(function(e){
+    status.style.color = 'var(--red)';
+    status.textContent = 'request failed';
   });
 }
 

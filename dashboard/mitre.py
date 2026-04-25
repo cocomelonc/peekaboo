@@ -83,6 +83,18 @@ PEEKABOO_MODULES: dict[str, dict] = {
         "snippet":  _BASE / "malware/stealer/bitbucket.c",
         "module":   "stealer/bitbucket",
     },
+    "T1567": {
+        "category": "c2",
+        "blog_url": "https://cocomelonc.github.io/malware/2025/08/11/malware-tricks-49.html",
+        "snippet":  _BASE / "malware/stealer/azure.c",
+        "module":   "stealer/azure",
+    },
+    "T1567.002": {
+        "category": "c2",
+        "blog_url": "https://cocomelonc.github.io/malware/2025/10/31/malware-tricks-54.html",
+        "snippet":  _BASE / "malware/stealer/angelcam.c",
+        "module":   "stealer/angelcam",
+    },
 }
 
 # slug keyword → (category, fallback_attack_id)
@@ -136,6 +148,7 @@ _AID_CATEGORY: dict[str, str] = {
     "T1547": "persistence",
     "T1562": "evasion",
     "T1564": "evasion",
+    "T1567": "c2",
     "T1574": "injection",
     "T1622": "evasion",
 }

