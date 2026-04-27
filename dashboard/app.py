@@ -771,6 +771,73 @@ def api_mitre_library_rebuild():
     return jsonify({"ok": True, "message": "rebuilding library cache in background"})
 
 
+@app.route("/api/reindex")
+def api_reindex():
+    """SSE stream: full reindex - library cache → embeddings → KB scrape."""
+    def generate():
+        import time
+
+        def evt(step, status, msg, detail=None):
+            obj = {"step": step, "status": status, "msg": msg}
+            if detail is not None:
+                obj["detail"] = detail
+            return f"data: {json.dumps(obj)}\n\n"
+
+        # ── step 1: blog post library cache ──────────────────────────────────
+        yield evt("library", "running", "scanning blog posts…")
+        try:
+            if HAS_MITRE:
+                posts = build_library_cache()
+                n = len(posts) if posts else 0
+                yield evt("library", "done", f"indexed {n} posts", n)
+            else:
+                yield evt("library", "skip", "mitre module not available")
+        except Exception as e:
+            yield evt("library", "error", str(e))
+
+        # ── step 2: semantic embeddings ───────────────────────────────────────
+        yield evt("embeddings", "running", "building semantic embeddings via Ollama…")
+        try:
+            import sys as _sys, os as _os
+            _sys.path.insert(0, _os.path.dirname(__file__))
+            from semantic import build_post_embeddings, available as sem_available
+            if not sem_available():
+                yield evt("embeddings", "skip", "Ollama / nomic-embed-text not available")
+            else:
+                ok = build_post_embeddings(force=True)
+                if ok:
+                    from semantic import _EMB_CACHE
+                    n = len(json.loads(_EMB_CACHE.read_text()))
+                    yield evt("embeddings", "done", f"embedded {n} posts", n)
+                else:
+                    yield evt("embeddings", "error", "embedding failed")
+        except Exception as e:
+            yield evt("embeddings", "error", str(e))
+
+        # ── step 3: knowledge base (chatbot KB scrape) ────────────────────────
+        yield evt("kb", "running", "scraping knowledge base from blog…")
+        try:
+            if HAS_CHATBOT:
+                from scraper import scrape
+                scrape()
+                from chatbot import kb_info
+                info = kb_info()
+                n = info.get("posts", 0)
+                yield evt("kb", "done", f"indexed {n} posts into KB", n)
+            else:
+                yield evt("kb", "skip", "chatbot module not available")
+        except Exception as e:
+            yield evt("kb", "error", str(e))
+
+        yield f"data: {json.dumps({'step': 'done', 'status': 'done', 'msg': 'reindex complete'})}\n\n"
+
+    return Response(
+        stream_with_context(generate()),
+        content_type="text/event-stream",
+        headers={"Cache-Control": "no-cache", "X-Accel-Buffering": "no"},
+    )
+
+
 @app.route("/api/mitre/library/categories")
 def api_mitre_library_cats():
     if not HAS_MITRE:

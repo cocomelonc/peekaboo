@@ -658,6 +658,25 @@
     color: var(--dim);
   }
 
+  /* ── reindex panel ── */
+  .reindex-step {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    padding: 7px 0;
+    border-bottom: 1px solid var(--sep);
+    font-size: 13px;
+  }
+  .reindex-step:last-child { border-bottom: none; }
+  .rstep-icon { font-size: 15px; flex: none; width: 20px; }
+  .rstep-label { flex: 1; color: var(--text2); }
+  .rstep-detail { font-size: 11px; color: var(--dim); font-family: var(--mono); }
+  .rstep-running .rstep-icon::after { content: ''; }
+  .rstep-running .rstep-label { color: var(--yellow); }
+  .rstep-done    .rstep-label { color: var(--green); }
+  .rstep-error   .rstep-label { color: var(--red); }
+  .rstep-skip    .rstep-label { color: var(--dim); }
+
   /* ── mitre ── */
   .mitre-toolbar {
     display: flex;
@@ -1222,6 +1241,24 @@ PEEKABOO</pre>
         <h2>R&amp;D / Threat Emulation</h2>
         <span class="badge badge-purple">MITRE ATT&amp;CK</span>
         <span style="font-size:12px;color:var(--dim);margin-left:4px;" id="mitre-avail-note"></span>
+        <button class="btn btn-blue" style="margin-left:auto;font-size:12px;padding:5px 14px;" onclick="openReindex()">🔄 Reindex</button>
+      </div>
+
+      <!-- reindex panel -->
+      <div id="reindex-panel" style="display:none;background:var(--bg2);border:1px solid var(--sep);border-radius:var(--radius);padding:16px;margin-bottom:18px;">
+        <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:12px;">
+          <strong style="font-size:13px;">Full Reindex</strong>
+          <button class="btn" style="font-size:11px;padding:3px 10px;" onclick="closeReindex()">✕</button>
+        </div>
+        <div id="reindex-steps">
+          <div class="reindex-step" id="rstep-library">  <span class="rstep-icon">⬜</span> <span class="rstep-label">Blog posts library cache</span>  <span class="rstep-detail"></span></div>
+          <div class="reindex-step" id="rstep-embeddings"><span class="rstep-icon">⬜</span> <span class="rstep-label">Semantic embeddings (Ollama)</span><span class="rstep-detail"></span></div>
+          <div class="reindex-step" id="rstep-kb">        <span class="rstep-icon">⬜</span> <span class="rstep-label">Knowledge base (AI chatbot)</span> <span class="rstep-detail"></span></div>
+        </div>
+        <div style="margin-top:12px;display:flex;gap:10px;align-items:center;">
+          <button class="btn btn-primary" id="btn-reindex-run" style="font-size:12px;padding:6px 18px;" onclick="runReindex()">▶ Run</button>
+          <span id="reindex-status" style="font-size:12px;color:var(--dim);"></span>
+        </div>
       </div>
 
       <!-- stats bar -->
@@ -1240,7 +1277,6 @@ PEEKABOO</pre>
           <div class="mitre-tabs" style="border:none;margin:0;padding:0;gap:4px;flex-wrap:wrap;" id="lib-cat-tabs">
             <div class="mitre-tab active" onclick="setLibCat(this,'all')">All</div>
           </div>
-          <button class="btn" style="font-size:11px;padding:4px 10px;margin-left:auto;" onclick="rebuildLibrary()">↻ Rebuild Index</button>
         </div>
         <div id="lib-content">
           <div class="mitre-loading"><span class="spinner"></span> loading technique library...</div>
@@ -2117,15 +2153,78 @@ function techCardHtml(t) {
     + '</div>';
 }
 
-function rebuildLibrary() {
-  fetch('/api/mitre/library/rebuild', {method:'POST'}).then(function(r){ return r.json(); })
-  .then(function(d) {
-    if (d.ok) {
-      document.getElementById('lib-content').innerHTML =
-        '<div class="mitre-loading"><span class="spinner"></span> rebuilding index from blog posts...</div>';
-      setTimeout(function(){ _mitreInitialized = false; _libTechs = []; initMitre(); }, 4000);
+function openReindex() {
+  var panel = document.getElementById('reindex-panel');
+  panel.style.display = panel.style.display === 'none' ? '' : 'none';
+  // reset step states when opening
+  if (panel.style.display !== 'none') {
+    ['library','embeddings','kb'].forEach(function(s) { setRstep(s,'idle',''); });
+    document.getElementById('reindex-status').textContent = '';
+    document.getElementById('btn-reindex-run').disabled = false;
+    document.getElementById('btn-reindex-run').textContent = '▶ Run';
+  }
+}
+function closeReindex() {
+  document.getElementById('reindex-panel').style.display = 'none';
+}
+
+var _RSTEP_ICONS = {idle:'⬜', running:'🔄', done:'✅', error:'❌', skip:'⏭️'};
+
+function setRstep(step, status, detail) {
+  var el = document.getElementById('rstep-' + step);
+  if (!el) return;
+  el.className = 'reindex-step rstep-' + status;
+  el.querySelector('.rstep-icon').textContent = _RSTEP_ICONS[status] || '⬜';
+  el.querySelector('.rstep-detail').textContent = detail || '';
+}
+
+function runReindex() {
+  var btn = document.getElementById('btn-reindex-run');
+  btn.disabled = true;
+  btn.textContent = '…';
+  document.getElementById('reindex-status').textContent = 'running…';
+  ['library','embeddings','kb'].forEach(function(s){ setRstep(s,'idle',''); });
+
+  var reader;
+  fetch('/api/reindex').then(function(resp) {
+    reader = resp.body.getReader();
+    var decoder = new TextDecoder();
+    function read() {
+      reader.read().then(function(result) {
+        if (result.done) { finishReindex(); return; }
+        decoder.decode(result.value, {stream:true}).split('\n').forEach(function(line) {
+          if (!line.startsWith('data: ')) return;
+          try {
+            var obj = JSON.parse(line.slice(6));
+            if (obj.step === 'done') { finishReindex(); return; }
+            if (obj.step && obj.status) {
+              var detail = obj.detail != null ? String(obj.detail) : (obj.msg || '');
+              setRstep(obj.step, obj.status, detail);
+            }
+          } catch(e) {}
+        });
+        read();
+      }).catch(function(e) {
+        document.getElementById('reindex-status').textContent = 'stream error: ' + e;
+        btn.disabled = false; btn.textContent = '▶ Run';
+      });
     }
+    read();
+  }).catch(function(e) {
+    document.getElementById('reindex-status').textContent = 'failed: ' + e;
+    btn.disabled = false; btn.textContent = '▶ Run';
   });
+}
+
+function finishReindex() {
+  var btn = document.getElementById('btn-reindex-run');
+  btn.disabled = false;
+  btn.textContent = '▶ Run';
+  document.getElementById('reindex-status').style.color = 'var(--green)';
+  document.getElementById('reindex-status').textContent = '✓ done - reload page to see updated counts';
+  // silently refresh mitre library data in the background
+  _mitreInitialized = false;
+  _libTechs = [];
 }
 
 function copySnippet(uid) {
