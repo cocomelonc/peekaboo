@@ -168,10 +168,16 @@ def _find_meow_source(date_str: str) -> str | None:
     if not _MEOW.exists():
         return None
     for d in _MEOW.iterdir():
-        if d.is_dir() and d.name.startswith(date_str):
-            preferred_stems = {"hack", "evil", "main", "pers", "inject", "mal", "shellcode"}
-            for ext in ("*.c", "*.cpp"):
-                files = sorted(d.glob(ext))
+        if not (d.is_dir() and d.name.startswith(date_str)):
+            continue
+        preferred_stems = {"hack", "evil", "main", "pers", "inject", "mal", "shellcode"}
+        # search order: C/C++ first, then assembly — root level before recursive
+        for glob_fn, exts in [
+            (d.glob,  ("*.c", "*.cpp", "*.nim", "*.asm", "*.s")),
+            (d.rglob, ("*.c", "*.cpp", "*.nim", "*.asm", "*.s")),
+        ]:
+            for ext in exts:
+                files = sorted(glob_fn(ext))
                 preferred = [f for f in files if f.stem in preferred_stems]
                 if preferred:
                     return str(preferred[0])
