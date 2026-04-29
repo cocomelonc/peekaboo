@@ -1,6 +1,6 @@
 # Peekaboo
 
-![img](./screenshots/2026-03-11_11-12.png)     
+![img](./screenshots/2026-04-28_23-40.png)          
 
 Peekaboo is a modular framework designed to safely emulate malware behavior. It allows security researchers, red teamers, and blue teamers to reproduce complex threat scenarios - including Command & Control (C2) communication, persistence mechanisms, and lateral movement - without using destructive payloads.     
 
