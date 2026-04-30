@@ -63,7 +63,7 @@ cd dashboard && python3 app.py
 | module | description |
 |--------|-------------|
 | **Builder** | Compile payloads and stealers from source templates with live build log streaming |
-| **Beacons** | Real-time monitoring of active agents — hostname, OS, IP, check-in time |
+| **Beacons** | Real-time monitoring of active agents - hostname, OS, IP, check-in time |
 | **C2** | Deliver compiled binaries over Telegram, GitHub, VirusTotal, Bitbucket |
 | **Config** | Inline editor for all API keys and service configs (Telegram, GitHub, Azure, Angelcam, Ollama, Gemini, etc.) |
 | **AI Assistant** | RAG chatbot with support for Claude, Gemini, and local Ollama (qwen3); answers questions about the codebase and blog posts |
@@ -72,9 +72,9 @@ cd dashboard && python3 app.py
 
 ### MITRE ATT&CK R&D
 
-The MITRE ATT&CK tab indexes all blog posts from the [meow](https://github.com/cocomelonc/meow) research repository and maps them to ATT&CK technique IDs found in the post body. Source code is extracted automatically from the post directory — supporting C, C++, Nim, and assembly (`.asm`/`.s`) files, including posts where source is nested inside subdirectories.
+The MITRE ATT&CK tab indexes all blog posts from the [meow](https://github.com/cocomelonc/meow) research repository and maps them to ATT&CK technique IDs found in the post body. Source code is extracted automatically from the post directory - supporting C, C++, Nim, and assembly (`.asm`/`.s`) files, including posts where source is nested inside subdirectories.
 
-![img](./screenshots/2026-03-11_23-40.png)
+![img](./screenshots/2026-04-28_23-40.png)
 
 - filter by category (injection, persistence, evasion, cryptography, linux, macos, etc.)
 - click any technique to expand the inline source code snippet
@@ -82,9 +82,9 @@ The MITRE ATT&CK tab indexes all blog posts from the [meow](https://github.com/c
 
 ### Malpedia integration
 
-The Malpedia tab connects to the [Malpedia REST API](https://malpedia.caad.fkie.fraunhofer.de/) to browse threat actors and malware families. For each actor or family, related blog posts are matched using **semantic similarity** — the actor/family description is embedded via `nomic-embed-text` (Ollama), then cosine-ranked against all 200+ cached post embeddings. No hardcoded keyword rules.
+The Malpedia tab connects to the [Malpedia REST API](https://malpedia.caad.fkie.fraunhofer.de/) to browse threat actors and malware families. For each actor or family, related blog posts are matched using **semantic similarity** - the actor/family description is embedded via `nomic-embed-text` (Ollama), then cosine-ranked against all 200+ cached post embeddings. No hardcoded keyword rules.   
 
-![img](./screenshots/2026-03-11_11-12.png)
+![img](./screenshots/2026-05-01_01-55_1.png)
 
 - search actors by name, country, or malware family
 - expand any actor/family to see techniques, aliases, and semantically matched blog posts with similarity score
@@ -92,10 +92,12 @@ The Malpedia tab connects to the [Malpedia REST API](https://malpedia.caad.fkie.
 
 ### AI assistant
 
-The AI assistant answers questions about malware techniques, the codebase, and blog posts using RAG (Retrieval-Augmented Generation). At query time the question is embedded and matched against all blog post embeddings; the top matching posts are injected as context into the LLM prompt.
+The AI assistant answers questions about malware techniques, the codebase, and blog posts using RAG (Retrieval-Augmented Generation). At query time the question is embedded and matched against all blog post embeddings; the top matching posts are injected as context into the LLM prompt.   
+
+![img](./screenshots/2026-05-01_01-55.png)
 
 Supported providers:
-- **Local (Ollama)** — `qwen3:4b` (or any Ollama model); runs fully offline; thinking mode tokens are filtered before streaming to the UI
+- **Local (Ollama)** - `qwen3:4b` (or any Ollama model); runs fully offline; thinking mode tokens are filtered before streaming to the UI
 - **Claude** (Anthropic API key required)
 - **Gemini** (Google API key required)    
 
