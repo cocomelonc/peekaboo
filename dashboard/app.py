@@ -74,6 +74,18 @@ _migrated_s = _db.migrate_samples(SAMPLES_DIR, PIPELINE_DIR)
 if _migrated_s:
     print(f"[db] migrated {_migrated_s} samples from filesystem → peekaboo.db")
 
+# migrate MITRE library JSON cache → SQLite (runs once, idempotent)
+if HAS_MITRE and _db.count_mitre_entries() == 0:
+    try:
+        from mitre import _LIBRARY_CACHE
+        if _LIBRARY_CACHE.exists():
+            _cached = json.loads(_LIBRARY_CACHE.read_text())
+            if _cached:
+                _db.save_mitre_entries(_cached)
+                print(f"[db] migrated {len(_cached)} MITRE library entries → peekaboo.db")
+    except Exception as _e:
+        print(f"[db] MITRE library migration skipped: {_e}")
+
 # -- in-memory job store --------------------------------------------------------
 _builds: dict = {}
 _lock = threading.Lock()
@@ -787,7 +799,32 @@ def api_mitre_library():
     if not HAS_MITRE:
         return jsonify({"error": "mitre module not available"}), 503
     category = request.args.get("category", "all")
-    return jsonify(get_library(category))
+    # fast path: serve from SQLite
+    if _db.count_mitre_entries() > 0:
+        return jsonify(_db.get_mitre_entries(category))
+    # cold start: build, save to DB, then return
+    entries = get_library("all")
+    _db.save_mitre_entries(entries)
+    if category != "all":
+        entries = [e for e in entries if e["category"] == category]
+    return jsonify(entries)
+
+
+@app.route("/api/mitre/library/entry/<path:slug>")
+def api_mitre_library_entry(slug: str):
+    entry = _db.get_mitre_entry(slug)
+    if not entry:
+        return jsonify({"error": "not found"}), 404
+    src_path = entry.get("src_path", "")
+    full_source = ""
+    if src_path:
+        p = Path(src_path)
+        if p.exists() and p.is_file():
+            try:
+                full_source = p.read_text(encoding="utf-8", errors="replace")
+            except Exception:
+                pass
+    return jsonify({**entry, "full_source": full_source})
 
 
 @app.route("/api/mitre/library/rebuild", methods=["POST"])
@@ -795,7 +832,9 @@ def api_mitre_library_rebuild():
     if not HAS_MITRE:
         return jsonify({"error": "mitre module not available"}), 503
     def _rebuild():
-        build_library_cache()
+        entries = build_library_cache()
+        if entries:
+            _db.save_mitre_entries(entries)
     threading.Thread(target=_rebuild, daemon=True).start()
     return jsonify({"ok": True, "message": "rebuilding library cache in background"})
 
@@ -817,6 +856,8 @@ def api_reindex():
         try:
             if HAS_MITRE:
                 posts = build_library_cache()
+                if posts:
+                    _db.save_mitre_entries(posts)
                 n = len(posts) if posts else 0
                 yield evt("library", "done", f"indexed {n} posts", n)
             else:
@@ -871,7 +912,7 @@ def api_reindex():
 def api_mitre_library_cats():
     if not HAS_MITRE:
         return jsonify([])
-    entries = get_library()
+    entries = _db.get_mitre_entries() if _db.count_mitre_entries() > 0 else get_library()
     cats: dict[str, int] = {}
     for e in entries:
         cats[e["category"]] = cats.get(e["category"], 0) + 1

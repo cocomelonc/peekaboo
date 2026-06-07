@@ -1024,6 +1024,9 @@ async function openModModal(moduleId) {
   document.getElementById('mm-title').textContent = '…';
   document.getElementById('mm-meta').innerHTML = '';
   document.getElementById('mm-code').textContent = 'loading…';
+  // restore compile button visibility (may have been hidden by MITRE entry modal)
+  const _cb = document.getElementById('mm-compile-btn');
+  _cb.style.display = '';
   openModal('mod-modal');
   try {
     const m = await fetch(`/api/library/${encodeURIComponent(moduleId)}`).then(r => r.json());
@@ -1925,8 +1928,9 @@ function renderMitreLibGrid() {
     const c       = MITRE_CAT_COLORS[e.category] || MITRE_CAT_COLORS.other;
     const ids     = (e.attack_ids||[]).map(a => `<span class="badge badge-red" style="font-size:10px">${a}</span>`).join('');
     const snippet = (e.snippet||'').split('\n').slice(0,3).join('\n');
+    const hasSrc  = !!(e.src_path);
     return `
-      <div class="mod-card">
+      <div class="mod-card" style="cursor:pointer" onclick="openMitreEntryModal('${escAttr(e.slug)}')">
         <div class="mod-card-bar" style="background:${c}"></div>
         <div class="mod-card-body">
           <div class="mod-card-title">${escHtml(e.title)}</div>
@@ -1939,10 +1943,55 @@ function renderMitreLibGrid() {
           ${snippet ? `<div class="mod-card-snippet">${escHtml(snippet)}</div>` : ''}
         </div>
         <div class="mod-card-foot">
-          ${e.blog_url ? `<a href="${e.blog_url}" target="_blank" class="btn btn-ghost btn-xs">📖 Blog</a>` : '<span class="text-xs text-dim" style="padding:2px 8px">no post</span>'}
+          ${hasSrc ? `<button class="btn btn-ghost btn-xs" onclick="event.stopPropagation();openMitreEntryModal('${escAttr(e.slug)}')">🔍 Source</button>` : '<span class="text-xs text-dim" style="padding:2px 8px">no source</span>'}
+          ${e.blog_url ? `<a href="${e.blog_url}" target="_blank" class="btn btn-ghost btn-xs" onclick="event.stopPropagation()">📖 Blog</a>` : ''}
         </div>
       </div>`;
   }).join('');
+}
+
+async function openMitreEntryModal(slug) {
+  const entry = mitreLibAll.find(e => e.slug === slug);
+  if (!entry) return;
+
+  document.getElementById('mm-title').textContent = entry.title;
+  document.getElementById('mm-source-tabs').innerHTML = '';
+
+  const blogLink = document.getElementById('mm-blog-link');
+  if (entry.blog_url) { blogLink.href = entry.blog_url; blogLink.style.display = ''; }
+  else { blogLink.style.display = 'none'; }
+
+  const compileBtn = document.getElementById('mm-compile-btn');
+  compileBtn.disabled = true;
+  compileBtn.style.display = 'none';
+
+  const c   = MITRE_CAT_COLORS[entry.category] || '#636366';
+  const ids = (entry.attack_ids||[]).map(a => `<span class="badge badge-red">${a}</span>`).join('');
+  document.getElementById('mm-meta').innerHTML = `
+    <span class="badge" style="background:${c}22;color:${c}">${entry.category}</span>
+    ${ids}
+    ${entry.implemented ? '<span class="badge badge-green">✓ peekaboo</span>' : '<span class="badge badge-dim">library only</span>'}
+    <span class="badge badge-dim">${entry.date}</span>
+  `;
+
+  const code = document.getElementById('mm-code');
+  code.textContent = 'loading…';
+  if (typeof hljs !== 'undefined') delete code.dataset.highlighted;
+  openModal('mod-modal');
+
+  try {
+    const d = await fetch(`/api/mitre/library/entry/${encodeURIComponent(slug)}`).then(r => r.json());
+    const src = d.full_source || entry.snippet || '(no source available)';
+    // detect language from src_path extension
+    const ext = (entry.src_path || '').split('.').pop().toLowerCase();
+    const langMap = {c:'language-c', cpp:'language-cpp', nim:'language-nim', asm:'language-x86asm', s:'language-x86asm'};
+    code.className = langMap[ext] || 'language-c';
+    code.textContent = src;
+    if (typeof hljs !== 'undefined') { delete code.dataset.highlighted; hljs.highlightElement(code); }
+  } catch(e) {
+    code.textContent = entry.snippet || '(failed to load source)';
+    if (typeof hljs !== 'undefined') { delete code.dataset.highlighted; hljs.highlightElement(code); }
+  }
 }
 
 async function rebuildLibCache() {

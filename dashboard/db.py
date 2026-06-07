@@ -80,6 +80,23 @@ def init() -> None:
         """)
         db.execute("CREATE INDEX IF NOT EXISTS idx_psessions_started ON pipeline_sessions(started DESC)")
 
+        db.execute("""
+            CREATE TABLE IF NOT EXISTS mitre_library (
+                slug        TEXT PRIMARY KEY,
+                date        TEXT NOT NULL DEFAULT '',
+                title       TEXT NOT NULL DEFAULT '',
+                category    TEXT NOT NULL DEFAULT 'other',
+                attack_ids  TEXT NOT NULL DEFAULT '[]',
+                blog_url    TEXT NOT NULL DEFAULT '',
+                src_path    TEXT NOT NULL DEFAULT '',
+                snippet     TEXT NOT NULL DEFAULT '',
+                mod_ref     TEXT NOT NULL DEFAULT '',
+                implemented INTEGER NOT NULL DEFAULT 0
+            )
+        """)
+        db.execute("CREATE INDEX IF NOT EXISTS idx_mitre_cat ON mitre_library(category)")
+        db.execute("CREATE INDEX IF NOT EXISTS idx_mitre_date ON mitre_library(date DESC)")
+
 
 # --------------------------------------------------------------------------- #
 #  Helpers                                                                      #
@@ -389,3 +406,75 @@ def migrate_samples(samples_dir: Path, pipeline_dir: Path | None = None) -> int:
             )
             imported += 1
     return imported
+
+
+# --------------------------------------------------------------------------- #
+#  MITRE library cache                                                          #
+# --------------------------------------------------------------------------- #
+
+def save_mitre_entries(entries: list[dict]) -> None:
+    with _conn() as db:
+        db.execute("DELETE FROM mitre_library")
+        for e in entries:
+            db.execute(
+                """
+                INSERT OR REPLACE INTO mitre_library
+                  (slug, date, title, category, attack_ids, blog_url, src_path, snippet, mod_ref, implemented)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                """,
+                (
+                    e.get("slug", ""),
+                    e.get("date", ""),
+                    e.get("title", ""),
+                    e.get("category", "other"),
+                    json.dumps(e.get("attack_ids", [])),
+                    e.get("blog_url", ""),
+                    e.get("src_path") or "",
+                    e.get("snippet", ""),
+                    e.get("module") or "",
+                    1 if e.get("implemented") else 0,
+                ),
+            )
+
+
+def _mitre_row(row: sqlite3.Row) -> dict:
+    d = dict(row)
+    try:
+        d["attack_ids"] = json.loads(d["attack_ids"] or "[]")
+    except Exception:
+        d["attack_ids"] = []
+    d["implemented"] = bool(d["implemented"])
+    d["module"] = d.pop("mod_ref", "")
+    return d
+
+
+def get_mitre_entries(category: str = "all") -> list[dict]:
+    with _conn() as db:
+        if category == "all":
+            rows = db.execute(
+                "SELECT * FROM mitre_library ORDER BY date DESC"
+            ).fetchall()
+        else:
+            rows = db.execute(
+                "SELECT * FROM mitre_library WHERE category = ? ORDER BY date DESC",
+                (category,),
+            ).fetchall()
+    return [_mitre_row(r) for r in rows]
+
+
+def get_mitre_entry(slug: str) -> dict | None:
+    with _conn() as db:
+        row = db.execute(
+            "SELECT * FROM mitre_library WHERE slug = ?", (slug,)
+        ).fetchone()
+    return _mitre_row(row) if row else None
+
+
+def count_mitre_entries() -> int:
+    with _conn() as db:
+        return db.execute("SELECT COUNT(*) FROM mitre_library").fetchone()[0]
+
+
+def clear_mitre_entries() -> None:
+    with _conn() as db:
+        db.execute("DELETE FROM mitre_library")
