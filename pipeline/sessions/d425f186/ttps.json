@@ -1,0 +1,116 @@
+[
+  {
+    "id": "T1583.001",
+    "name": "T1583.001",
+    "tactic": "unknown",
+    "source": "report_07.txt"
+  },
+  {
+    "id": "T1583.004",
+    "name": "T1583.004",
+    "tactic": "unknown",
+    "source": "report_07.txt"
+  },
+  {
+    "id": "T1587.004",
+    "name": "T1587.004",
+    "tactic": "unknown",
+    "source": "report_07.txt"
+  },
+  {
+    "id": "T1587.001",
+    "name": "T1587.001",
+    "tactic": "unknown",
+    "source": "report_07.txt"
+  },
+  {
+    "id": "T1190",
+    "name": "T1190",
+    "tactic": "unknown",
+    "source": "report_07.txt"
+  },
+  {
+    "id": "T1203",
+    "name": "T1203",
+    "tactic": "unknown",
+    "source": "report_07.txt"
+  },
+  {
+    "id": "T1027",
+    "name": "T1027",
+    "tactic": "defense-evasion",
+    "source": "report_07.txt"
+  },
+  {
+    "id": "T1187",
+    "name": "T1187",
+    "tactic": "unknown",
+    "source": "report_07.txt"
+  },
+  {
+    "id": "T1556.006",
+    "name": "T1556.006",
+    "tactic": "unknown",
+    "source": "report_07.txt"
+  },
+  {
+    "id": "T1087.003",
+    "name": "T1087.003",
+    "tactic": "unknown",
+    "source": "report_07.txt"
+  },
+  {
+    "id": "T1056.003",
+    "name": "T1056.003",
+    "tactic": "unknown",
+    "source": "report_07.txt"
+  },
+  {
+    "id": "T1119",
+    "name": "T1119",
+    "tactic": "unknown",
+    "source": "report_07.txt"
+  },
+  {
+    "id": "T1114.002",
+    "name": "T1114.002",
+    "tactic": "unknown",
+    "source": "report_07.txt"
+  },
+  {
+    "id": "T1114.003",
+    "name": "T1114.003",
+    "tactic": "unknown",
+    "source": "report_07.txt"
+  },
+  {
+    "id": "T1071.001",
+    "name": "T1071.001",
+    "tactic": "command-and-control",
+    "source": "report_07.txt"
+  },
+  {
+    "id": "T1071.003",
+    "name": "T1071.003",
+    "tactic": "command-and-control",
+    "source": "report_07.txt"
+  },
+  {
+    "id": "T1132.001",
+    "name": "T1132.001",
+    "tactic": "unknown",
+    "source": "report_07.txt"
+  },
+  {
+    "id": "T1020",
+    "name": "T1020",
+    "tactic": "unknown",
+    "source": "report_07.txt"
+  },
+  {
+    "id": "T1041",
+    "name": "T1041",
+    "tactic": "command-and-control",
+    "source": "report_07.txt"
+  }
+]

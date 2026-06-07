@@ -3,2469 +3,1863 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>peekaboo // dashboard</title>
+<title>peekaboo // simulation lab</title>
 <script src="https://cdn.jsdelivr.net/npm/marked@9/marked.min.js"></script>
-<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/highlight.js@11/styles/atom-one-dark.min.css">
-<script src="https://cdn.jsdelivr.net/npm/highlight.js@11/lib/core.min.js"></script>
-<script src="https://cdn.jsdelivr.net/npm/highlight.js@11/lib/languages/c.min.js"></script>
-<script src="https://cdn.jsdelivr.net/npm/highlight.js@11/lib/languages/cpp.min.js"></script>
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/styles/atom-one-dark.min.css">
+<script src="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/highlight.min.js"></script>
 <style>
-  :root {
-    /* macOS Monterey dark palette */
-    --bg:       #1C1C1E;
-    --bg2:      #2C2C2E;
-    --bg3:      #3A3A3C;
-    --bg4:      #48484A;
-    --sep:      #38383A;
-    --text:     #FFFFFF;
-    --text2:    #EBEBF5CC;
-    --dim:      #8E8E93;
-    --purple:   #BF5AF2;
-    --blue:     #0A84FF;
-    --green:    #30D158;
-    --red:      #FF453A;
-    --yellow:   #FFD60A;
-    --orange:   #FF9F0A;
-    --cyan:     #5AC8F5;
-    --pink:     #FF375F;
-    --sidebar-w: 220px;
-    --header-h:  54px;
-    --radius:    10px;
-    --radius-sm: 6px;
-    --font: -apple-system, BlinkMacSystemFont, 'SF Pro Display', 'Helvetica Neue', Arial, sans-serif;
-    --mono: 'SF Mono', 'Fira Code', 'Courier New', monospace;
-  }
+:root {
+  --bg:      #15121E;
+  --bg2:     #1E1B2E;
+  --bg3:     #272440;
+  --bg4:     #312D52;
+  --sep:     #3D3860;
+  --text:    #EAE6FF;
+  --text2:   rgba(234,230,255,.65);
+  --dim:     #8A85A8;
+  --purple:  #B57BFF;
+  --blue:    #78B4FF;
+  --green:   #56D98A;
+  --red:     #FF7875;
+  --yellow:  #FFD166;
+  --orange:  #FFB347;
+  --cyan:    #72D9F5;
+  --pink:    #FF8FAD;
+  --sidebar: 228px;
+  --hdr:     52px;
+  --r:       10px;
+  --rs:      6px;
+  --font: -apple-system,BlinkMacSystemFont,'SF Pro Display','Helvetica Neue',Arial,sans-serif;
+  --mono: 'SF Mono','Fira Code','Courier New',monospace;
+}
+*,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
+html{scroll-behavior:smooth}
+body{background:var(--bg);color:var(--text);font-family:var(--font);font-size:14px;line-height:1.5;min-height:100vh;overflow-x:hidden;-webkit-font-smoothing:antialiased}
 
-  *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
-  html { scroll-behavior: smooth; }
-  body {
-    background: var(--bg);
-    color: var(--text);
-    font-family: var(--font);
-    font-size: 14px;
-    line-height: 1.5;
-    min-height: 100vh;
-    overflow-x: hidden;
-    -webkit-font-smoothing: antialiased;
-  }
+@keyframes pulse{0%,100%{opacity:1}50%{opacity:.4}}
+@keyframes spin{to{transform:rotate(360deg)}}
+@keyframes fadeIn{from{opacity:0;transform:translateY(8px)}to{opacity:1;transform:none}}
+@keyframes slideRight{from{opacity:0;transform:translateX(-10px)}to{opacity:1;transform:none}}
+@keyframes glow{0%,100%{box-shadow:0 0 4px currentColor}50%{box-shadow:0 0 12px currentColor}}
 
-  /* ── animations ── */
-  @keyframes pulse    { 0%,100%{opacity:1} 50%{opacity:.4} }
-  @keyframes spin     { to{transform:rotate(360deg)} }
-  @keyframes fadeIn   { from{opacity:0;transform:translateY(6px)} to{opacity:1;transform:translateY(0)} }
-  @keyframes slideIn  { from{opacity:0;transform:translateX(-8px)} to{opacity:1;transform:translateX(0)} }
+/* -- layout -- */
+.layout{display:flex;min-height:100vh}
 
-  /* ── layout ── */
-  .layout {
-    display: flex;
-    min-height: 100vh;
-  }
+/* -- sidebar -- */
+.sidebar{width:var(--sidebar);background:var(--bg2);border-right:1px solid var(--sep);display:flex;flex-direction:column;position:fixed;top:0;left:0;bottom:0;z-index:100;overflow-y:auto}
+.sidebar::-webkit-scrollbar{width:3px}
+.sidebar::-webkit-scrollbar-thumb{background:var(--sep)}
 
-  /* ── sidebar ── */
-  .sidebar {
-    width: var(--sidebar-w);
-    background: var(--bg2);
-    border-right: 1px solid var(--sep);
-    display: flex;
-    flex-direction: column;
-    position: fixed;
-    top: 0; left: 0; bottom: 0;
-    z-index: 100;
-    overflow-y: auto;
-  }
+.sb-brand{padding:18px 16px 14px;border-bottom:1px solid var(--sep)}
+.sb-brand .cat{font-family:var(--mono);font-size:10px;color:var(--purple);white-space:pre;line-height:1.2;text-shadow:0 0 12px rgba(181,123,255,.5);margin-bottom:6px}
+.sb-brand .name{font-size:15px;font-weight:700;letter-spacing:.3px}
+.sb-brand .sub{font-size:11px;color:var(--dim);margin-top:2px}
 
-  .sidebar-brand {
-    padding: 20px 16px 16px;
-    border-bottom: 1px solid var(--sep);
-  }
-  .sidebar-brand .cat {
-    font-family: var(--mono);
-    font-size: 11px;
-    color: var(--purple);
-    white-space: pre;
-    line-height: 1.2;
-    text-shadow: 0 0 12px var(--purple);
-    margin-bottom: 8px;
-  }
-  .sidebar-brand .brand-name {
-    font-size: 15px;
-    font-weight: 700;
-    color: var(--text);
-    letter-spacing: 0.5px;
-  }
-  .sidebar-brand .brand-sub {
-    font-size: 11px;
-    color: var(--dim);
-    margin-top: 2px;
-  }
+.sb-section{padding:6px 0;border-bottom:1px solid var(--sep)}
+.sb-label{font-size:10px;font-weight:600;color:var(--dim);text-transform:uppercase;letter-spacing:.9px;padding:6px 16px 4px}
+.nav-item{display:flex;align-items:center;gap:9px;padding:8px 16px;cursor:pointer;color:var(--text2);font-size:13px;transition:background .12s,color .12s;position:relative;user-select:none}
+.nav-item:hover{background:rgba(234,230,255,.06);color:var(--text)}
+.nav-item.active{background:rgba(181,123,255,.14);color:var(--purple);font-weight:500}
+.nav-item.active::before{content:'';position:absolute;left:0;top:5px;bottom:5px;width:3px;background:var(--purple);border-radius:0 2px 2px 0}
+.nav-icon{font-size:15px;width:20px;text-align:center;flex-shrink:0}
+.nav-badge{margin-left:auto;font-size:10px;padding:1px 6px;border-radius:10px;background:var(--bg4);color:var(--dim);font-weight:600}
+.nav-badge.live{background:rgba(86,217,138,.18);color:var(--green)}
+.nav-badge.new{background:rgba(181,123,255,.22);color:var(--purple)}
 
-  .sidebar-section {
-    padding: 8px 0;
-    border-bottom: 1px solid var(--sep);
-  }
-  .sidebar-section-label {
-    font-size: 11px;
-    font-weight: 600;
-    color: var(--dim);
-    text-transform: uppercase;
-    letter-spacing: 0.8px;
-    padding: 4px 16px 6px;
-  }
+.sb-footer{margin-top:auto;padding:10px 14px;font-size:10px;color:var(--dim);border-top:1px solid var(--sep);display:flex;align-items:center;gap:6px}
+.dot{width:6px;height:6px;border-radius:50%;background:var(--green);box-shadow:0 0 6px var(--green);animation:pulse 2s infinite;flex-shrink:0}
 
-  .nav-item {
-    display: flex;
-    align-items: center;
-    gap: 10px;
-    padding: 9px 16px;
-    cursor: pointer;
-    border-radius: 0;
-    transition: background .15s, color .15s;
-    color: var(--text2);
-    font-size: 14px;
-    font-weight: 400;
-    position: relative;
-    user-select: none;
-  }
-  .nav-item:hover {
-    background: rgba(255,255,255,0.06);
-    color: var(--text);
-  }
-  .nav-item.active {
-    background: rgba(191,90,242,0.15);
-    color: var(--purple);
-    font-weight: 500;
-  }
-  .nav-item.active::before {
-    content: '';
-    position: absolute;
-    left: 0; top: 4px; bottom: 4px;
-    width: 3px;
-    background: var(--purple);
-    border-radius: 0 2px 2px 0;
-  }
-  .nav-icon {
-    font-size: 16px;
-    width: 20px;
-    text-align: center;
-    flex-shrink: 0;
-  }
-  .nav-badge {
-    margin-left: auto;
-    font-size: 11px;
-    padding: 1px 6px;
-    border-radius: 10px;
-    background: var(--bg3);
-    color: var(--dim);
-    font-weight: 500;
-  }
-  .nav-badge.live {
-    background: rgba(48,209,88,0.2);
-    color: var(--green);
-  }
+/* -- main -- */
+.main{margin-left:var(--sidebar);flex:1;display:flex;flex-direction:column;min-height:100vh}
+.topbar{height:var(--hdr);background:rgba(21,18,30,.92);backdrop-filter:blur(20px);border-bottom:1px solid var(--sep);display:flex;align-items:center;padding:0 24px;position:sticky;top:0;z-index:50;gap:16px}
+.topbar-title{font-size:16px;font-weight:600;flex:1}
+.topbar-sub{font-size:12px;color:var(--dim)}
+.topbar-actions{display:flex;gap:8px;align-items:center}
 
-  .sidebar-footer {
-    margin-top: auto;
-    padding: 12px 16px;
-    font-size: 11px;
-    color: var(--dim);
-    border-top: 1px solid var(--sep);
-  }
-  .sidebar-footer .status-dot {
-    display: inline-block;
-    width: 6px; height: 6px;
-    border-radius: 50%;
-    background: var(--green);
-    box-shadow: 0 0 6px var(--green);
-    animation: pulse 2s infinite;
-    vertical-align: middle;
-    margin-right: 5px;
-  }
+.content{flex:1;padding:24px;animation:fadeIn .2s ease}
+.panel{display:none}
+.panel.active{display:block}
 
-  /* ── main content ── */
-  .main {
-    margin-left: var(--sidebar-w);
-    flex: 1;
-    display: flex;
-    flex-direction: column;
-    min-height: 100vh;
-  }
+/* -- cards / boxes -- */
+.card{background:var(--bg2);border:1px solid var(--sep);border-radius:var(--r);padding:18px}
+.card-sm{padding:12px 14px}
+.card-header{display:flex;align-items:center;gap:10px;margin-bottom:14px}
+.card-title{font-size:14px;font-weight:600}
+.card-sub{font-size:12px;color:var(--dim);margin-top:2px}
 
-  .topbar {
-    height: var(--header-h);
-    background: rgba(28,28,30,0.85);
-    backdrop-filter: blur(20px);
-    -webkit-backdrop-filter: blur(20px);
-    border-bottom: 1px solid var(--sep);
-    display: flex;
-    align-items: center;
-    padding: 0 24px;
-    gap: 16px;
-    position: sticky;
-    top: 0;
-    z-index: 50;
-  }
-  .topbar-title {
-    font-size: 17px;
-    font-weight: 600;
-    color: var(--text);
-  }
-  .topbar-sub {
-    font-size: 12px;
-    color: var(--dim);
-  }
-  #clock {
-    margin-left: auto;
-    font-family: var(--mono);
-    font-size: 12px;
-    color: var(--dim);
-  }
+/* -- buttons -- */
+.btn{display:inline-flex;align-items:center;gap:6px;padding:7px 14px;border-radius:var(--rs);border:none;cursor:pointer;font-size:13px;font-weight:500;font-family:var(--font);transition:opacity .15s,filter .15s}
+.btn:hover{filter:brightness(1.1)}
+.btn:active{filter:brightness(.9)}
+.btn-primary{background:var(--purple);color:#fff}
+.btn-blue{background:var(--blue);color:#fff}
+.btn-green{background:var(--green);color:#000}
+.btn-ghost{background:var(--bg3);color:var(--text2);border:1px solid var(--sep)}
+.btn-ghost:hover{color:var(--text);background:var(--bg4)}
+.btn-red{background:rgba(255,120,117,.15);color:var(--red);border:1px solid rgba(255,120,117,.3)}
+.btn-sm{padding:4px 10px;font-size:12px}
+.btn-xs{padding:2px 8px;font-size:11px}
+.btn[disabled]{opacity:.4;cursor:default;pointer-events:none}
+.btn .spin{animation:spin .7s linear infinite}
 
-  /* ── page / section ── */
-  .page {
-    display: none;
-    padding: 24px;
-    animation: fadeIn .2s ease;
-    flex: 1;
-  }
-  .page.active { display: block; }
+/* -- form -- */
+.form-row{display:grid;grid-template-columns:repeat(auto-fit,minmax(160px,1fr));gap:12px;margin-bottom:14px}
+label{font-size:12px;color:var(--dim);display:block;margin-bottom:4px}
+select,input[type=text],input[type=password],textarea{width:100%;background:var(--bg3);border:1px solid var(--sep);border-radius:var(--rs);color:var(--text);font-family:var(--font);font-size:13px;padding:7px 10px;outline:none;transition:border .15s}
+select:focus,input:focus,textarea:focus{border-color:var(--purple)}
+textarea{resize:vertical;font-family:var(--mono);font-size:12px}
 
-  /* ── cards ── */
-  .card {
-    background: var(--bg2);
-    border: 1px solid var(--sep);
-    border-radius: var(--radius);
-    padding: 18px 20px;
-    margin-bottom: 16px;
-  }
-  .card-title {
-    font-size: 13px;
-    font-weight: 600;
-    color: var(--dim);
-    text-transform: uppercase;
-    letter-spacing: 0.6px;
-    margin-bottom: 14px;
-    display: flex;
-    align-items: center;
-    gap: 8px;
-  }
-  .card-title .icon { font-size: 15px; }
+/* -- badges -- */
+.badge{display:inline-flex;align-items:center;padding:2px 7px;border-radius:4px;font-size:11px;font-weight:600;letter-spacing:.2px}
+.badge-red{background:rgba(255,120,117,.18);color:var(--red)}
+.badge-green{background:rgba(86,217,138,.18);color:var(--green)}
+.badge-blue{background:rgba(120,180,255,.18);color:var(--blue)}
+.badge-purple{background:rgba(181,123,255,.18);color:var(--purple)}
+.badge-yellow{background:rgba(255,209,102,.18);color:var(--yellow)}
+.badge-orange{background:rgba(255,179,71,.18);color:var(--orange)}
+.badge-dim{background:var(--bg4);color:var(--dim)}
+.badge-cyan{background:rgba(114,217,245,.18);color:var(--cyan)}
 
-  .page-grid-2 {
-    display: grid;
-    grid-template-columns: 1fr 1fr;
-    gap: 16px;
-  }
-  .page-grid-3 {
-    display: grid;
-    grid-template-columns: repeat(3,1fr);
-    gap: 16px;
-  }
+/* -- tables -- */
+.tbl{width:100%;border-collapse:collapse;font-size:13px}
+.tbl th{text-align:left;padding:8px 12px;font-size:11px;font-weight:600;color:var(--dim);text-transform:uppercase;letter-spacing:.5px;border-bottom:1px solid var(--sep)}
+.tbl td{padding:9px 12px;border-bottom:1px solid rgba(61,56,96,.6);vertical-align:middle}
+.tbl tr:last-child td{border-bottom:none}
+.tbl tr:hover td{background:rgba(181,123,255,.05)}
 
-  /* ── form elements ── */
-  .form-row {
-    display: flex;
-    align-items: center;
-    gap: 12px;
-    margin-bottom: 12px;
-    flex-wrap: wrap;
-  }
-  .form-row label {
-    font-size: 13px;
-    color: var(--dim);
-    width: 90px;
-    flex-shrink: 0;
-    text-align: right;
-  }
-  select, input[type="text"] {
-    background: var(--bg3);
-    border: 1px solid var(--sep);
-    color: var(--text);
-    font-family: var(--font);
-    font-size: 13px;
-    padding: 7px 11px;
-    flex: 1 1 160px;
-    min-width: 0;
-    outline: none;
-    appearance: none;
-    border-radius: var(--radius-sm);
-    transition: border-color .15s;
-  }
-  select:focus, input:focus { border-color: var(--purple); }
-  select option { background: var(--bg3); color: var(--text); }
+/* -- grid -- */
+.grid-3{display:grid;grid-template-columns:repeat(auto-fill,minmax(300px,1fr));gap:14px}
+.grid-4{display:grid;grid-template-columns:repeat(auto-fill,minmax(240px,1fr));gap:12px}
+.grid-2{display:grid;grid-template-columns:1fr 1fr;gap:14px}
+.grid-stats{display:grid;grid-template-columns:repeat(auto-fit,minmax(140px,1fr));gap:12px;margin-bottom:20px}
 
-  /* ── buttons ── */
-  .btn {
-    display: inline-flex;
-    align-items: center;
-    gap: 6px;
-    background: var(--bg3);
-    border: 1px solid var(--sep);
-    color: var(--text2);
-    font-family: var(--font);
-    font-size: 13px;
-    font-weight: 500;
-    padding: 7px 16px;
-    cursor: pointer;
-    border-radius: var(--radius-sm);
-    transition: background .15s, color .15s, border-color .15s;
-    white-space: nowrap;
-    user-select: none;
-  }
-  .btn:hover { background: var(--bg4); color: var(--text); }
-  .btn:disabled { opacity: .4; cursor: not-allowed; }
-  .btn:disabled:hover { background: var(--bg3); color: var(--text2); }
+/* -- stat card -- */
+.stat{background:var(--bg2);border:1px solid var(--sep);border-radius:var(--r);padding:16px 18px}
+.stat-val{font-size:28px;font-weight:700;font-family:var(--mono);line-height:1}
+.stat-label{font-size:11px;color:var(--dim);margin-top:4px;text-transform:uppercase;letter-spacing:.5px}
+.stat-sub{font-size:12px;color:var(--text2);margin-top:6px}
 
-  .btn-primary  { background: var(--purple); border-color: var(--purple); color: #fff; }
-  .btn-primary:hover { background: #CF6BFF; border-color: #CF6BFF; }
-  .btn-blue     { background: rgba(10,132,255,.15); border-color: var(--blue);   color: var(--blue); }
-  .btn-blue:hover { background: rgba(10,132,255,.28); }
-  .btn-green    { background: rgba(48,209,88,.15);  border-color: var(--green);  color: var(--green); }
-  .btn-green:hover { background: rgba(48,209,88,.28); }
-  .btn-red      { background: rgba(255,69,58,.15);  border-color: var(--red);    color: var(--red); }
-  .btn-red:hover { background: rgba(255,69,58,.28); }
-  .btn-orange   { background: rgba(255,159,10,.15); border-color: var(--orange); color: var(--orange); }
-  .btn-orange:hover { background: rgba(255,159,10,.28); }
-  .btn-cyan     { background: rgba(90,200,245,.15); border-color: var(--cyan);   color: var(--cyan); }
-  .btn-cyan:hover { background: rgba(90,200,245,.28); }
+/* -- code -- */
+pre{background:var(--bg3);border:1px solid var(--sep);border-radius:var(--rs);padding:14px;overflow-x:auto;font-family:var(--mono);font-size:12px;line-height:1.6;max-height:380px;overflow-y:auto}
+code{font-family:var(--mono);font-size:12px;background:var(--bg4);padding:1px 5px;border-radius:3px}
 
-  .btn-row { display: flex; gap: 8px; margin-top: 12px; flex-wrap: wrap; }
+/* -- terminal output -- */
+.terminal{background:#0D0B14;border:1px solid var(--sep);border-radius:var(--rs);padding:14px;font-family:var(--mono);font-size:12px;line-height:1.7;max-height:320px;overflow-y:auto;white-space:pre-wrap;word-break:break-all}
+.terminal::-webkit-scrollbar{width:4px}
+.terminal::-webkit-scrollbar-thumb{background:var(--sep)}
 
-  /* ── build output ── */
-  #build-output {
-    background: var(--bg);
-    border: 1px solid var(--sep);
-    border-radius: var(--radius-sm);
-    padding: 12px;
-    font-family: var(--mono);
-    font-size: 12px;
-    line-height: 1.6;
-    min-height: 120px;
-    max-height: 280px;
-    overflow-y: auto;
-    white-space: pre-wrap;
-    word-break: break-all;
-    color: var(--dim);
-    margin-top: 14px;
-  }
-  #build-output .ok  { color: var(--green); }
-  #build-output .err { color: var(--red); }
-  #build-output .inf { color: var(--cyan); }
-  #build-output .wrn { color: var(--yellow); }
+/* -- module card -- */
+.mod-card{background:var(--bg2);border:1px solid var(--sep);border-radius:var(--r);overflow:hidden;display:flex;flex-direction:column;transition:border-color .15s,transform .15s}
+.mod-card:hover{border-color:rgba(181,123,255,.35);transform:translateY(-1px);box-shadow:0 4px 20px rgba(181,123,255,.1)}
+.mod-card-bar{height:3px;width:100%;flex-shrink:0}
+.mod-card-body{padding:14px;flex:1;display:flex;flex-direction:column;gap:8px}
+.mod-card-title{font-size:13px;font-weight:600;line-height:1.35;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden}
+.mod-card-meta{display:flex;flex-wrap:wrap;gap:4px;align-items:center}
+.mod-card-date{font-size:11px;color:var(--dim)}
+.mod-card-snippet{font-family:var(--mono);font-size:10px;color:var(--dim);line-height:1.5;display:-webkit-box;-webkit-line-clamp:3;-webkit-box-orient:vertical;overflow:hidden;background:var(--bg3);border-radius:4px;padding:6px 8px}
+.mod-card-foot{display:flex;gap:6px;justify-content:flex-end;padding:10px 14px;border-top:1px solid var(--sep);background:rgba(0,0,0,.12)}
 
-  /* ── status badges ── */
-  .badge {
-    display: inline-block;
-    font-size: 11px;
-    font-weight: 600;
-    padding: 2px 8px;
-    border-radius: 20px;
-  }
-  .badge-purple { background: rgba(191,90,242,.2);  color: var(--purple); }
-  .badge-green  { background: rgba(48,209,88,.2);   color: var(--green); }
-  .badge-yellow { background: rgba(255,214,10,.2);  color: var(--yellow); }
-  .badge-red    { background: rgba(255,69,58,.2);   color: var(--red); }
-  .badge-blue   { background: rgba(10,132,255,.2);  color: var(--blue); }
-  .badge-dim    { background: var(--bg3);            color: var(--dim); }
+/* -- platform icon -- */
+.plat{font-size:13px}
 
-  .build-status { display: inline-flex; align-items: center; gap: 5px; font-size: 12px; font-weight: 500; padding: 3px 10px; border-radius: 20px; }
-  .build-status.success { background: rgba(48,209,88,.2);  color: var(--green); }
-  .build-status.failed  { background: rgba(255,69,58,.2);  color: var(--red); }
-  .build-status.running { background: rgba(255,214,10,.2); color: var(--yellow); animation: pulse 1s infinite; }
-  .build-status.queued  { background: rgba(10,132,255,.2); color: var(--blue); }
-  .build-status.timeout { background: rgba(255,159,10,.2); color: var(--orange); }
-  .build-status.error   { background: rgba(255,69,58,.2);  color: var(--red); }
-  .build-status.idle    { background: var(--bg3);           color: var(--dim); }
+/* -- filter bar -- */
+.filter-bar{display:flex;gap:8px;flex-wrap:wrap;align-items:center;margin-bottom:16px}
+.filter-pill{padding:4px 12px;border-radius:20px;border:1px solid var(--sep);background:var(--bg3);color:var(--text2);font-size:12px;cursor:pointer;transition:all .15s;user-select:none}
+.filter-pill:hover{border-color:rgba(255,255,255,.2);color:var(--text)}
+.filter-pill.active{background:rgba(181,123,255,.18);border-color:var(--purple);color:var(--purple)}
+.filter-search{flex:1;min-width:180px;max-width:280px}
 
-  /* ── beacon items ── */
-  .beacon-item {
-    background: var(--bg3);
-    border: 1px solid var(--sep);
-    border-radius: var(--radius-sm);
-    padding: 10px 12px;
-    margin-bottom: 8px;
-    animation: fadeIn .3s ease;
-  }
-  .beacon-item .b-head { display: flex; justify-content: space-between; align-items: center; margin-bottom: 5px; }
-  .beacon-item .b-from { color: var(--purple); font-size: 13px; font-weight: 500; }
-  .beacon-item .b-time { color: var(--dim); font-size: 11px; font-family: var(--mono); }
-  .beacon-item .b-text { font-size: 13px; color: var(--text2); white-space: pre-wrap; word-break: break-word; max-height: 80px; overflow-y: auto; }
-  .beacon-empty { color: var(--dim); font-size: 13px; text-align: center; padding: 28px 0; }
+/* -- pipeline steps -- */
+.pipe-steps{display:flex;flex-direction:column;gap:0}
+.pipe-step{display:flex;gap:14px;align-items:flex-start;padding:14px 0;position:relative}
+.pipe-step:not(:last-child)::after{content:'';position:absolute;left:19px;top:44px;bottom:0;width:2px;background:var(--sep)}
+.pipe-step-icon{width:38px;height:38px;border-radius:50%;background:var(--bg3);border:2px solid var(--sep);display:flex;align-items:center;justify-content:center;font-size:16px;flex-shrink:0;z-index:1;transition:all .3s}
+.pipe-step-icon.running{border-color:var(--blue);background:rgba(120,180,255,.12);animation:pulse 1s infinite}
+.pipe-step-icon.done{border-color:var(--green);background:rgba(86,217,138,.12)}
+.pipe-step-icon.error{border-color:var(--red);background:rgba(255,120,117,.12)}
+.pipe-step-body{flex:1;padding-top:6px}
+.pipe-step-name{font-size:13px;font-weight:600}
+.pipe-step-msg{font-size:12px;color:var(--dim);margin-top:2px}
 
-  /* ── C2 channel cards ── */
-  .c2-card {
-    background: var(--bg3);
-    border: 1px solid var(--sep);
-    border-radius: var(--radius);
-    padding: 14px 16px;
-    transition: border-color .2s;
-  }
-  .c2-card:hover { border-color: var(--purple); }
-  .c2-card .c2-name { font-size: 14px; font-weight: 600; color: var(--text); margin-bottom: 6px; display: flex; align-items: center; gap: 8px; }
-  .c2-card .c2-status { font-size: 12px; color: var(--dim); margin-bottom: 10px; min-height: 18px; }
-  .c2-card .c2-technique { font-size: 11px; color: var(--dim); margin-top: 8px; font-family: var(--mono); }
-  .c2-result {
-    background: var(--bg2);
-    border: 1px solid var(--sep);
-    border-radius: var(--radius-sm);
-    padding: 10px 12px;
-    margin-top: 12px;
-    font-size: 12px;
-    font-family: var(--mono);
-    white-space: pre-wrap;
-    word-break: break-all;
-    max-height: 140px;
-    overflow-y: auto;
-    animation: fadeIn .3s ease;
-  }
-  .c2-result.ok  { border-color: var(--green);  color: var(--green); }
-  .c2-result.err { border-color: var(--red);    color: var(--red); }
+/* -- coverage heatmap -- */
+.coverage-wrap{overflow-x:auto}
+.coverage-matrix{border-collapse:collapse;font-size:11px;min-width:100%}
+.coverage-matrix th{padding:6px 10px;font-size:10px;font-weight:600;color:var(--dim);text-transform:uppercase;letter-spacing:.6px;border-bottom:2px solid var(--sep);white-space:nowrap;text-align:center}
+.cov-cell{width:28px;height:28px;border-radius:3px;cursor:pointer;transition:transform .1s,filter .1s;display:inline-block;margin:1px;vertical-align:top}
+.cov-cell:hover{transform:scale(1.3);filter:brightness(1.3);z-index:10;position:relative}
+.cov-empty{background:var(--bg3);opacity:.7}
+.cov-library{background:rgba(255,209,102,.45)}
+.cov-peekaboo{background:var(--green)}
+.cov-both{background:var(--purple)}
+.cov-td{padding:4px 6px;vertical-align:top}
+.cov-tactic{writing-mode:horizontal-tb;padding:8px 6px;font-size:10px;font-weight:600;color:var(--dim);white-space:nowrap}
 
-  #binary-info {
-    font-size: 13px;
-    font-family: var(--mono);
-    color: var(--cyan);
-    padding: 10px 14px;
-    background: var(--bg3);
-    border: 1px solid var(--sep);
-    border-radius: var(--radius-sm);
-    margin-bottom: 16px;
-  }
+/* -- APT campaign -- */
+.apt-layout{display:grid;grid-template-columns:340px 1fr;gap:18px;align-items:start}
+.apt-panel{background:var(--bg2);border:1px solid var(--sep);border-radius:var(--r);padding:18px}
+.ttp-row{display:flex;align-items:center;gap:8px;padding:8px 12px;border-bottom:1px solid rgba(61,56,96,.5)}
+.ttp-row:last-child{border-bottom:none}
 
-  /* ── chat ── */
-  .chat-messages {
-    height: clamp(260px,42vh,480px);
-    overflow-y: auto;
-    padding: 12px;
-    background: var(--bg);
-    border: 1px solid var(--sep);
-    border-radius: var(--radius-sm);
-    margin-bottom: 12px;
-    display: flex;
-    flex-direction: column;
-    gap: 12px;
-  }
-  .msg { animation: fadeIn .25s ease; }
-  .msg-user {
-    align-self: flex-end;
-    background: var(--purple);
-    padding: 9px 14px;
-    border-radius: 14px 14px 3px 14px;
-    max-width: 80%;
-    font-size: 13px;
-    color: #fff;
-  }
-  .msg-assistant {
-    align-self: flex-start;
-    background: var(--bg3);
-    border: 1px solid var(--sep);
-    padding: 9px 14px;
-    border-radius: 3px 14px 14px 14px;
-    max-width: 88%;
-    font-size: 13px;
-    color: var(--text2);
-    word-break: break-word;
-  }
-  /* markdown inside assistant messages */
-  .msg-assistant .msg-body h1,
-  .msg-assistant .msg-body h2,
-  .msg-assistant .msg-body h3,
-  .msg-assistant .msg-body h4 {
-    color: var(--text);
-    font-weight: 600;
-    margin: 10px 0 4px;
-    line-height: 1.3;
-  }
-  .msg-assistant .msg-body h1 { font-size: 15px; }
-  .msg-assistant .msg-body h2 { font-size: 14px; color: var(--purple); }
-  .msg-assistant .msg-body h3 { font-size: 13px; color: var(--cyan); }
-  .msg-assistant .msg-body h4 { font-size: 13px; color: var(--blue); }
-  .msg-assistant .msg-body p  { margin: 5px 0; line-height: 1.6; }
-  .msg-assistant .msg-body ul,
-  .msg-assistant .msg-body ol {
-    margin: 5px 0 5px 18px;
-    padding: 0;
-  }
-  .msg-assistant .msg-body li { margin: 2px 0; line-height: 1.5; }
-  .msg-assistant .msg-body code {
-    font-family: var(--mono);
-    font-size: 11.5px;
-    background: var(--bg);
-    border: 1px solid var(--sep);
-    border-radius: 4px;
-    padding: 1px 5px;
-    color: var(--cyan);
-  }
-  .msg-assistant .msg-body pre {
-    background: var(--bg);
-    border: 1px solid var(--sep);
-    border-radius: var(--radius-sm);
-    padding: 10px 12px;
-    margin: 8px 0;
-    overflow-x: auto;
-    line-height: 1.55;
-  }
-  .msg-assistant .msg-body pre code {
-    background: none;
-    border: none;
-    padding: 0;
-    color: var(--green);
-    font-size: 11.5px;
-  }
-  .msg-assistant .msg-body blockquote {
-    border-left: 3px solid var(--purple);
-    margin: 6px 0;
-    padding: 4px 10px;
-    color: var(--dim);
-    font-style: italic;
-  }
-  .msg-assistant .msg-body strong { color: var(--text); font-weight: 600; }
-  .msg-assistant .msg-body em     { color: var(--yellow); font-style: italic; }
-  .msg-assistant .msg-body a      { color: var(--blue); text-decoration: underline; }
-  .msg-assistant .msg-body hr     { border: none; border-top: 1px solid var(--sep); margin: 8px 0; }
-  .msg-assistant .msg-body table  { border-collapse: collapse; font-size: 12px; margin: 6px 0; width: 100%; }
-  .msg-assistant .msg-body th     { background: var(--bg4); color: var(--text); padding: 5px 10px; border: 1px solid var(--sep); text-align: left; }
-  .msg-assistant .msg-body td     { padding: 4px 10px; border: 1px solid var(--sep); color: var(--text2); }
-  .msg-assistant .msg-body tr:nth-child(even) td { background: rgba(255,255,255,0.03); }
-  .msg-label { font-size: 11px; font-weight: 600; margin-bottom: 5px; letter-spacing: 0.3px; }
-  .msg-user .msg-label     { color: rgba(255,255,255,.7); }
-  .msg-assistant .msg-label { color: var(--purple); }
+/* -- malpedia reports -- */
+.rep-row{display:grid;grid-template-columns:90px 1fr auto;gap:10px;align-items:start;padding:10px 12px;border-bottom:1px solid rgba(61,56,96,.5);transition:background .12s;text-decoration:none;color:inherit;display:grid}
+.rep-row:last-child{border-bottom:none}
+.rep-row:hover{background:rgba(181,123,255,.06)}
+.rep-date{font-family:var(--mono);font-size:11px;color:var(--dim);white-space:nowrap;padding-top:2px}
+.rep-body{display:flex;flex-direction:column;gap:3px}
+.rep-title{font-size:13px;font-weight:500;line-height:1.35;color:var(--text)}
+.rep-meta{font-size:11px;color:var(--dim)}
+.rep-families{display:flex;gap:4px;flex-wrap:wrap;margin-top:3px}
 
-  .chat-input-row {
-    display: flex;
-    gap: 10px;
-    align-items: flex-end;
-  }
-  textarea#chat-input {
-    flex: 1;
-    background: var(--bg3);
-    border: 1px solid var(--sep);
-    color: var(--text);
-    font-family: var(--font);
-    font-size: 13px;
-    padding: 9px 12px;
-    resize: vertical;
-    min-height: 54px;
-    max-height: 140px;
-    border-radius: var(--radius-sm);
-    outline: none;
-    transition: border-color .15s;
-  }
-  textarea#chat-input:focus { border-color: var(--purple); }
+/* -- beacons -- */
+.beacon-msg{padding:10px 14px;background:var(--bg3);border-radius:var(--rs);margin-bottom:8px;border-left:3px solid var(--green);animation:slideRight .2s ease}
+.beacon-from{font-size:11px;color:var(--dim)}
+.beacon-text{font-size:13px;margin-top:2px;word-break:break-all}
 
-  .quick-btns { display: flex; gap: 6px; margin-top: 10px; flex-wrap: wrap; }
-  .quick-btn {
-    font-size: 11px;
-    padding: 4px 10px;
-    border-radius: 14px;
-    background: var(--bg3);
-    border: 1px solid var(--sep);
-    color: var(--dim);
-    cursor: pointer;
-    transition: background .15s, color .15s, border-color .15s;
-  }
-  .quick-btn:hover { background: rgba(191,90,242,.15); border-color: var(--purple); color: var(--purple); }
+/* -- chat -- */
+.chat-wrap{display:flex;flex-direction:column;height:calc(100vh - var(--hdr) - 48px);max-height:700px}
+.chat-msgs{flex:1;overflow-y:auto;padding:16px 0;display:flex;flex-direction:column;gap:10px}
+.chat-msgs::-webkit-scrollbar{width:4px}
+.chat-msgs::-webkit-scrollbar-thumb{background:var(--sep)}
+.msg{padding:10px 14px;border-radius:var(--r);max-width:82%;animation:fadeIn .15s ease;line-height:1.55}
+.msg-user{background:var(--purple);color:#fff;align-self:flex-end;border-radius:var(--r) var(--r) 3px var(--r)}
+.msg-ai{background:var(--bg3);align-self:flex-start;border-radius:var(--r) var(--r) var(--r) 3px}
+.msg-ai code{background:var(--bg4)}
+.msg-ai pre{margin:8px 0}
+.chat-input-row{display:flex;gap:8px;padding:14px 0 0;border-top:1px solid var(--sep);margin-top:12px}
+.chat-input{flex:1}
+.chat-provider{display:flex;gap:6px}
+.provider-btn{padding:4px 10px;border-radius:var(--rs);border:1px solid var(--sep);background:var(--bg3);color:var(--dim);font-size:11px;cursor:pointer;transition:all .15s}
+.provider-btn.active{border-color:var(--purple);color:var(--purple);background:rgba(181,123,255,.14)}
 
-  /* ── module tags ── */
-  .module-group { margin-bottom: 18px; }
-  .module-group-label { font-size: 11px; font-weight: 600; color: var(--blue); text-transform: uppercase; letter-spacing: 0.6px; margin-bottom: 8px; }
-  .module-tag {
-    display: inline-block;
-    background: var(--bg3);
-    border: 1px solid var(--sep);
-    color: var(--text2);
-    padding: 4px 10px;
-    margin: 3px;
-    font-size: 12px;
-    border-radius: 6px;
-    cursor: default;
-    transition: border-color .15s, color .15s;
-  }
-  .module-tag:hover { border-color: var(--purple); color: var(--purple); }
+/* -- modals -- */
+.modal-bg{position:fixed;inset:0;background:rgba(8,6,18,.82);z-index:200;display:flex;align-items:center;justify-content:center;padding:20px;opacity:0;pointer-events:none;transition:opacity .2s}
+.modal-bg.open{opacity:1;pointer-events:all}
+.modal{background:var(--bg2);border:1px solid var(--sep);border-radius:14px;width:100%;max-width:760px;max-height:85vh;display:flex;flex-direction:column;overflow:hidden;transform:scale(.96);transition:transform .2s}
+.modal-bg.open .modal{transform:scale(1)}
+.modal-head{display:flex;align-items:center;padding:16px 20px;border-bottom:1px solid var(--sep);gap:10px}
+.modal-title{font-size:15px;font-weight:600;flex:1}
+.modal-close{background:none;border:none;color:var(--dim);font-size:20px;cursor:pointer;line-height:1;padding:0 4px}
+.modal-close:hover{color:var(--text)}
+.modal-body{flex:1;overflow-y:auto;padding:20px}
+.modal-body::-webkit-scrollbar{width:4px}
+.modal-body::-webkit-scrollbar-thumb{background:var(--sep)}
+.modal-foot{padding:14px 20px;border-top:1px solid var(--sep);display:flex;gap:8px;justify-content:flex-end}
 
-  /* ── history ── */
-  .history-item {
-    display: flex;
-    gap: 10px;
-    align-items: center;
-    padding: 8px 0;
-    border-bottom: 1px solid var(--sep);
-    font-size: 13px;
-    flex-wrap: wrap;
-  }
-  .history-item:last-child { border-bottom: none; }
-  .history-id     { color: var(--yellow); font-family: var(--mono); font-size: 12px; width: 4.5em; flex-shrink: 0; }
-  .history-params { color: var(--dim); flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; min-width: 0; font-family: var(--mono); font-size: 11px; }
-  .history-time   { color: var(--dim); font-size: 11px; flex-shrink: 0; font-family: var(--mono); }
+/* -- toast -- */
+.toasts{position:fixed;bottom:20px;right:20px;z-index:300;display:flex;flex-direction:column;gap:8px;pointer-events:none}
+.toast{background:var(--bg3);border:1px solid var(--sep);border-radius:var(--rs);padding:10px 14px;font-size:13px;min-width:220px;animation:fadeIn .2s ease;pointer-events:none}
+.toast.ok{border-color:var(--green);background:rgba(86,217,138,.1)}
+.toast.err{border-color:var(--red);background:rgba(255,120,117,.1)}
+.toast.info{border-color:var(--blue);background:rgba(120,180,255,.1)}
 
-  /* ── misc ── */
-  .spinner { display: inline-block; width: 12px; height: 12px; border: 2px solid var(--sep); border-top-color: var(--purple); border-radius: 50%; animation: spin .6s linear infinite; vertical-align: middle; margin-right: 6px; }
-  .sep-line { height: 1px; background: var(--sep); margin: 14px 0; }
-  .dot-ok  { color: var(--green); }
-  .dot-err { color: var(--red); }
-  .dot-dim { color: var(--dim); }
-  .text-purple { color: var(--purple); }
-  .text-green  { color: var(--green); }
-  .text-dim    { color: var(--dim); }
-  .text-blue   { color: var(--blue); }
-  .text-cyan   { color: var(--cyan); }
-
-  /* ── provider bar ── */
-  .provider-bar {
-    display: flex;
-    align-items: center;
-    gap: 10px;
-    margin-bottom: 12px;
-    flex-wrap: wrap;
-  }
-  .provider-bar label { font-size: 12px; color: var(--dim); }
-
-  /* ── kb bar ── */
-  .kb-bar {
-    font-size: 12px;
-    color: var(--dim);
-    margin-bottom: 10px;
-    padding: 7px 12px;
-    background: var(--bg3);
-    border: 1px solid var(--sep);
-    border-radius: var(--radius-sm);
-    display: flex;
-    justify-content: space-between;
-    align-items: center;
-    flex-wrap: wrap;
-    gap: 6px;
-  }
-
-  /* ── config editor inputs ── */
-  #cfg-fields input:focus {
-    outline: none;
-    border-color: var(--blue);
-  }
-
-  /* ── page header ── */
-  .page-header {
-    display: flex;
-    align-items: center;
-    gap: 12px;
-    margin-bottom: 22px;
-  }
-  .page-header h2 {
-    font-size: 22px;
-    font-weight: 700;
-    color: var(--text);
-  }
-  .page-header .sub {
-    font-size: 13px;
-    color: var(--dim);
-  }
-
-  /* ── reindex panel ── */
-  .reindex-step {
-    display: flex;
-    align-items: center;
-    gap: 10px;
-    padding: 7px 0;
-    border-bottom: 1px solid var(--sep);
-    font-size: 13px;
-  }
-  .reindex-step:last-child { border-bottom: none; }
-  .rstep-icon { font-size: 15px; flex: none; width: 20px; }
-  .rstep-label { flex: 1; color: var(--text2); }
-  .rstep-detail { font-size: 11px; color: var(--dim); font-family: var(--mono); }
-  .rstep-running .rstep-icon::after { content: ''; }
-  .rstep-running .rstep-label { color: var(--yellow); }
-  .rstep-done    .rstep-label { color: var(--green); }
-  .rstep-error   .rstep-label { color: var(--red); }
-  .rstep-skip    .rstep-label { color: var(--dim); }
-
-  /* ── mitre ── */
-  .mitre-toolbar {
-    display: flex;
-    gap: 10px;
-    align-items: center;
-    margin-bottom: 18px;
-    flex-wrap: wrap;
-  }
-  .mitre-toolbar select { flex: 1; min-width: 200px; max-width: 360px; }
-  .mitre-tabs {
-    display: flex;
-    gap: 4px;
-    margin-bottom: 18px;
-    border-bottom: 1px solid var(--sep);
-    padding-bottom: 0;
-  }
-  .mitre-tab {
-    padding: 7px 16px;
-    font-size: 13px;
-    font-weight: 500;
-    color: var(--dim);
-    cursor: pointer;
-    border-bottom: 2px solid transparent;
-    transition: color .15s, border-color .15s;
-    user-select: none;
-    margin-bottom: -1px;
-  }
-  .mitre-tab:hover { color: var(--text); }
-  .mitre-tab.active { color: var(--purple); border-bottom-color: var(--purple); }
-  .mitre-grid {
-    display: grid;
-    grid-template-columns: repeat(auto-fill, minmax(340px, 1fr));
-    gap: 14px;
-  }
-  .tech-card {
-    background: var(--bg2);
-    border: 1px solid var(--sep);
-    border-radius: var(--radius);
-    overflow: hidden;
-    animation: fadeIn .25s ease;
-    transition: border-color .2s;
-  }
-  .tech-card:hover { border-color: var(--purple); }
-  .tech-card-impl { border-color: rgba(48,209,88,.3); }
-  .tech-card-impl:hover { border-color: var(--green); }
-  .copy-snip-btn {
-    position: absolute;
-    top: 6px; right: 8px;
-    background: var(--bg4);
-    border: 1px solid var(--sep);
-    color: var(--dim);
-    font-size: 13px;
-    padding: 2px 7px;
-    border-radius: 4px;
-    cursor: pointer;
-    z-index: 2;
-    transition: color .15s, background .15s;
-  }
-  .copy-snip-btn:hover { color: var(--text); background: var(--bg3); }
-  .tech-card-head {
-    padding: 12px 14px 10px;
-    border-bottom: 1px solid var(--sep);
-    display: flex;
-    align-items: flex-start;
-    gap: 10px;
-  }
-  .tech-id {
-    font-family: var(--mono);
-    font-size: 11px;
-    font-weight: 700;
-    background: rgba(191,90,242,.18);
-    color: var(--purple);
-    padding: 3px 8px;
-    border-radius: 5px;
-    white-space: nowrap;
-    flex-shrink: 0;
-  }
-  .tech-id.cat-injection  { background: rgba(10,132,255,.15);  color: var(--blue); }
-  .tech-id.cat-persistence{ background: rgba(48,209,88,.15);   color: var(--green); }
-  .tech-id.cat-c2         { background: rgba(255,159,10,.15);  color: var(--orange); }
-  .tech-id.cat-other      { background: var(--bg3);             color: var(--dim); }
-  .tech-name { font-size: 13px; font-weight: 600; color: var(--text); line-height: 1.3; }
-  .tech-tactics {
-    display: flex;
-    gap: 4px;
-    flex-wrap: wrap;
-    padding: 6px 14px 8px;
-    border-bottom: 1px solid var(--sep);
-  }
-  .tactic-pill {
-    font-size: 10px;
-    padding: 2px 7px;
-    border-radius: 10px;
-    background: var(--bg3);
-    color: var(--dim);
-    border: 1px solid var(--sep);
-  }
-  .tech-desc {
-    font-size: 12px;
-    color: var(--text2);
-    line-height: 1.5;
-    padding: 8px 14px;
-    border-bottom: 1px solid var(--sep);
-  }
-  .tech-snippet {
-    background: #282c34;
-    font-size: 11px;
-    line-height: 1.5;
-    max-height: 200px;
-    overflow-y: auto;
-    margin: 0;
-  }
-  .tech-snippet code { font-family: var(--mono) !important; }
-  .tech-footer {
-    padding: 8px 14px;
-    display: flex;
-    gap: 8px;
-    align-items: center;
-    flex-wrap: wrap;
-  }
-  .mitre-empty {
-    text-align: center;
-    padding: 48px 0;
-    color: var(--dim);
-    font-size: 14px;
-  }
-  .mitre-loading {
-    text-align: center;
-    padding: 36px 0;
-    color: var(--dim);
-  }
-
-  /* ── malpedia ── */
-  .malp-layout {
-    display: grid;
-    grid-template-columns: 280px 1fr;
-    gap: 16px;
-    align-items: start;
-  }
-  .malp-list-wrap {
-    background: var(--bg2);
-    border: 1px solid var(--sep);
-    border-radius: var(--radius);
-    overflow: hidden;
-  }
-  .malp-search {
-    display: flex;
-    gap: 0;
-    border-bottom: 1px solid var(--sep);
-  }
-  .malp-search input {
-    flex: 1;
-    background: var(--bg3);
-    border: none;
-    border-radius: 0;
-    padding: 9px 12px;
-    font-size: 13px;
-    color: var(--text);
-    outline: none;
-  }
-  .malp-list {
-    max-height: calc(100vh - 280px);
-    overflow-y: auto;
-  }
-  .malp-item {
-    padding: 8px 12px;
-    font-size: 12px;
-    font-family: var(--mono);
-    color: var(--text2);
-    cursor: pointer;
-    border-bottom: 1px solid var(--sep);
-    transition: background .12s, color .12s;
-    white-space: nowrap;
-    overflow: hidden;
-    text-overflow: ellipsis;
-  }
-  .malp-item:hover { background: rgba(255,255,255,.05); color: var(--text); }
-  .malp-item.active { background: rgba(191,90,242,.15); color: var(--purple); }
-  .malp-count {
-    font-size: 11px;
-    color: var(--dim);
-    padding: 6px 12px;
-    border-bottom: 1px solid var(--sep);
-    display: flex;
-    justify-content: space-between;
-    align-items: center;
-  }
-  .malp-detail {
-    background: var(--bg2);
-    border: 1px solid var(--sep);
-    border-radius: var(--radius);
-    padding: 20px;
-    min-height: 200px;
-  }
-  .malp-detail-title {
-    font-size: 18px;
-    font-weight: 700;
-    color: var(--text);
-    margin-bottom: 6px;
-  }
-  .malp-detail-id {
-    font-family: var(--mono);
-    font-size: 11px;
-    color: var(--dim);
-    margin-bottom: 14px;
-  }
-  .malp-meta-row {
-    display: flex;
-    gap: 8px;
-    flex-wrap: wrap;
-    margin-bottom: 12px;
-  }
-  .malp-chip {
-    font-size: 11px;
-    padding: 3px 10px;
-    border-radius: 14px;
-    border: 1px solid var(--sep);
-    background: var(--bg3);
-    color: var(--text2);
-  }
-  .malp-chip.country { border-color: var(--blue); color: var(--blue); background: rgba(10,132,255,.1); }
-  .malp-chip.family  { border-color: var(--purple); color: var(--purple); background: rgba(191,90,242,.1); cursor:pointer; }
-  .malp-chip.family:hover { background: rgba(191,90,242,.22); }
-  .malp-chip.actor   { border-color: var(--orange); color: var(--orange); background: rgba(255,159,10,.1); cursor:pointer; }
-  .malp-desc {
-    font-size: 13px;
-    color: var(--text2);
-    line-height: 1.6;
-    margin-bottom: 14px;
-    max-height: 120px;
-    overflow-y: auto;
-  }
-  .malp-section-label {
-    font-size: 11px;
-    font-weight: 600;
-    color: var(--dim);
-    text-transform: uppercase;
-    letter-spacing: .5px;
-    margin: 14px 0 6px;
-  }
-  .malp-url-list {
-    list-style: none;
-    margin: 0; padding: 0;
-  }
-  .malp-url-list li {
-    margin-bottom: 4px;
-    overflow: hidden;
-    text-overflow: ellipsis;
-    white-space: nowrap;
-  }
-  .malp-url-list a {
-    font-size: 12px;
-    color: var(--blue);
-    text-decoration: none;
-  }
-  .malp-url-list a:hover { text-decoration: underline; }
-  .malp-rpost-list {
-    list-style: none;
-    margin: 0; padding: 0;
-  }
-  .malp-rpost {
-    padding: 6px 0;
-    border-bottom: 1px solid var(--sep);
-  }
-  .malp-rpost:last-child { border-bottom: none; }
-  .malp-rpost a {
-    color: var(--cyan);
-    text-decoration: none;
-    font-size: 13px;
-    display: block;
-  }
-  .malp-rpost a:hover { text-decoration: underline; }
-  .malp-rpost-meta {
-    display: block;
-    font-size: 11px;
-    color: var(--dim);
-    margin-top: 2px;
-  }
-  .malp-placeholder {
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    min-height: 200px;
-    color: var(--dim);
-    font-size: 14px;
-  }
-  @media (max-width: 900px) { .malp-layout { grid-template-columns: 1fr; } }
-
-  /* ── responsive ── */
-  @media (max-width: 900px) {
-    .page-grid-2, .page-grid-3 { grid-template-columns: 1fr; }
-  }
-  @media (max-width: 640px) {
-    :root { --sidebar-w: 64px; }
-    .nav-item span { display: none; }
-    .sidebar-brand .brand-name, .sidebar-brand .brand-sub, .sidebar-brand .cat,
-    .sidebar-section-label, .nav-badge, .sidebar-footer { display: none; }
-    .nav-item { justify-content: center; padding: 12px; }
-    .nav-item.active::before { display: none; }
-    .page { padding: 16px; }
-  }
+/* -- misc -- */
+.sep-line{height:1px;background:var(--sep);margin:16px 0}
+.empty{text-align:center;color:var(--dim);padding:40px 20px;font-size:13px}
+.empty .empty-icon{font-size:36px;margin-bottom:10px}
+.spinner{display:inline-block;width:16px;height:16px;border:2px solid rgba(234,230,255,.14);border-top-color:var(--purple);border-radius:50%;animation:spin .7s linear infinite}
+.loading-full{display:flex;align-items:center;justify-content:center;gap:10px;padding:40px;color:var(--dim);font-size:13px}
+.mono{font-family:var(--mono)}
+.truncate{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.flex{display:flex}
+.flex-col{display:flex;flex-direction:column}
+.gap-8{gap:8px}
+.gap-12{gap:12px}
+.items-center{align-items:center}
+.justify-between{justify-content:space-between}
+.mb-16{margin-bottom:16px}
+.mb-8{margin-bottom:8px}
+.text-dim{color:var(--dim)}
+.text-green{color:var(--green)}
+.text-red{color:var(--red)}
+.text-purple{color:var(--purple)}
+.text-blue{color:var(--blue)}
+.text-yellow{color:var(--yellow)}
+.text-sm{font-size:12px}
+.text-xs{font-size:11px}
+.fw-600{font-weight:600}
 </style>
 </head>
 <body>
-
 <div class="layout">
 
-  <!-- ═══════ SIDEBAR ═══════ -->
-  <nav class="sidebar">
-    <div class="sidebar-brand">
-      <pre class="cat">[=^..^=]
-PEEKABOO</pre>
-      <div class="brand-name">Peekaboo</div>
-      <div class="brand-sub">v0.2.0 · DEFCON Demo Labs</div>
+<!-- ═══════════════════ SIDEBAR ═══════════════════ -->
+<nav class="sidebar">
+  <div class="sb-brand">
+    <div class="cat">=[=^..^=]=</div>
+    <div class="name">peekaboo</div>
+    <div class="sub">simulation laboratory</div>
+  </div>
+
+  <div class="sb-section">
+    <div class="sb-label">Build</div>
+    <div class="nav-item active" onclick="showPanel('builder')" id="nav-builder">
+      <span class="nav-icon">🔨</span> Builder
     </div>
-
-    <div class="sidebar-section">
-      <div class="sidebar-section-label">Build</div>
-      <div class="nav-item active" onclick="showPage('builder',this)" data-page="builder">
-        <span class="nav-icon">🔨</span><span>Builder</span>
-      </div>
-      <div class="nav-item" onclick="showPage('history',this)" data-page="history">
-        <span class="nav-icon">🕐</span><span>History</span>
-      </div>
+    <div class="nav-item" onclick="showPanel('library')" id="nav-library">
+      <span class="nav-icon">📦</span> Module Library
+      <span class="nav-badge new" id="lib-count">…</span>
     </div>
-
-    <div class="sidebar-section">
-      <div class="sidebar-section-label">C2</div>
-      <div class="nav-item" onclick="showPage('beacons',this)" data-page="beacons">
-        <span class="nav-icon">📡</span><span>Beacons</span>
-        <span class="nav-badge live" id="nav-beacon-count"></span>
-      </div>
-      <div class="nav-item" onclick="showPage('delivery',this)" data-page="delivery">
-        <span class="nav-icon">🚀</span><span>Delivery</span>
-        <span class="nav-badge badge-yellow">DEMO</span>
-      </div>
+    <div class="nav-item" onclick="showPanel('samples')" id="nav-samples">
+      <span class="nav-icon">💾</span> Samples
     </div>
+  </div>
 
-    <div class="sidebar-section">
-      <div class="sidebar-section-label">Tools</div>
-      <div class="nav-item" onclick="showPage('chat',this)" data-page="chat">
-        <span class="nav-icon">🤖</span><span>AI Chat</span>
-      </div>
-      <div class="nav-item" onclick="showPage('modules',this)" data-page="modules">
-        <span class="nav-icon">📦</span><span>Modules</span>
-      </div>
-      <div class="nav-item" onclick="showPage('mitre',this)" data-page="mitre">
-        <span class="nav-icon">🎯</span><span>ATT&amp;CK</span>
-      </div>
-      <div class="nav-item" onclick="showPage('malpedia',this)" data-page="malpedia">
-        <span class="nav-icon">🕵️</span><span>Malpedia</span>
-      </div>
+  <div class="sb-section">
+    <div class="sb-label">Intelligence</div>
+    <div class="nav-item" onclick="showPanel('apt')" id="nav-apt">
+      <span class="nav-icon">🎯</span> APT Campaign
     </div>
-
-    <div class="sidebar-footer">
-      <span class="status-dot"></span> online &nbsp;·&nbsp; @cocomelonc
+    <div class="nav-item" onclick="showPanel('coverage')" id="nav-coverage">
+      <span class="nav-icon">🗺️</span> Coverage Map
     </div>
-  </nav>
-
-  <!-- ═══════ MAIN ═══════ -->
-  <div class="main">
-
-    <!-- topbar -->
-    <div class="topbar">
-      <span class="topbar-title" id="topbar-title">Builder</span>
-      <span class="topbar-sub" id="topbar-sub">Threat Simulation Framework · DEFCON Demo Labs Singapore 2026</span>
-      <span id="clock"></span>
+    <div class="nav-item" onclick="showPanel('mitre')" id="nav-mitre">
+      <span class="nav-icon">🛡️</span> MITRE ATT&amp;CK
     </div>
-
-    <!-- ══ PAGE: Builder ══ -->
-    <div class="page active" id="page-builder">
-      <div class="page-header">
-        <h2>Builder</h2>
-        <span class="badge badge-purple">payload forge</span>
-      </div>
-
-      <div class="page-grid-2">
-        <div class="card">
-          <div class="card-title"><span class="icon">⚙️</span> Build Parameters</div>
-
-          <div class="form-row">
-            <label>payload</label>
-            <select id="f-payload">{% for p in modules.payloads %}<option value="{{ p }}"{% if p=='meow' %} selected{% endif %}>{{ p }}</option>{% endfor %}</select>
-          </div>
-          <div class="form-row">
-            <label>encryption</label>
-            <select id="f-encryption">{% for c in modules.crypto %}<option value="{{ c }}"{% if c=='speck' %} selected{% endif %}>{{ c }}</option>{% endfor %}</select>
-          </div>
-          <div class="form-row">
-            <label>type</label>
-            <select id="f-malware"><option value="injection">injection</option><option value="stealer">stealer</option></select>
-          </div>
-          <div class="form-row">
-            <label>injection</label>
-            <select id="f-injection">{% for i in modules.injection %}<option value="{{ i }}"{% if i=='virtualallocex' %} selected{% endif %}>{{ i }}</option>{% endfor %}</select>
-          </div>
-          <div class="form-row">
-            <label>stealer</label>
-            <select id="f-stealer">{% for s in modules.stealer %}<option value="{{ s }}"{% if s=='telegram' %} selected{% endif %}>{{ s }}</option>{% endfor %}</select>
-          </div>
-          <div class="form-row">
-            <label>persistence</label>
-            <select id="f-persistence">{% for r in modules.persistence %}<option value="{{ r }}"{% if r=='none' %} selected{% endif %}>{{ r }}</option>{% endfor %}</select>
-          </div>
-
-          <div class="btn-row">
-            <button class="btn btn-primary" id="btn-build" onclick="startBuild()">▶ Build</button>
-            <button class="btn btn-red" onclick="clearOutput()">✕ Clear</button>
-          </div>
-
-          <div style="margin-top:12px;font-size:12px;color:var(--dim);">
-            status: <span class="build-status idle" id="build-status-badge">idle</span>
-            <span id="current-build-id" style="color:var(--dim);margin-left:8px;font-family:var(--mono);font-size:11px;"></span>
-          </div>
-        </div>
-
-        <div class="card">
-          <div class="card-title"><span class="icon">🖥️</span> Build Output</div>
-          <div id="build-output">// build output will appear here...</div>
-          <div id="build-downloads" style="display:none;margin-top:14px;border-top:1px solid var(--sep);padding-top:12px;">
-            <div style="font-size:11px;font-weight:600;color:var(--dim);text-transform:uppercase;letter-spacing:0.6px;margin-bottom:8px;">⬇ Downloads</div>
-            <div id="download-btns" style="display:flex;gap:8px;flex-wrap:wrap;"></div>
-          </div>
-        </div>
-      </div>
+    <div class="nav-item" onclick="showPanel('malpedia')" id="nav-malpedia">
+      <span class="nav-icon">🗄️</span> Malpedia
     </div>
+  </div>
 
-    <!-- ══ PAGE: History ══ -->
-    <div class="page" id="page-history">
-      <div class="page-header">
-        <h2>Build History</h2>
-        <span class="badge badge-dim">last 100</span>
-      </div>
-      <div class="card">
-        <div class="card-title" style="justify-content:space-between;">
-          <span><span class="icon">🕐</span> Recent Builds</span>
-          <button class="btn btn-blue" style="font-size:12px;padding:5px 12px;" onclick="loadHistory()">↻ Refresh</button>
-        </div>
-        <div id="history-list"><span class="text-dim">loading...</span></div>
-      </div>
+  <div class="sb-section">
+    <div class="sb-label">Operations</div>
+    <div class="nav-item" onclick="showPanel('c2')" id="nav-c2">
+      <span class="nav-icon">📡</span> C2 Panel
     </div>
-
-    <!-- ══ PAGE: Beacons ══ -->
-    <div class="page" id="page-beacons">
-      <div class="page-header">
-        <h2>Beacon Feed</h2>
-        <span class="badge badge-green" id="beacon-count-badge"></span>
-      </div>
-      <div class="card">
-        <div class="card-title" style="justify-content:space-between;">
-          <span><span class="icon">📡</span> Telegram Beacons</span>
-          <div style="display:flex;gap:8px;align-items:center;">
-            <span style="font-size:11px;color:var(--dim);" id="beacon-auto"></span>
-            <button class="btn btn-green" style="font-size:12px;padding:5px 12px;" onclick="loadBeacons()">↻ Refresh</button>
-          </div>
-        </div>
-        <div id="beacon-list"><span class="beacon-empty">[ waiting for beacons... ]</span></div>
-      </div>
+    <div class="nav-item" onclick="showPanel('beacons')" id="nav-beacons">
+      <span class="nav-icon">📶</span> Beacons
+      <span class="nav-badge live" id="beacon-badge">0</span>
     </div>
+  </div>
 
-    <!-- ══ PAGE: Delivery ══ -->
-    <div class="page" id="page-delivery">
-      <div class="page-header">
-        <h2>C2 Binary Delivery</h2>
-        <span class="badge badge-yellow">DEMO</span>
-        <span style="font-size:12px;color:var(--dim);margin-left:4px;">T1102 · T1105</span>
-      </div>
-
-      <div id="binary-info">🐱 checking for built binary...</div>
-
-      <div class="page-grid-2">
-
-        <div class="c2-card" id="card-telegram">
-          <div class="c2-name">📨 Telegram</div>
-          <div class="c2-status" id="status-telegram"><span class="dot-dim">●</span> checking...</div>
-          <button class="btn btn-primary" style="width:100%;" onclick="c2Drop('telegram')">Drop via Bot</button>
-          <div class="c2-technique">sendDocument API · bot exfil</div>
-        </div>
-
-        <div class="c2-card" id="card-github">
-          <div class="c2-name">🐙 GitHub</div>
-          <div class="c2-status" id="status-github"><span class="dot-dim">●</span> checking...</div>
-          <button class="btn btn-blue" style="width:100%;" onclick="c2Drop('github')">Drop to Gist</button>
-          <div class="c2-technique">Gist dead-drop · T1102.001</div>
-        </div>
-
-        <div class="c2-card" id="card-virustotal">
-          <div class="c2-name">📊 VirusTotal</div>
-          <div class="c2-status" id="status-virustotal"><span class="dot-dim">●</span> checking...</div>
-          <button class="btn btn-orange" style="width:100%;" onclick="c2Drop('virustotal')">Upload + Scan</button>
-          <div class="c2-technique">VT abuse · detection score</div>
-        </div>
-
-        <div class="c2-card" id="card-bitbucket">
-          <div class="c2-name">🔧 Bitbucket</div>
-          <div class="c2-status" id="status-bitbucket"><span class="dot-dim">●</span> checking...</div>
-          <button class="btn btn-cyan" style="width:100%;" onclick="c2Drop('bitbucket')">Push to Repo</button>
-          <div class="c2-technique">repo staging · T1102</div>
-        </div>
-
-      </div>
-
-      <div id="c2-result-area"></div>
+  <div class="sb-section">
+    <div class="sb-label">AI</div>
+    <div class="nav-item" onclick="showPanel('chat')" id="nav-chat">
+      <span class="nav-icon">🤖</span> AI Assistant
     </div>
+  </div>
 
-    <!-- ══ PAGE: AI Chat ══ -->
-    <div class="page" id="page-chat">
-      <div class="page-header">
-        <h2>Peekaboo AI</h2>
-        <span class="badge {% if kb and kb.status == 'ready' %}badge-green{% else %}badge-dim{% endif %}" id="kb-badge">
-          {% if kb and kb.status == 'ready' %}KB: {{ kb.posts }} topics{% else %}KB: not indexed{% endif %}
-        </span>
-      </div>
-
-      <div class="kb-bar">
-        <span id="kb-info-text">
-          {% if kb and kb.status == 'ready' %}
-            📦 {{ kb.posts }} posts indexed &nbsp;|&nbsp; ~/hacking/cocomelonc.github.io
-          {% else %}
-            ⚠️ knowledge base not indexed yet - click to index
-          {% endif %}
-        </span>
-        <button class="btn btn-blue" style="font-size:12px;padding:5px 12px;" onclick="triggerScrape()">↻ Index Codebase</button>
-      </div>
-
-      <div class="provider-bar">
-        <label>Model:</label>
-        <select id="provider-select" onchange="onProviderChange()" style="flex:none;width:auto;font-size:13px;padding:6px 10px;">
-          <option value="claude">🐱 Claude (Opus 4.6)</option>
-          <option value="gemini">✉️ Gemini</option>
-          <option value="ollama">🦙 Local AI (Ollama)</option>
-        </select>
-        <span id="provider-status" style="font-size:12px;color:var(--dim);"></span>
-      </div>
-
-      <div class="card" style="padding:0;overflow:hidden;">
-        <div class="chat-messages" id="chat-messages">
-          <div class="msg msg-assistant">
-            <div class="msg-label">🐱 PEEKABOO AI</div>
-            <div>Hello! I'm your C2 &amp; malware development assistant, powered by Claude and grounded in @cocomelonc's research.<br><br>Ask me anything about:<br>• C2 channels (GitHub, Telegram, Bitbucket, VirusTotal)<br>• Binary delivery &amp; payload dropping<br>• Process injection techniques<br>• AV/EDR bypass &amp; evasion<br>• Detection &amp; MITRE ATT&amp;CK mapping</div>
-          </div>
-        </div>
-        <div style="padding:14px 14px 10px;">
-          <div class="chat-input-row">
-            <textarea id="chat-input" placeholder="Ask about C2 channels, injection, evasion, persistence... (Local AI has full RAG over 200 posts)" onkeydown="chatKeydown(event)"></textarea>
-            <button class="btn btn-primary" id="btn-chat-send" onclick="sendChat()" style="padding:12px 18px;height:54px;">▶ Send</button>
-          </div>
-          <div class="quick-btns">
-            <span class="quick-btn" onclick="quickAsk('How does GitHub C2 dead-drop work?')">GitHub C2</span>
-            <span class="quick-btn" onclick="quickAsk('Explain Telegram bot C2 and binary delivery')">Telegram drop</span>
-            <span class="quick-btn" onclick="quickAsk('How does VirtualAllocEx injection work?')">Injection</span>
-            <span class="quick-btn" onclick="quickAsk('What MITRE ATT&CK techniques does this framework cover?')">ATT&CK map</span>
-            <span class="quick-btn" style="color:var(--red);border-color:var(--red);" onclick="clearChat()">✕ Clear</span>
-          </div>
-        </div>
-      </div>
+  <div class="sb-section">
+    <div class="nav-item" onclick="showPanel('settings')" id="nav-settings">
+      <span class="nav-icon">⚙️</span> Settings
     </div>
+  </div>
 
-    <!-- ══ PAGE: MITRE ATT&CK / R&D ══ -->
-    <div class="page" id="page-mitre">
-      <div class="page-header">
-        <h2>R&amp;D / Threat Emulation</h2>
-        <span class="badge badge-purple">MITRE ATT&amp;CK</span>
-        <span style="font-size:12px;color:var(--dim);margin-left:4px;" id="mitre-avail-note"></span>
-        <button class="btn btn-blue" style="margin-left:auto;font-size:12px;padding:5px 14px;" onclick="openReindex()">🔄 Reindex</button>
+  <div class="sb-footer" style="flex-direction:column;align-items:flex-start;gap:5px">
+    <div style="display:flex;align-items:center;gap:6px">
+      <span class="dot"></span>
+      <span id="sb-status">ready</span>
+    </div>
+    <div style="font-size:9px;color:var(--purple);opacity:.7;letter-spacing:.4px;font-family:var(--mono)">peekaboo · DEFCON Demo Labs 2026</div>
+  </div>
+</nav>
+
+<!-- ═══════════════════ MAIN ═══════════════════ -->
+<div class="main">
+<div class="topbar">
+  <div>
+    <div class="topbar-title" id="topbar-title">Builder</div>
+    <div class="topbar-sub" id="topbar-sub">compile malware for EDR benchmarking</div>
+  </div>
+  <div class="topbar-actions">
+    <button class="btn btn-ghost btn-sm" onclick="refreshCurrent()">↻ Refresh</button>
+  </div>
+</div>
+<div class="content">
+
+<!-- ════════ BUILDER ════════ -->
+<div id="panel-builder" class="panel active">
+  <div class="grid-2" style="margin-bottom:18px;align-items:start">
+    <div class="card">
+      <div class="card-header">
+        <span style="font-size:20px">🔨</span>
+        <div><div class="card-title">Combo Builder</div><div class="card-sub">encrypt + inject + persist + exfil</div></div>
       </div>
-
-      <!-- reindex panel -->
-      <div id="reindex-panel" style="display:none;background:var(--bg2);border:1px solid var(--sep);border-radius:var(--radius);padding:16px;margin-bottom:18px;">
-        <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:12px;">
-          <strong style="font-size:13px;">Full Reindex</strong>
-          <button class="btn" style="font-size:11px;padding:3px 10px;" onclick="closeReindex()">✕</button>
+      <div class="form-row">
+        <div><label>Payload</label>
+          <select id="b-payload">{% for p in modules.payloads %}<option value="{{p}}">{{p}}</option>{% endfor %}</select>
         </div>
-        <div id="reindex-steps">
-          <div class="reindex-step" id="rstep-library">  <span class="rstep-icon">⬜</span> <span class="rstep-label">Blog posts library cache</span>  <span class="rstep-detail"></span></div>
-          <div class="reindex-step" id="rstep-embeddings"><span class="rstep-icon">⬜</span> <span class="rstep-label">Semantic embeddings (Ollama)</span><span class="rstep-detail"></span></div>
-          <div class="reindex-step" id="rstep-kb">        <span class="rstep-icon">⬜</span> <span class="rstep-label">Knowledge base (AI chatbot)</span> <span class="rstep-detail"></span></div>
-        </div>
-        <div style="margin-top:12px;display:flex;gap:10px;align-items:center;">
-          <button class="btn btn-primary" id="btn-reindex-run" style="font-size:12px;padding:6px 18px;" onclick="runReindex()">▶ Run</button>
-          <span id="reindex-status" style="font-size:12px;color:var(--dim);"></span>
-        </div>
-      </div>
-
-      <!-- stats bar -->
-      <div style="display:flex;gap:12px;margin-bottom:18px;flex-wrap:wrap;" id="mitre-stats"></div>
-
-      <!-- view selector -->
-      <div class="mitre-tabs" style="margin-bottom:0;border-bottom:none;gap:0;">
-        <div class="mitre-tab active" onclick="setMitreView(this,'library')" style="padding:8px 20px;font-size:13px;">📚 Technique Library</div>
-        <div class="mitre-tab"        onclick="setMitreView(this,'apt')"     style="padding:8px 20px;font-size:13px;">🎯 APT Group Mapping</div>
-      </div>
-
-      <!-- ── VIEW: Library ── -->
-      <div id="mitre-view-library" class="card" style="border-top-left-radius:0;margin-top:0;">
-        <div style="display:flex;align-items:center;gap:10px;margin-bottom:16px;flex-wrap:wrap;">
-          <span style="font-size:12px;color:var(--dim);font-weight:600;text-transform:uppercase;letter-spacing:.5px;">Filter:</span>
-          <div class="mitre-tabs" style="border:none;margin:0;padding:0;gap:4px;flex-wrap:wrap;" id="lib-cat-tabs">
-            <div class="mitre-tab active" onclick="setLibCat(this,'all')">All</div>
-          </div>
-        </div>
-        <div id="lib-content">
-          <div class="mitre-loading"><span class="spinner"></span> loading technique library...</div>
+        <div><label>Encryption</label>
+          <select id="b-enc">{% for c in modules.crypto %}<option value="{{c}}">{{c}}</option>{% endfor %}</select>
         </div>
       </div>
-
-      <!-- ── VIEW: APT ── -->
-      <div id="mitre-view-apt" class="card" style="border-top-left-radius:0;margin-top:0;display:none;">
-        <div class="mitre-toolbar" style="margin-bottom:14px;">
-          <select id="mitre-group-select" onchange="onMitreGroupChange()">
-            <option value="">- select APT group -</option>
+      <div class="form-row">
+        <div><label>Mode</label>
+          <select id="b-malware" onchange="toggleInjectionMode()">
+            <option value="injection">injection</option>
+            <option value="stealer">stealer</option>
           </select>
-          <button class="btn btn-blue" style="font-size:12px;padding:6px 14px;" onclick="loadMitreGroups()">↻ Groups</button>
-          <span id="mitre-group-count" style="font-size:12px;color:var(--dim);"></span>
         </div>
-        <div class="mitre-tabs" style="border-bottom:1px solid var(--sep);margin-bottom:16px;" id="apt-cat-tabs">
-          <div class="mitre-tab active" onclick="setAptCat(this,'all')">All</div>
-          <div class="mitre-tab" onclick="setAptCat(this,'injection')">Injection</div>
-          <div class="mitre-tab" onclick="setAptCat(this,'persistence')">Persistence</div>
-          <div class="mitre-tab" onclick="setAptCat(this,'c2')">C2</div>
-          <div class="mitre-tab" onclick="setAptCat(this,'other')">Other</div>
+        <div id="b-inj-wrap"><label>Injection</label>
+          <select id="b-injection">{% for i in modules.injection %}<option value="{{i}}">{{i}}</option>{% endfor %}</select>
         </div>
-        <div id="apt-content">
-          <div class="mitre-empty">Select an APT group above to map techniques</div>
+        <div id="b-stl-wrap" style="display:none"><label>Stealer API</label>
+          <select id="b-stealer">{% for s in modules.stealer %}<option value="{{s}}">{{s}}</option>{% endfor %}</select>
+        </div>
+      </div>
+      <div class="form-row">
+        <div><label>Persistence</label>
+          <select id="b-persistence">{% for r in modules.persistence %}<option value="{{r}}">{{r}}</option>{% endfor %}</select>
+        </div>
+      </div>
+      <button class="btn btn-primary" onclick="startBuild()" id="build-btn">
+        <span>⚡</span> Build Binary
+      </button>
+    </div>
+
+    <div class="card">
+      <div class="card-header">
+        <span style="font-size:20px">📋</span>
+        <div><div class="card-title">Build Output</div><div class="card-sub" id="build-status-label">idle</div></div>
+        <div id="build-status-dot" style="width:8px;height:8px;border-radius:50%;background:var(--dim);margin-left:auto"></div>
+      </div>
+      <div class="terminal" id="build-output" style="min-height:220px">waiting for build…</div>
+      <div id="build-files" style="margin-top:12px;display:none">
+        <div style="font-size:12px;color:var(--dim);margin-bottom:8px;text-transform:uppercase;letter-spacing:.5px">Generated Files</div>
+        <div id="build-files-list"></div>
+      </div>
+    </div>
+  </div>
+
+  <div class="card">
+    <div class="card-header">
+      <span style="font-size:18px">🕐</span>
+      <div class="card-title">Build History</div>
+    </div>
+    <table class="tbl">
+      <thead><tr>
+        <th>ID</th><th>Mode</th><th>Encryption</th><th>Injection</th><th>Persistence</th><th>Status</th><th>Time</th>
+      </tr></thead>
+      <tbody id="build-history-tbody"></tbody>
+    </table>
+  </div>
+</div>
+
+<!-- ════════ MODULE LIBRARY ════════ -->
+<div id="panel-library" class="panel">
+  <div class="grid-stats" id="lib-stats-row"></div>
+  <div class="filter-bar">
+    <div class="filter-search">
+      <input type="text" placeholder="🔍  search modules…" id="lib-search" oninput="filterLibrary()">
+    </div>
+    <div id="lib-cat-pills" style="display:flex;gap:6px;flex-wrap:wrap"></div>
+    <div style="display:flex;gap:6px;margin-left:auto">
+      <span class="filter-pill" id="plat-all" onclick="setPlatform('all')" style="border-color:var(--purple);color:var(--purple)">All</span>
+      <span class="filter-pill" id="plat-windows" onclick="setPlatform('windows')">🪟 Win</span>
+      <span class="filter-pill" id="plat-linux" onclick="setPlatform('linux')">🐧 Linux</span>
+      <span class="filter-pill" id="plat-macos" onclick="setPlatform('macos')">🍎 macOS</span>
+    </div>
+    <button class="btn btn-ghost btn-sm" onclick="rebuildRegistry()">↻ Rebuild Index</button>
+  </div>
+  <div id="lib-grid" class="grid-3"></div>
+  <div id="lib-loading" class="loading-full"><div class="spinner"></div> scanning modules…</div>
+  <div id="lib-empty" class="empty" style="display:none">
+    <div class="empty-icon">🔍</div>
+    <div>No modules match your filters</div>
+  </div>
+</div>
+
+<!-- ════════ SAMPLES ════════ -->
+<div id="panel-samples" class="panel">
+  <div id="samples-stats" class="grid-stats" style="margin-bottom:18px"></div>
+  <div class="card">
+    <div class="card-header">
+      <span style="font-size:18px">💾</span>
+      <div class="card-title">Compiled Samples</div>
+      <button class="btn btn-ghost btn-sm" style="margin-left:auto" onclick="loadSamples()">↻ Refresh</button>
+    </div>
+    <table class="tbl">
+      <thead><tr>
+        <th>Session</th><th>Actor / Source</th><th>Files</th><th>Size</th><th>Status</th><th>Created</th><th>Actions</th>
+      </tr></thead>
+      <tbody id="samples-tbody"></tbody>
+    </table>
+    <div id="samples-empty" class="empty" style="display:none">
+      <div class="empty-icon">📦</div>
+      <div>No samples compiled yet — use the Builder or run an APT Campaign</div>
+    </div>
+  </div>
+</div>
+
+<!-- ════════ APT CAMPAIGN ════════ -->
+<div id="panel-apt" class="panel">
+  <div class="apt-layout">
+    <div>
+      <div class="apt-panel" style="margin-bottom:14px">
+        <div class="fw-600 mb-8" style="font-size:14px">🎯 APT Actor / Family</div>
+        <div style="position:relative">
+          <input type="text" id="apt-actor" placeholder="e.g. ta505, apt28, win.emotet…" oninput="aptActorSearch(this.value)">
+          <div id="apt-suggestions" style="position:absolute;top:calc(100% + 4px);left:0;right:0;background:var(--bg3);border:1px solid var(--sep);border-radius:var(--rs);z-index:20;display:none;max-height:180px;overflow-y:auto"></div>
+        </div>
+        <button class="btn btn-primary" style="width:100%;margin-top:10px;justify-content:center" onclick="runPipeline()" id="apt-run-btn">
+          <span>▶</span> Run Pipeline
+        </button>
+      </div>
+      <div class="apt-panel">
+        <div class="fw-600 mb-8" style="font-size:13px;color:var(--dim);text-transform:uppercase;letter-spacing:.5px">Pipeline Steps</div>
+        <div class="pipe-steps" id="pipe-steps">
+          <div class="pipe-step" id="ps-1"><div class="pipe-step-icon" id="psi-1">🗄️</div><div class="pipe-step-body"><div class="pipe-step-name">Malpedia Fetch</div><div class="pipe-step-msg" id="psm-1">Fetch actor / family data</div></div></div>
+          <div class="pipe-step" id="ps-2"><div class="pipe-step-icon" id="psi-2">⬇️</div><div class="pipe-step-body"><div class="pipe-step-name">Report Download</div><div class="pipe-step-msg" id="psm-2">Download threat reports</div></div></div>
+          <div class="pipe-step" id="ps-3"><div class="pipe-step-icon" id="psi-3">🔍</div><div class="pipe-step-body"><div class="pipe-step-name">TTP Extraction</div><div class="pipe-step-msg" id="psm-3">Extract ATT&amp;CK techniques</div></div></div>
+          <div class="pipe-step" id="ps-4"><div class="pipe-step-icon" id="psi-4">🧩</div><div class="pipe-step-body"><div class="pipe-step-name">Module Selection</div><div class="pipe-step-msg" id="psm-4">Map TTPs to peekaboo modules</div></div></div>
+          <div class="pipe-step" id="ps-5"><div class="pipe-step-icon" id="psi-5">⚡</div><div class="pipe-step-body"><div class="pipe-step-name">Binary Compile</div><div class="pipe-step-msg" id="psm-5">Compile custom binary</div></div></div>
         </div>
       </div>
     </div>
 
-    <!-- ══ PAGE: Malpedia ══ -->
-    <div class="page" id="page-malpedia">
-      <div class="page-header">
-        <h2>Malpedia</h2>
-        <span class="badge badge-blue">threat intelligence</span>
-        <span style="font-size:12px;color:var(--dim);margin-left:4px;" id="malp-status-note"></span>
-      </div>
-
-      <div class="mitre-tabs" style="margin-bottom:16px;">
-        <div class="mitre-tab active" onclick="setMalpView(this,'actors')">🎭 Actors <span id="malp-actor-count" style="font-size:10px;opacity:.6;"></span></div>
-        <div class="mitre-tab"        onclick="setMalpView(this,'families')">🦠 Families <span id="malp-family-count" style="font-size:10px;opacity:.6;"></span></div>
-      </div>
-
-      <!-- actors view -->
-      <div id="malp-view-actors" class="malp-layout">
-        <div class="malp-list-wrap">
-          <div class="malp-search">
-            <input id="malp-actor-search" type="text" placeholder="search actors..." oninput="filterMalpList('actor')">
-          </div>
-          <div class="malp-count">
-            <span id="malp-actor-list-count"></span>
-            <button class="btn" style="font-size:10px;padding:2px 8px;" onclick="refreshMalpData('actors')">↻</button>
-          </div>
-          <div class="malp-list" id="malp-actor-list"></div>
-        </div>
-        <div class="malp-detail" id="malp-actor-detail">
-          <div class="malp-placeholder">← select an actor</div>
-        </div>
-      </div>
-
-      <!-- families view -->
-      <div id="malp-view-families" class="malp-layout" style="display:none;">
-        <div class="malp-list-wrap">
-          <div class="malp-search">
-            <input id="malp-family-search" type="text" placeholder="search families..." oninput="filterMalpList('family')">
-          </div>
-          <div class="malp-count">
-            <span id="malp-family-list-count"></span>
-            <button class="btn" style="font-size:10px;padding:2px 8px;" onclick="refreshMalpData('families')">↻</button>
-          </div>
-          <div class="malp-list" id="malp-family-list"></div>
-        </div>
-        <div class="malp-detail" id="malp-family-detail">
-          <div class="malp-placeholder">← select a family</div>
+    <div>
+      <div class="apt-panel" id="apt-results" style="min-height:420px">
+        <div class="empty" style="padding:60px 20px">
+          <div class="empty-icon">🎯</div>
+          <div>Select an APT actor and run the pipeline to extract TTPs and auto-compile a sample</div>
         </div>
       </div>
     </div>
+  </div>
 
-    <!-- ══ PAGE: Modules ══ -->
-    <div class="page" id="page-modules">
-      <div class="page-header">
-        <h2>Modules</h2>
-        <span class="badge badge-blue" id="module-count-badge"></span>
+  <div style="margin-top:18px">
+    <div class="card">
+      <div class="card-header">
+        <span style="font-size:16px">🕐</span>
+        <div class="card-title">Past Sessions</div>
+        <button class="btn btn-ghost btn-sm" style="margin-left:auto" onclick="loadPipelineSessions()">↻ Refresh</button>
       </div>
+      <table class="tbl">
+        <thead><tr><th>Session</th><th>Actor</th><th>TTPs</th><th>Status</th><th>Started</th></tr></thead>
+        <tbody id="sessions-tbody"></tbody>
+      </table>
+    </div>
+  </div>
+</div>
 
-      <div class="page-grid-2">
-        <div class="card">
-          <div class="card-title"><span class="icon">📦</span> Available Modules</div>
-          {% for group, items in modules.items() %}
-          <div class="module-group">
-            <div class="module-group-label">{{ group }} ({{ items|length }})</div>
-            {% for item in items %}<span class="module-tag">{{ item }}</span>
-            {% else %}<span class="text-dim" style="font-size:12px;">none</span>
-            {% endfor %}
-          </div>
-          {% endfor %}
-        </div>
-
-        <div class="card">
-          <div class="card-title"><span class="icon">🔑</span> Configs</div>
-          <div id="cfg-btn-list">
-          {% for cfg in ["telegram_config","github_config","bitbucket_config","virustotal_config","azure_config","angelcam_config","ollama_config","anthropic_config","gemini_config","malpedia_config"] %}
-          <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px;gap:8px;">
-            <span style="font-size:13px;color:var(--text2);">{{ cfg.replace('_config','') }}</span>
-            <button class="btn btn-blue" style="padding:4px 12px;font-size:12px;" onclick="openCfgEditor('{{ cfg }}')">edit</button>
-          </div>
-          {% endfor %}
-          </div>
-          <div id="cfg-editor" style="display:none;margin-top:12px;">
-            <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:10px;">
-              <strong id="cfg-editor-title" style="font-size:13px;color:var(--cyan);"></strong>
-              <button class="btn" style="padding:3px 10px;font-size:11px;" onclick="closeCfgEditor()">✕ close</button>
-            </div>
-            <div id="cfg-fields"></div>
-            <div style="margin-top:12px;display:flex;gap:8px;">
-              <button class="btn btn-primary" style="font-size:12px;padding:6px 16px;" onclick="saveCfg()">💾 Save</button>
-              <span id="cfg-save-status" style="font-size:12px;color:var(--dim);align-self:center;"></span>
-            </div>
-          </div>
-        </div>
+<!-- ════════ COVERAGE MAP ════════ -->
+<div id="panel-coverage" class="panel">
+  <div class="grid-stats mb-16" id="cov-stats"></div>
+  <div class="card">
+    <div class="card-header">
+      <span style="font-size:18px">🗺️</span>
+      <div class="card-title">ATT&amp;CK Coverage Map</div>
+      <div style="display:flex;gap:10px;margin-left:auto;align-items:center;font-size:12px">
+        <span style="display:inline-flex;align-items:center;gap:5px"><span style="width:12px;height:12px;background:var(--green);border-radius:2px;display:inline-block"></span>peekaboo template</span>
+        <span style="display:inline-flex;align-items:center;gap:5px"><span style="width:12px;height:12px;background:var(--purple);border-radius:2px;display:inline-block"></span>both</span>
+        <span style="display:inline-flex;align-items:center;gap:5px"><span style="width:12px;height:12px;background:rgba(255,214,10,.5);border-radius:2px;display:inline-block"></span>library only</span>
+        <span style="display:inline-flex;align-items:center;gap:5px"><span style="width:12px;height:12px;background:var(--bg3);border-radius:2px;display:inline-block"></span>uncovered</span>
       </div>
     </div>
+    <div id="cov-loading" class="loading-full"><div class="spinner"></div> loading coverage data…</div>
+    <div id="cov-content"></div>
+  </div>
+</div>
 
-  </div><!-- /.main -->
-</div><!-- /.layout -->
+<!-- ════════ MITRE ATT&CK ════════ -->
+<div id="panel-mitre" class="panel">
+  <div class="grid-2" style="margin-bottom:18px;align-items:start">
+    <div class="card">
+      <div class="card-header"><div class="card-title">ATT&amp;CK Groups</div>
+        <button class="btn btn-ghost btn-sm" style="margin-left:auto" onclick="loadMitreGroups()">Load</button>
+      </div>
+      <input type="text" id="mitre-group-search" placeholder="🔍 search groups…" style="margin-bottom:10px" oninput="filterMitreGroups()">
+      <div id="mitre-groups-list" style="max-height:400px;overflow-y:auto" class="flex flex-col gap-8"></div>
+    </div>
+    <div class="card" style="display:flex;flex-direction:column;max-height:520px">
+      <div class="card-header" style="flex-shrink:0">
+        <div class="card-title" id="mitre-group-title">Select a group</div>
+        <span id="mitre-tech-count" class="badge badge-dim" style="margin-left:auto;display:none"></span>
+      </div>
+      <div id="mitre-techniques-list" style="overflow-y:auto;flex:1;padding-right:4px"></div>
+    </div>
+  </div>
+  <div class="card">
+    <div class="card-header">
+      <div class="card-title">peekaboo Technique Library</div>
+      <div style="margin-left:auto;display:flex;gap:8px">
+        <select id="lib-cat-filter" onchange="loadLibCategory()" style="font-size:12px;padding:5px 8px">
+          <option value="all">All categories</option>
+          <option value="injection">Injection</option>
+          <option value="evasion">Evasion</option>
+          <option value="persistence">Persistence</option>
+          <option value="cryptography">Cryptography</option>
+          <option value="tricks">Tricks</option>
+          <option value="c2">C2</option>
+        </select>
+        <button class="btn btn-ghost btn-sm" onclick="rebuildLibCache()">↻ Rebuild</button>
+      </div>
+    </div>
+    <div id="lib-entries" style="display:flex;flex-direction:column;gap:10px"></div>
+  </div>
+</div>
+
+<!-- ════════ MALPEDIA ════════ -->
+<div id="panel-malpedia" class="panel">
+  <div class="grid-2" style="margin-bottom:18px;align-items:start">
+    <div class="card">
+      <div class="card-header">
+        <div class="card-title">Malpedia Search</div>
+        <div id="malpedia-status-dot" style="width:8px;height:8px;border-radius:50%;background:var(--dim);margin-left:auto"></div>
+      </div>
+      <div style="display:flex;gap:8px;margin-bottom:10px">
+        <input type="text" id="malp-search" placeholder="actor or family name…" style="flex:1" onkeydown="if(event.key==='Enter')searchMalpedia()">
+        <button class="btn btn-primary btn-sm" onclick="searchMalpedia()">Search</button>
+      </div>
+      <div style="display:flex;gap:6px;margin-bottom:14px">
+        <span class="filter-pill active" id="malp-t-all" onclick="setMalpType('all')">All</span>
+        <span class="filter-pill" id="malp-t-actor" onclick="setMalpType('actor')">Actors</span>
+        <span class="filter-pill" id="malp-t-family" onclick="setMalpType('family')">Families</span>
+      </div>
+      <div id="malp-results" class="flex flex-col gap-8"></div>
+    </div>
+    <div class="card" id="malp-detail-card">
+      <div class="empty"><div class="empty-icon">🗄️</div><div>Select an actor or family</div></div>
+    </div>
+  </div>
+
+  <!-- Recent Reports -->
+  <div class="card">
+    <div class="card-header">
+      <span style="font-size:18px">📰</span>
+      <div class="card-title">Latest Threat Reports</div>
+      <div style="margin-left:auto;display:flex;align-items:center;gap:10px">
+        <input type="text" id="malp-rep-search" placeholder="filter…" style="width:160px;padding:4px 8px;font-size:12px" oninput="filterMalpReports()">
+        <button class="btn btn-ghost btn-sm" onclick="loadMalpReports()">↻ Refresh</button>
+        <a href="https://malpedia.caad.fkie.fraunhofer.de/library" target="_blank" class="btn btn-ghost btn-sm">Open Library ↗</a>
+      </div>
+    </div>
+    <div id="malp-rep-loading" class="loading-full" style="display:none"><div class="spinner"></div> fetching reports…</div>
+    <div id="malp-rep-list"></div>
+  </div>
+</div>
+
+<!-- ════════ C2 PANEL ════════ -->
+<div id="panel-c2" class="panel">
+  <div class="card" style="margin-bottom:18px">
+    <div class="card-header">
+      <span style="font-size:18px">📡</span>
+      <div><div class="card-title">C2 Channel Status</div><div class="card-sub">connectivity check for configured channels</div></div>
+      <button class="btn btn-ghost btn-sm" style="margin-left:auto" onclick="checkC2Status()">Check All</button>
+    </div>
+    <div id="c2-status-row" class="grid-4"></div>
+  </div>
+
+  <div class="card" style="margin-bottom:18px">
+    <div class="card-header">
+      <span style="font-size:18px">🎯</span>
+      <div><div class="card-title">Binary Delivery</div><div class="card-sub" id="c2-binary-info">no binary loaded</div></div>
+      <button class="btn btn-ghost btn-sm" style="margin-left:auto" onclick="checkBinaryInfo()">Refresh</button>
+    </div>
+    <div class="grid-4">
+      <button class="btn btn-ghost" onclick="deliver('telegram')"><span>📨</span> Telegram</button>
+      <button class="btn btn-ghost" onclick="deliver('github')"><span>🐙</span> GitHub Gist</button>
+      <button class="btn btn-ghost" onclick="deliver('bitbucket')"><span>🪣</span> Bitbucket</button>
+      <button class="btn btn-ghost" onclick="deliver('virustotal')"><span>🦠</span> VirusTotal</button>
+    </div>
+    <div id="deliver-output" class="terminal" style="margin-top:14px;min-height:80px;display:none"></div>
+  </div>
+</div>
+
+<!-- ════════ BEACONS ════════ -->
+<div id="panel-beacons" class="panel">
+  <div class="card">
+    <div class="card-header">
+      <span style="font-size:18px">📶</span>
+      <div class="card-title">Live Beacon Messages</div>
+      <button class="btn btn-ghost btn-sm" style="margin-left:auto" onclick="loadBeacons()">↻ Refresh</button>
+      <button class="btn btn-ghost btn-sm" onclick="toggleAutoRefresh()" id="auto-refresh-btn">Auto: OFF</button>
+    </div>
+    <div id="beacons-list" class="flex flex-col gap-8"></div>
+    <div id="beacons-empty" class="empty" style="display:none">
+      <div class="empty-icon">📶</div>
+      <div>No beacon messages — configure Telegram and run the payload</div>
+    </div>
+  </div>
+</div>
+
+<!-- ════════ AI ASSISTANT ════════ -->
+<div id="panel-chat" class="panel">
+  <div class="grid-2" style="margin-bottom:14px;align-items:start">
+    <div class="card card-sm">
+      <div style="font-size:12px;color:var(--dim);margin-bottom:6px">Knowledge Base</div>
+      <div id="kb-info" style="font-size:12px"></div>
+    </div>
+    <div class="card card-sm">
+      <div style="font-size:12px;color:var(--dim);margin-bottom:6px">Providers</div>
+      <div id="providers-info" style="font-size:12px;display:flex;gap:6px;flex-wrap:wrap"></div>
+    </div>
+  </div>
+  <div class="card" style="padding:0">
+    <div class="chat-wrap" style="padding:0 16px 16px">
+      <div class="chat-msgs" id="chat-msgs">
+        <div class="msg msg-ai">Hi! I'm your malware research assistant. Ask me about techniques, TTPs, or the codebase.</div>
+      </div>
+      <div class="chat-input-row">
+        <div class="chat-provider">
+          <button class="provider-btn active" id="prov-claude" onclick="setProvider('claude')">Claude</button>
+          <button class="provider-btn" id="prov-gemini" onclick="setProvider('gemini')">Gemini</button>
+        </div>
+        <input class="chat-input" type="text" id="chat-input" placeholder="Ask about TTPs, techniques, code…" onkeydown="if(event.key==='Enter')sendChat()">
+        <button class="btn btn-primary btn-sm" onclick="sendChat()" id="chat-send-btn">Send</button>
+        <button class="btn btn-ghost btn-sm" onclick="scrapeKB()">Index KB</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- ════════ SETTINGS ════════ -->
+<div id="panel-settings" class="panel">
+  <div class="grid-2" id="settings-grid"></div>
+</div>
+
+</div><!-- content -->
+</div><!-- main -->
+</div><!-- layout -->
+
+<!-- ═══════ MODULE DETAIL MODAL ═══════ -->
+<div class="modal-bg" id="mod-modal">
+  <div class="modal" style="max-width:860px">
+    <div class="modal-head">
+      <div class="modal-title" id="mm-title">Module</div>
+      <button class="modal-close" onclick="closeModal('mod-modal')">✕</button>
+    </div>
+    <div class="modal-body">
+      <div id="mm-meta" style="display:flex;flex-wrap:wrap;gap:8px;margin-bottom:14px"></div>
+      <div id="mm-source-tabs" style="display:flex;gap:6px;margin-bottom:8px"></div>
+      <pre id="mm-source"><code class="language-c" id="mm-code"></code></pre>
+    </div>
+    <div class="modal-foot">
+      <a id="mm-blog-link" href="#" target="_blank" class="btn btn-ghost btn-sm">📖 Blog Post</a>
+      <button class="btn btn-primary btn-sm" id="mm-compile-btn" onclick="compileModal()">⚡ Compile Standalone</button>
+    </div>
+  </div>
+</div>
+
+<!-- ═══════ COMPILE RESULT MODAL ═══════ -->
+<div class="modal-bg" id="compile-modal">
+  <div class="modal" style="max-width:620px">
+    <div class="modal-head">
+      <div class="modal-title">Compile Result</div>
+      <button class="modal-close" onclick="closeModal('compile-modal')">✕</button>
+    </div>
+    <div class="modal-body">
+      <div id="cm-status" style="margin-bottom:12px"></div>
+      <div class="terminal" id="cm-log"></div>
+      <div id="cm-download" style="margin-top:14px;display:none"></div>
+    </div>
+  </div>
+</div>
+
+<!-- ═══════ TOASTS ═══════ -->
+<div class="toasts" id="toasts"></div>
 
 <script>
-'use strict';
+// -----------------------------------------------------------------
+// Global state
+// -----------------------------------------------------------------
+let currentPanel   = 'builder';
+let libModules     = [];
+let libCatFilter   = 'all';
+let libPlatFilter  = 'all';
+let libSearchQ     = '';
+let chatProvider   = 'claude';
+let chatHistory    = [];
+let currentBuildId = null;
+let buildPoll      = null;
+let autoRefresh    = null;
+let modalModId     = null;
+let malpType       = 'all';
+let mitreGroups    = [];
 
-// ── page navigation ────────────────────────────────────────────────────────────
-var _pageTitles = {
-  builder:  'Builder',
-  history:  'Build History',
-  beacons:  'Beacon Feed',
-  delivery: 'C2 Binary Delivery',
-  chat:     'AI Chat',
-  modules:  'Modules',
-  mitre:    'MITRE ATT\u0026CK',
-  malpedia: 'Malpedia',
+const PANEL_META = {
+  builder:  ['Builder',          'compile malware for EDR benchmarking'],
+  library:  ['Module Library',   'browse 190+ techniques from meow & blog'],
+  samples:  ['Samples',          'compiled binaries organized by session'],
+  apt:      ['APT Campaign',     'Malpedia → TTPs → auto-compile pipeline'],
+  coverage: ['Coverage Map',     'ATT&CK technique coverage heatmap'],
+  mitre:    ['MITRE ATT&CK',     'groups, techniques, peekaboo library'],
+  malpedia: ['Malpedia',         'threat actors & malware families'],
+  c2:       ['C2 Panel',         'binary delivery over covert channels'],
+  beacons:  ['Beacons',          'live messages from deployed payloads'],
+  chat:     ['AI Assistant',     'Claude / Gemini malware research chatbot'],
+  settings: ['Settings',         'configure API keys and tokens'],
 };
 
-function showPage(name, navEl) {
-  document.querySelectorAll('.page').forEach(function(p){ p.classList.remove('active'); });
-  document.querySelectorAll('.nav-item').forEach(function(n){ n.classList.remove('active'); });
-  var pg = document.getElementById('page-' + name);
-  if (pg) pg.classList.add('active');
-  if (navEl) navEl.classList.add('active');
-  document.getElementById('topbar-title').textContent = _pageTitles[name] || name;
-  // on-navigate actions
-  if (name === 'history')  loadHistory();
-  if (name === 'beacons')  loadBeacons();
-  if (name === 'delivery') { loadBinaryInfo(); loadC2Status(); }
-  if (name === 'mitre')    initMitre();
-  if (name === 'malpedia') initMalpedia();
+// -----------------------------------------------------------------
+// Panel routing
+// -----------------------------------------------------------------
+function showPanel(id) {
+  document.querySelectorAll('.panel').forEach(p => p.classList.remove('active'));
+  document.querySelectorAll('.nav-item').forEach(n => n.classList.remove('active'));
+  document.getElementById('panel-' + id).classList.add('active');
+  document.getElementById('nav-' + id)?.classList.add('active');
+  const [title, sub] = PANEL_META[id] || [id, ''];
+  document.getElementById('topbar-title').textContent = title;
+  document.getElementById('topbar-sub').textContent = sub;
+  currentPanel = id;
+
+  if (id === 'library' && libModules.length === 0) loadLibrary();
+  if (id === 'samples')   loadSamples();
+  if (id === 'apt')       loadPipelineSessions();
+  if (id === 'coverage')  loadCoverage();
+  if (id === 'beacons')   loadBeacons();
+  if (id === 'malpedia')  { if (!malpReports.length) loadMalpReports(); }
+  if (id === 'mitre')     loadLibCategory();
+  if (id === 'settings')  loadSettings();
+  if (id === 'chat')      loadChatStatus();
+  if (id === 'c2')        { checkC2Status(); checkBinaryInfo(); }
 }
 
-// ── utils ──────────────────────────────────────────────────────────────────────
-function escapeHtml(s) {
-  return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
-}
-function colorize(txt) {
-  txt = escapeHtml(txt);
-  txt = txt.replace(/\033\[[0-9;]*m/g,'');
-  txt = txt.replace(/(successfully\s+\w+)/gi,'<span class="ok">$1</span>');
-  txt = txt.replace(/(error[:\s][^\n]*)/gi,'<span class="err">$1</span>');
-  txt = txt.replace(/(warning[:\s][^\n]*)/gi,'<span class="wrn">$1</span>');
-  txt = txt.replace(/(compiling:[^\n]*)/gi,'<span class="inf">$1</span>');
-  return txt;
-}
+function refreshCurrent() { showPanel(currentPanel); }
 
-// ── builder ────────────────────────────────────────────────────────────────────
-var _pollInterval = null;
-var _currentBuildId = null;
-
-function startBuild() {
-  var params = {
-    payload:     document.getElementById('f-payload').value,
-    encryption:  document.getElementById('f-encryption').value,
-    malware:     document.getElementById('f-malware').value,
-    injection:   document.getElementById('f-injection').value,
-    stealer:     document.getElementById('f-stealer').value,
-    persistence: document.getElementById('f-persistence').value,
-  };
-  document.getElementById('btn-build').disabled = true;
-  setStatusBadge('queued');
-  setOutput('// queuing build...\n// params: ' + JSON.stringify(params, null, 2));
-
-  fetch('/api/build', {method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify(params)})
-  .then(function(r){ return r.json(); })
-  .then(function(d) {
-    _currentBuildId = d.build_id;
-    document.getElementById('current-build-id').textContent = '#' + _currentBuildId;
-    appendOutput('\n// build id: ' + _currentBuildId + '\n// compiling...');
-    _pollInterval = setInterval(function(){ pollBuild(_currentBuildId); }, 1200);
-  })
-  .catch(function(e) {
-    appendOutput('\n// error: ' + e);
-    setStatusBadge('error');
-    document.getElementById('btn-build').disabled = false;
-  });
+// -----------------------------------------------------------------
+// Toast
+// -----------------------------------------------------------------
+function toast(msg, type='info') {
+  const t = document.getElementById('toasts');
+  const d = document.createElement('div');
+  d.className = `toast ${type}`;
+  d.textContent = msg;
+  t.appendChild(d);
+  setTimeout(() => d.remove(), 3500);
 }
 
-function pollBuild(id) {
-  fetch('/api/build/' + id)
-  .then(function(r){ return r.json(); })
-  .then(function(d) {
-    setStatusBadge(d.status);
-    if (d.output) renderOutput(d.output);
-    if (d.status !== 'running' && d.status !== 'queued') {
-      clearInterval(_pollInterval); _pollInterval = null;
-      document.getElementById('btn-build').disabled = false;
-      if (d.status === 'success') {
-        setTimeout(loadBinaryInfo, 1000);
-        loadBuildDownloads(id);
-      }
-    }
-  });
-}
+// -----------------------------------------------------------------
+// Modal helpers
+// -----------------------------------------------------------------
+function openModal(id)  { document.getElementById(id).classList.add('open'); }
+function closeModal(id) { document.getElementById(id).classList.remove('open'); }
 
-function loadBuildDownloads(id) {
-  fetch('/api/build/' + id + '/files')
-  .then(function(r){ return r.json(); })
-  .then(function(d) {
-    var files = d.files || [];
-    if (!files.length) return;
-    var area = document.getElementById('build-downloads');
-    var btns = document.getElementById('download-btns');
-    btns.innerHTML = files.map(function(f) {
-      var cls = f.name === 'persistence.exe' ? 'btn btn-orange' : 'btn btn-green';
-      var label = f.name + ' (' + (f.size / 1024).toFixed(1) + ' KB)';
-      var tech  = f.technique ? ' <span style="font-size:10px;opacity:.7;">[' + escapeHtml(f.technique) + ']</span>' : '';
-      return '<a class="' + cls + '" href="/api/build/' + id + '/download/' + encodeURIComponent(f.name) + '" download="' + escapeHtml(f.name) + '">⬇ ' + escapeHtml(label) + tech + '</a>';
-    }).join('');
-    area.style.display = 'block';
-  })
-  .catch(function(){});
-}
-
-function setStatusBadge(status) {
-  var el = document.getElementById('build-status-badge');
-  el.className = 'build-status ' + status;
-  el.textContent = status;
-}
-function setOutput(txt)    { document.getElementById('build-output').innerHTML = colorize(txt); }
-function appendOutput(txt) { var el = document.getElementById('build-output'); el.innerHTML += colorize(txt); el.scrollTop = el.scrollHeight; }
-function renderOutput(raw) { var el = document.getElementById('build-output'); el.innerHTML = colorize(raw); el.scrollTop = el.scrollHeight; }
-function clearOutput()     {
-  document.getElementById('build-output').innerHTML = '// cleared.';
-  document.getElementById('current-build-id').textContent = '';
-  document.getElementById('build-downloads').style.display = 'none';
-  document.getElementById('download-btns').innerHTML = '';
-  setStatusBadge('idle');
-}
-
-// ── beacons ────────────────────────────────────────────────────────────────────
-function loadBeacons() {
-  document.getElementById('beacon-list').innerHTML = '<span class="beacon-empty"><span class="spinner"></span>fetching...</span>';
-  fetch('/api/beacons')
-  .then(function(r){ return r.json(); })
-  .then(function(d) {
-    var list = document.getElementById('beacon-list');
-    if (d.error) { list.innerHTML = '<span class="beacon-empty" style="color:var(--yellow)">[!] ' + escapeHtml(d.error) + '</span>'; return; }
-    var cnt = d.messages.length;
-    document.getElementById('beacon-count-badge').textContent = cnt + ' messages';
-    var navBadge = document.getElementById('nav-beacon-count');
-    if (navBadge) navBadge.textContent = cnt || '';
-    if (!cnt) { list.innerHTML = '<span class="beacon-empty">[ no messages yet ]</span>'; return; }
-    list.innerHTML = d.messages.map(function(m) {
-      return '<div class="beacon-item">'
-        + '<div class="b-head"><span class="b-from">🐱 ' + escapeHtml(String(m.from)) + '</span>'
-        + '<span class="b-time">' + new Date(m.date * 1000).toLocaleTimeString() + '</span></div>'
-        + '<div class="b-text">' + escapeHtml(m.text) + '</div></div>';
-    }).join('');
-  })
-  .catch(function(e) { document.getElementById('beacon-list').innerHTML = '<span class="beacon-empty" style="color:var(--red)">[!] ' + e + '</span>'; });
-}
-setInterval(loadBeacons, 30000);
-document.getElementById('beacon-auto').textContent = 'auto 30s';
-
-// ── history ────────────────────────────────────────────────────────────────────
-function loadHistory() {
-  fetch('/api/logs')
-  .then(function(r){ return r.json(); })
-  .then(function(logs) {
-    var el = document.getElementById('history-list');
-    if (!logs.length) { el.innerHTML = '<span class="text-dim">no builds yet.</span>'; return; }
-    el.innerHTML = logs.slice().reverse().map(function(b) {
-      var p = b.params || {};
-      var badge = '<span class="build-status ' + b.status + '">' + b.status + '</span>';
-      var t = b.created ? b.created.slice(0,19).replace('T',' ') : '';
-      var detail = [p.encryption, p.injection, p.stealer].filter(Boolean).join(' / ');
-      return '<div class="history-item"><span class="history-id">#' + b.id + '</span>' + badge
-        + '<span class="history-params">' + escapeHtml(detail) + '</span>'
-        + '<span class="history-time">' + t + '</span></div>';
-    }).join('');
-  });
-}
-
-// ── config ─────────────────────────────────────────────────────────────────────
-// ── config editor ──────────────────────────────────────────────────────────────
-var _cfgCurrent = null;
-
-var _cfgSchema = {
-  telegram_config:  [
-    {k:'bot_token',  label:'Bot Token',  type:'password', ph:'123456:AAF...'},
-    {k:'chat_id',    label:'Chat ID',    type:'text',     ph:'-100123456789'},
-  ],
-  github_config: [
-    {k:'github_token',           label:'Classic Token',  type:'password', ph:'ghp_...'},
-    {k:'repo_owner',             label:'Repo Owner',     type:'text',     ph:'cocomelonc'},
-    {k:'repo_name',              label:'Repo Name',      type:'text',     ph:'hack1'},
-    {k:'issue_number',           label:'Issue Number',   type:'text',     ph:'1'},
-  ],
-  bitbucket_config: [
-    {k:'bitbucket_token_base64', label:'Token Base64',   type:'password', ph:'base64(user:token)'},
-    {k:'bitbucket_workspace',    label:'Workspace',      type:'text',     ph:'myworkspace'},
-    {k:'bitbucket_repo',         label:'Repo Name',      type:'text',     ph:'myrepo'},
-  ],
-  virustotal_config: [
-    {k:'vt_api_key', label:'API Key',  type:'password', ph:'VT API key'},
-    {k:'file_id',    label:'File ID',  type:'text',     ph:'file hash or ID'},
-  ],
-  azure_config: [
-    {k:'azure_org',     label:'Organization', type:'text',     ph:'myorg'},
-    {k:'azure_project', label:'Project',      type:'text',     ph:'myproject'},
-    {k:'azure_pat',     label:'PAT Token',    type:'password', ph:'personal access token'},
-  ],
-  angelcam_config: [
-    {k:'api_key', label:'Personal Access Token', type:'password', ph:'angelcam PAT'},
-  ],
-  ollama_config: [
-    {k:'base_url',      label:'Base URL',       type:'text',   ph:'http://localhost:11434'},
-    {k:'model',         label:'Model',          type:'text',   ph:'qwen3:4b'},
-    {k:'temperature',   label:'Temperature',    type:'text',   ph:'0.6'},
-    {k:'context_posts', label:'Context Posts',  type:'text',   ph:'6'},
-  ],
-  anthropic_config: [
-    {k:'api_key', label:'API Key', type:'password', ph:'sk-ant-...'},
-  ],
-  gemini_config: [
-    {k:'api_key', label:'API Key', type:'password', ph:'AIza...'},
-    {k:'model',   label:'Model',   type:'text',     ph:'gemini-2.0-flash'},
-  ],
-  malpedia_config: [
-    {k:'api_token', label:'API Token', type:'password', ph:'(leave empty for anonymous)'},
-  ],
-};
-
-function openCfgEditor(name) {
-  _cfgCurrent = name;
-  document.getElementById('cfg-editor-title').textContent = name.replace('_config','') + ' config';
-  document.getElementById('cfg-save-status').textContent = '';
-  document.getElementById('cfg-editor').style.display = '';
-  document.getElementById('cfg-fields').innerHTML = '<span style="color:var(--dim);font-size:12px;">loading...</span>';
-  fetch('/api/config/' + name).then(function(r){ return r.json(); })
-  .then(function(data) {
-    var schema = _cfgSchema[name] || Object.keys(data).map(function(k){
-      return {k:k, label:k, type:'text', ph:''};
-    });
-    var html = '';
-    schema.forEach(function(f) {
-      var val = (data[f.k] !== undefined && data[f.k] !== null) ? String(data[f.k]) : '';
-      html += '<div style="margin-bottom:10px;">'
-        + '<label style="display:block;font-size:11px;color:var(--dim);margin-bottom:4px;">' + escapeHtml(f.label) + '</label>'
-        + '<input id="cfg-field-' + escapeHtml(f.k) + '" type="' + f.type + '" '
-        + 'data-key="' + escapeHtml(f.k) + '" '
-        + 'value="' + escapeHtml(val) + '" '
-        + 'placeholder="' + escapeHtml(f.ph) + '" '
-        + 'autocomplete="off" spellcheck="false" '
-        + 'style="width:100%;background:var(--bg);border:1px solid var(--sep);border-radius:var(--radius-sm);'
-        + 'color:var(--text);padding:6px 9px;font-size:12px;font-family:var(--mono);">'
-        + '</div>';
-    });
-    document.getElementById('cfg-fields').innerHTML = html;
-  });
-}
-
-function closeCfgEditor() {
-  _cfgCurrent = null;
-  document.getElementById('cfg-editor').style.display = 'none';
-  document.getElementById('cfg-fields').innerHTML = '';
-}
-
-function saveCfg() {
-  if (!_cfgCurrent) return;
-  var fields = document.getElementById('cfg-fields').querySelectorAll('[data-key]');
-  var payload = {};
-  fields.forEach(function(f){ payload[f.dataset.key] = f.value; });
-  var status = document.getElementById('cfg-save-status');
-  status.textContent = 'saving...';
-  fetch('/api/config/' + _cfgCurrent, {
-    method: 'POST',
-    headers: {'Content-Type':'application/json'},
-    body: JSON.stringify(payload),
-  }).then(function(r){ return r.json(); })
-  .then(function(d) {
-    if (d.ok) {
-      status.style.color = 'var(--green)';
-      status.textContent = '✓ saved';
-      setTimeout(function(){ status.textContent = ''; }, 2000);
-    } else {
-      status.style.color = 'var(--red)';
-      status.textContent = d.error || 'error';
-    }
-  }).catch(function(e){
-    status.style.color = 'var(--red)';
-    status.textContent = 'request failed';
-  });
-}
-
-// ── binary info + C2 status ───────────────────────────────────────────────────
-function loadBinaryInfo() {
-  fetch('/api/c2/binary_info').then(function(r){ return r.json(); })
-  .then(function(d) {
-    var el = document.getElementById('binary-info');
-    if (!d.found) {
-      el.innerHTML = '⚠️ no built binary found - run the builder first';
-      el.style.color = 'var(--yellow)';
-    } else {
-      var kb = (d.size / 1024).toFixed(1);
-      el.innerHTML = '🐙 <strong>' + escapeHtml(d.name) + '</strong>'
-        + ' &nbsp;|&nbsp; ' + kb + ' KB'
-        + ' &nbsp;|&nbsp; built: ' + escapeHtml(d.modified.slice(0,19).replace('T',' '))
-        + ' &nbsp;|&nbsp; <span class="text-green">ready to drop</span>';
-      el.style.color = 'var(--cyan)';
-    }
-  });
-}
-
-function loadC2Status() {
-  fetch('/api/c2/status').then(function(r){ return r.json(); })
-  .then(function(d) {
-    ['telegram','github','virustotal','bitbucket'].forEach(function(ch) {
-      var el = document.getElementById('status-' + ch);
-      if (!el) return;
-      var info = d[ch] || {};
-      if (info.ok) {
-        el.innerHTML = '<span class="dot-ok">●</span> online' + (info.name ? ' - ' + escapeHtml(info.name) : '');
-      } else {
-        el.innerHTML = '<span class="dot-err">●</span> ' + (info.error ? escapeHtml(info.error) : 'offline');
-      }
-    });
-  }).catch(function(){});
-}
-
-function c2Drop(channel) {
-  var resultArea = document.getElementById('c2-result-area');
-  resultArea.innerHTML = '<div class="c2-result"><span class="spinner"></span>dropping via ' + channel + '...</div>';
-  fetch('/api/c2/deliver/' + channel, {method:'POST', headers:{'Content-Type':'application/json'}, body:'{}'})
-  .then(function(r){ return r.json(); })
-  .then(function(d) {
-    if (d.ok) {
-      var lines = ['✓ DROP SUCCESSFUL', ''];
-      lines.push('channel:   ' + d.channel);
-      lines.push('file:      ' + d.file);
-      lines.push('size:      ' + (d.size/1024).toFixed(1) + ' KB');
-      if (d.url)         lines.push('url:       ' + d.url);
-      if (d.message_id)  lines.push('msg_id:    ' + d.message_id);
-      if (d.gist_id)     lines.push('gist_id:   ' + d.gist_id);
-      if (d.analysis_id) lines.push('analysis:  ' + d.analysis_id);
-      if (d.technique)   lines.push('technique: ' + d.technique);
-      if (d.note)        lines.push('note:      ' + d.note);
-      resultArea.innerHTML = '<div class="c2-result ok">' + escapeHtml(lines.join('\n')) + '</div>';
-      if (channel === 'telegram') setTimeout(loadBeacons, 3000);
-    } else {
-      resultArea.innerHTML = '<div class="c2-result err">✗ ERROR: ' + escapeHtml(d.error || 'unknown') + '</div>';
-    }
-  })
-  .catch(function(e) {
-    resultArea.innerHTML = '<div class="c2-result err">✗ ' + e + '</div>';
-  });
-}
-
-// ── AI chat ────────────────────────────────────────────────────────────────────
-var _chatHistory = [];
-var _chatStreaming = false;
-
-function scrollChat() { var el = document.getElementById('chat-messages'); el.scrollTop = el.scrollHeight; }
-
-function addMsg(role, text) {
-  var container = document.getElementById('chat-messages');
-  var div = document.createElement('div');
-  div.className = 'msg msg-' + role;
-  var label = role === 'assistant' ? '🐱 PEEKABOO AI' : '👤 YOU';
-  div.innerHTML = '<div class="msg-label">' + label + '</div><div class="msg-body">' + escapeHtml(text) + '</div>';
-  container.appendChild(div);
-  scrollChat();
-  return div.querySelector('.msg-body');
-}
-
-function sendChat() {
-  if (_chatStreaming) return;
-  var input = document.getElementById('chat-input');
-  var text = input.value.trim();
-  if (!text) return;
-  input.value = '';
-  _chatHistory.push({role:'user', content:text});
-  addMsg('user', text);
-  _chatStreaming = true;
-  document.getElementById('btn-chat-send').disabled = true;
-  document.getElementById('btn-chat-send').textContent = '...';
-
-  var container = document.getElementById('chat-messages');
-  var div = document.createElement('div');
-  div.className = 'msg msg-assistant';
-  div.innerHTML = '<div class="msg-label">🐱 PEEKABOO AI</div><div class="msg-body"><span class="spinner"></span></div>';
-  container.appendChild(div);
-  scrollChat();
-  var bodyEl = div.querySelector('.msg-body');
-  var accumulated = '';
-
-  var provider = document.getElementById('provider-select').value;
-  fetch('/api/chat', {
-    method: 'POST',
-    headers: {'Content-Type':'application/json'},
-    body: JSON.stringify({messages: _chatHistory, provider: provider})
-  })
-  .then(function(resp) {
-    var reader = resp.body.getReader();
-    var decoder = new TextDecoder();
-    bodyEl.innerHTML = '';
-    function read() {
-      reader.read().then(function(result) {
-        if (result.done) { finishChat(accumulated); return; }
-        var chunk = decoder.decode(result.value, {stream:true});
-        chunk.split('\n').forEach(function(line) {
-          if (!line.startsWith('data: ')) return;
-          var data = line.slice(6);
-          if (data === '[DONE]') { finishChat(accumulated); return; }
-          try {
-            var obj = JSON.parse(data);
-            if (obj.thinking === true) {
-              bodyEl.innerHTML = '<span class="spinner"></span> <span style="color:var(--dim);font-size:12px;">thinking...</span>';
-            } else if (obj.thinking === false) {
-              bodyEl.innerHTML = '';
-            } else if (obj.text) {
-              accumulated += obj.text;
-              bodyEl.innerHTML = marked.parse(accumulated);
-              scrollChat();
-            }
-            if (obj.error) { bodyEl.innerHTML = '<span style="color:var(--red)">[!] ' + escapeHtml(obj.error) + '</span>'; }
-          } catch(e) {}
-        });
-        read();
-      }).catch(function(e) { bodyEl.innerHTML = '<span style="color:var(--red)">[!] stream error: ' + escapeHtml(String(e)) + '</span>'; finishChat(accumulated); });
-    }
-    read();
-  })
-  .catch(function(e) { bodyEl.innerHTML = '<span style="color:var(--red)">[!] request failed: ' + escapeHtml(String(e)) + '</span>'; finishChat(''); });
-}
-
-function finishChat(text) {
-  if (text) _chatHistory.push({role:'assistant', content:text});
-  _chatStreaming = false;
-  document.getElementById('btn-chat-send').disabled = false;
-  document.getElementById('btn-chat-send').textContent = '▶ Send';
-  scrollChat();
-}
-function quickAsk(q) { document.getElementById('chat-input').value = q; sendChat(); }
-function chatKeydown(e) { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); sendChat(); } }
-function clearChat() {
-  _chatHistory = [];
-  document.getElementById('chat-messages').innerHTML =
-    '<div class="msg msg-assistant"><div class="msg-label">🐱 PEEKABOO AI</div>'
-    + '<div class="msg-body">Chat cleared. Ask me anything about C2 channels, injection, or detection!</div></div>';
-}
-
-function loadProviders() {
-  fetch('/api/chat/providers').then(function(r){ return r.json(); })
-  .then(function(d) {
-    var sel = document.getElementById('provider-select');
-    var status = document.getElementById('provider-status');
-    var lines = [];
-    ['claude','gemini','ollama'].forEach(function(p) {
-      var info = d[p] || {};
-      var dot = info.available ? '<span class="dot-ok">●</span>' : '<span class="dot-err">●</span>';
-      lines.push(dot + ' ' + p + (info.model ? ' (' + info.model + ')' : ''));
-      var opt = sel.querySelector('option[value="' + p + '"]');
-      if (opt) opt.disabled = !info.available;
-    });
-    status.innerHTML = lines.join(' &nbsp;|&nbsp; ');
-    var opts = sel.querySelectorAll('option:not(:disabled)');
-    if (opts.length) sel.value = opts[0].value;
-    onProviderChange();
-  });
-}
-
-function onProviderChange() {
-  var p = document.getElementById('provider-select').value;
-  var labels = {claude:'🐱 PEEKABOO AI (Claude)', gemini:'✉️ PEEKABOO AI (Gemini)', ollama:'🦙 PEEKABOO AI (Local)'};
-  document.querySelectorAll('.msg-assistant .msg-label').forEach(function(el) {
-    el.innerHTML = labels[p] || '🐱 PEEKABOO AI';
-  });
-}
-
-function triggerScrape() {
-  fetch('/api/chat/scrape', {method:'POST'}).then(function(r){ return r.json(); })
-  .then(function() {
-    document.getElementById('kb-info-text').textContent = '↻ indexing ~/hacking/cocomelonc.github.io/_posts ...';
-    setTimeout(refreshKbInfo, 30000);
-  });
-}
-
-function refreshKbInfo() {
-  fetch('/api/chat/kb_info').then(function(r){ return r.json(); })
-  .then(function(d) {
-    var badge = document.getElementById('kb-badge');
-    if (d.status === 'ready') {
-      badge.textContent = 'KB: ' + d.posts + ' posts';
-      badge.className = 'badge badge-green';
-      document.getElementById('kb-info-text').textContent = '📦 ' + d.posts + ' posts indexed | ~/hacking/cocomelonc.github.io';
-    }
-  });
-}
-
-// ── MITRE ATT&CK / R&D ────────────────────────────────────────────────────────
-var _mitreInitialized = false;
-var _libTechs  = [];
-var _libCat    = 'all';
-var _aptCat    = 'all';
-var _aptGroups = [];
-
-function initMitre() {
-  if (_mitreInitialized) return;
-  _mitreInitialized = true;
-  fetch('/api/mitre/available').then(function(r){ return r.json(); })
-  .then(function(d) {
-    var note = document.getElementById('mitre-avail-note');
-    if (d.available) {
-      note.innerHTML = '<span class="dot-ok">●</span> STIX loaded';
-    } else {
-      note.innerHTML = '<span class="dot-err">●</span> STIX not found';
-    }
-    loadLibrary();
-    loadMitreGroups();
-  }).catch(function(){ loadLibrary(); loadMitreGroups(); });
-}
-
-// ── view toggle ────────────────────────────────────────────────────────────────
-function setMitreView(el, view) {
-  document.querySelectorAll('#page-mitre > .mitre-tabs .mitre-tab').forEach(function(t){ t.classList.remove('active'); });
-  el.classList.add('active');
-  document.getElementById('mitre-view-library').style.display = view === 'library' ? '' : 'none';
-  document.getElementById('mitre-view-apt').style.display     = view === 'apt'     ? '' : 'none';
-}
-
-// ── technique library (full blog scan) ────────────────────────────────────────
-function loadLibrary() {
-  var el = document.getElementById('lib-content');
-  el.innerHTML = '<div class="mitre-loading"><span class="spinner"></span> loading 200 posts...</div>';
-
-  Promise.all([
-    fetch('/api/mitre/library').then(function(r){ return r.json(); }),
-    fetch('/api/mitre/library/categories').then(function(r){ return r.json(); })
-  ]).then(function(results) {
-    _libTechs = results[0];
-    var cats  = results[1];
-    renderStats(_libTechs, cats);
-    buildLibCatTabs(cats);
-    renderLibrary(_libTechs, _libCat);
-  }).catch(function(e) {
-    el.innerHTML = '<div class="mitre-empty" style="color:var(--red)">Error: ' + escapeHtml(String(e)) + '</div>';
-  });
-}
-
-function renderStats(entries, cats) {
-  var withSrc  = entries.filter(function(e){ return e.snippet; }).length;
-  var withAid  = entries.filter(function(e){ return e.attack_ids && e.attack_ids.length; }).length;
-  var withImpl = entries.filter(function(e){ return e.implemented; }).length;
-  var html = statChip(entries.length + ' posts',           'var(--purple)')
-           + statChip(withSrc  + ' with source',           'var(--cyan)')
-           + statChip(withAid  + ' ATT\u0026CK mapped',    'var(--blue)')
-           + statChip(withImpl + ' in peekaboo',           'var(--green)');
-  document.getElementById('mitre-stats').innerHTML = html;
-}
-
-function statChip(label, color) {
-  return '<span style="background:' + color + '22;border:1px solid ' + color + '55;color:' + color
-    + ';font-size:12px;font-weight:600;padding:4px 12px;border-radius:20px;">' + label + '</span>';
-}
-
-var _CAT_COLORS = {
-  injection:'var(--blue)', persistence:'var(--green)', evasion:'var(--yellow)',
-  cryptography:'var(--cyan)', c2:'var(--orange)', tricks:'var(--purple)',
-  macos:'var(--pink)', linux:'var(--green)', android:'var(--blue)',
-  privesc:'var(--red)', shellcoding:'var(--cyan)', hooking:'var(--yellow)',
-  syscalls:'var(--purple)', exploitation:'var(--red)', network:'var(--blue)',
-  analysis:'var(--dim)', other:'var(--dim)',
-};
-
-function buildLibCatTabs(cats) {
-  var container = document.getElementById('lib-cat-tabs');
-  var html = '<div class="mitre-tab active" onclick="setLibCat(this,\'all\')">All</div>';
-  cats.forEach(function(pair) {
-    var cat = pair[0], n = pair[1];
-    html += '<div class="mitre-tab" onclick="setLibCat(this,\'' + cat + '\')">'
-          + cat + ' <span style="opacity:.6;font-size:10px;">(' + n + ')</span></div>';
-  });
-  container.innerHTML = html;
-}
-
-function setLibCat(el, cat) {
-  document.querySelectorAll('#lib-cat-tabs .mitre-tab').forEach(function(t){ t.classList.remove('active'); });
-  el.classList.add('active');
-  _libCat = cat;
-  renderLibrary(_libTechs, cat);
-}
-
-function renderLibrary(entries, cat) {
-  var filtered = cat === 'all' ? entries : entries.filter(function(e){ return e.category === cat; });
-  var el = document.getElementById('lib-content');
-  if (!filtered.length) {
-    el.innerHTML = '<div class="mitre-empty">No posts in this category</div>';
-    return;
+// -----------------------------------------------------------------
+// Module Library
+// -----------------------------------------------------------------
+async function loadLibrary() {
+  document.getElementById('lib-loading').style.display = 'flex';
+  document.getElementById('lib-grid').innerHTML = '';
+  try {
+    const [stats, mods] = await Promise.all([
+      fetch('/api/library/stats').then(r => r.json()),
+      fetch('/api/library').then(r => r.json()),
+    ]);
+    libModules = mods;
+    renderLibStats(stats);
+    buildCatPills(stats);
+    renderLibGrid();
+    document.getElementById('lib-count').textContent = mods.length;
+  } catch(e) {
+    toast('Failed to load library: ' + e, 'err');
+  } finally {
+    document.getElementById('lib-loading').style.display = 'none';
   }
-  el.innerHTML = '<div class="mitre-grid">' + filtered.map(libCardHtml).join('') + '</div>';
 }
 
-function libCardHtml(e) {
-  var color    = _CAT_COLORS[e.category] || 'var(--dim)';
-  var aidBadges = (e.attack_ids || []).map(function(aid) {
-    return '<span style="font-family:var(--mono);font-size:10px;background:rgba(10,132,255,.15);color:var(--blue);border:1px solid rgba(10,132,255,.3);padding:2px 6px;border-radius:4px;">' + escapeHtml(aid) + '</span>';
-  }).join(' ');
-
-  var snippetHtml = '';
-  if (e.snippet) {
-    var uid  = 'snip-' + e.slug.replace(/[^a-z0-9]/g, '-');
-    var lang = (e.src_path && e.src_path.indexOf('.cpp') >= 0) ? 'cpp' : 'c';
-    var highlighted;
-    try { highlighted = hljs.highlight(e.snippet, {language: lang}).value; }
-    catch(err) { highlighted = escapeHtml(e.snippet); }
-    snippetHtml =
-      '<div style="position:relative;">'
-      + '<button class="copy-snip-btn" onclick="copySnippet(\'' + uid + '\')" title="copy">⎘</button>'
-      + '<pre class="tech-snippet" id="' + uid + '"><code class="language-' + lang + '">' + highlighted + '</code></pre>'
-      + '</div>';
-  }
-
-  var implBadge = e.implemented
-    ? '<span class="badge badge-green" style="font-size:10px;">✓ peekaboo</span>' : '';
-  var modBadge = e.module
-    ? '<span class="badge badge-dim" style="font-size:10px;font-family:var(--mono);">' + escapeHtml(e.module) + '</span>' : '';
-  var srcFile = e.src_path ? e.src_path.split('/').pop() : '';
-  var srcBadge = srcFile
-    ? '<span style="font-size:10px;color:var(--dim);font-family:var(--mono);">' + escapeHtml(srcFile) + '</span>' : '';
-
-  return '<div class="tech-card' + (e.implemented ? ' tech-card-impl' : '') + '">'
-    + '<div class="tech-card-head" style="flex-wrap:wrap;gap:6px;">'
-    + '<span style="font-family:var(--mono);font-size:10px;color:var(--dim);">' + escapeHtml(e.date) + '</span>'
-    + '<span class="tech-name" style="flex:1;">' + escapeHtml(e.title) + '</span>'
-    + '</div>'
-    + '<div class="tech-tactics" style="flex-wrap:wrap;gap:4px;">'
-    + '<span style="font-size:10px;background:' + color + '22;color:' + color + ';border:1px solid ' + color + '44;padding:2px 7px;border-radius:10px;">' + escapeHtml(e.category) + '</span>'
-    + aidBadges
-    + '</div>'
-    + snippetHtml
-    + '<div class="tech-footer">'
-    + '<a class="btn btn-blue" style="font-size:11px;padding:4px 10px;" href="' + escapeHtml(e.blog_url) + '" target="_blank">📖 blog</a>'
-    + srcBadge + modBadge + implBadge
-    + '</div>'
-    + '</div>';
+function renderLibStats(stats) {
+  const el = document.getElementById('lib-stats-row');
+  const topCats = (stats.categories || []).slice(0, 4);
+  const platW = stats.platforms?.windows || 0;
+  const platL = stats.platforms?.linux || 0;
+  const platM = stats.platforms?.macos || 0;
+  el.innerHTML = `
+    <div class="stat"><div class="stat-val text-purple">${stats.total || 0}</div><div class="stat-label">Total Modules</div></div>
+    <div class="stat"><div class="stat-val text-green">${stats.attack_ids || 0}</div><div class="stat-label">ATT&CK IDs</div></div>
+    <div class="stat"><div class="stat-val" style="color:#0A84FF">${platW}</div><div class="stat-label">Windows</div></div>
+    <div class="stat"><div class="stat-val" style="color:#5AC8F5">${platL}</div><div class="stat-label">Linux</div></div>
+    <div class="stat"><div class="stat-val" style="color:#8E8E93">${platM}</div><div class="stat-label">macOS</div></div>
+    <div class="stat"><div class="stat-val" style="color:#FF9F0A">${(stats.categories||[]).length}</div><div class="stat-label">Categories</div></div>
+  `;
 }
 
-// ── APT group mapping ──────────────────────────────────────────────────────────
-function loadMitreGroups() {
-  var sel = document.getElementById('mitre-group-select');
-  sel.innerHTML = '<option value="">loading groups...</option>';
-  fetch('/api/mitre/groups').then(function(r){ return r.json(); })
-  .then(function(groups) {
-    _aptGroups = groups;
-    sel.innerHTML = '<option value="">- select APT group (' + groups.length + ') -</option>';
-    groups.forEach(function(g) {
-      var opt = document.createElement('option');
-      opt.value = g.id;
-      var aliases = g.aliases && g.aliases.length ? ' · ' + g.aliases.slice(0,2).join(', ') : '';
-      opt.textContent = g.name + aliases;
-      sel.appendChild(opt);
-    });
-    document.getElementById('mitre-group-count').textContent = groups.length + ' groups';
-  }).catch(function() {
-    sel.innerHTML = '<option value="">error loading groups</option>';
-  });
-}
-
-function onMitreGroupChange() {
-  var stixId = document.getElementById('mitre-group-select').value;
-  if (!stixId) {
-    document.getElementById('apt-content').innerHTML =
-      '<div class="mitre-empty">Select an APT group above to map techniques</div>';
-    return;
-  }
-  loadAptTechniques(stixId, _aptCat);
-}
-
-function setAptCat(el, cat) {
-  document.querySelectorAll('#apt-cat-tabs .mitre-tab').forEach(function(t){ t.classList.remove('active'); });
-  el.classList.add('active');
-  _aptCat = cat;
-  var stixId = document.getElementById('mitre-group-select').value;
-  if (stixId) loadAptTechniques(stixId, cat);
-}
-
-function loadAptTechniques(stixId, cat) {
-  var el = document.getElementById('apt-content');
-  el.innerHTML = '<div class="mitre-loading"><span class="spinner"></span> loading techniques...</div>';
-  fetch('/api/mitre/group/' + encodeURIComponent(stixId) + '/techniques?category=' + cat)
-  .then(function(r){ return r.json(); })
-  .then(function(techs) { renderAptTechs(techs); })
-  .catch(function(e) {
-    el.innerHTML = '<div class="mitre-empty" style="color:var(--red)">Error: ' + escapeHtml(String(e)) + '</div>';
-  });
-}
-
-function renderAptTechs(techs) {
-  var el = document.getElementById('apt-content');
-  if (!techs.length) {
-    el.innerHTML = '<div class="mitre-empty">No techniques found for this group / category</div>';
-    return;
-  }
-  var withEx  = techs.filter(function(t){ return t.has_example; });
-  var without = techs.filter(function(t){ return !t.has_example; });
-  var html = '';
-  if (withEx.length) {
-    html += '<div style="font-size:11px;font-weight:600;color:var(--green);text-transform:uppercase;letter-spacing:.5px;margin-bottom:10px;">'
-          + '✓ peekaboo examples (' + withEx.length + ')</div>';
-    html += '<div class="mitre-grid" style="margin-bottom:20px;">' + withEx.map(techCardHtml).join('') + '</div>';
-  }
-  if (without.length) {
-    html += '<div style="font-size:11px;font-weight:600;color:var(--dim);text-transform:uppercase;letter-spacing:.5px;margin-bottom:10px;">'
-          + '○ other techniques (' + without.length + ')</div>';
-    html += '<div class="mitre-grid">' + without.map(techCardHtml).join('') + '</div>';
-  }
-  el.innerHTML = html;
-}
-
-// ── shared card renderer ───────────────────────────────────────────────────────
-function techCardHtml(t) {
-  var catCls  = 'cat-' + (t.category || 'other');
-  var tactics = (t.tactics || []).map(function(tac){
-    return '<span class="tactic-pill">' + escapeHtml(tac) + '</span>';
+function buildCatPills(stats) {
+  const el = document.getElementById('lib-cat-pills');
+  const allPill = `<span class="filter-pill active" id="cat-all" onclick="setCat('all')">All</span>`;
+  const pills = (stats.categories || []).map(([cat, count]) => {
+    const col = (stats.colors||{})[cat] || '#636366';
+    return `<span class="filter-pill" id="cat-${cat}" onclick="setCat('${cat}')" style="--cat-col:${col}">${cat} <span style="opacity:.6;font-size:10px">${count}</span></span>`;
   }).join('');
-
-  var snippetHtml = '';
-  if (t.snippet) {
-    var lang = (t.module && t.module.indexOf('cpp') >= 0) ? 'cpp' : 'c';
-    var uid  = 'snip-' + t.attack_id.replace(/\./g,'-');
-    var highlighted;
-    try { highlighted = hljs.highlight(t.snippet, {language: lang}).value; }
-    catch(e) { highlighted = escapeHtml(t.snippet); }
-    snippetHtml =
-      '<div style="position:relative;">'
-      + '<button class="copy-snip-btn" onclick="copySnippet(\'' + uid + '\')" title="copy">⎘</button>'
-      + '<pre class="tech-snippet" id="' + uid + '"><code class="language-' + lang + '">' + highlighted + '</code></pre>'
-      + '</div>';
-  }
-
-  var blogBtn = t.blog_url
-    ? '<a class="btn btn-blue" style="font-size:11px;padding:4px 10px;" href="' + escapeHtml(t.blog_url) + '" target="_blank">📖 blog post</a>'
-    : '';
-  var modBadge = t.module
-    ? '<span class="badge badge-dim" style="font-size:10px;font-family:var(--mono);">' + escapeHtml(t.module) + '</span>'
-    : '';
-  var exBadge = t.has_example
-    ? '<span class="badge badge-green" style="font-size:10px;">✓ implemented</span>'
-    : '';
-
-  return '<div class="tech-card' + (t.has_example ? ' tech-card-impl' : '') + '">'
-    + '<div class="tech-card-head">'
-    + '<span class="tech-id ' + catCls + '">' + escapeHtml(t.attack_id) + '</span>'
-    + '<span class="tech-name">' + escapeHtml(t.name) + '</span>'
-    + '</div>'
-    + (tactics ? '<div class="tech-tactics">' + tactics + '</div>' : '')
-    + (t.description ? '<div class="tech-desc">' + escapeHtml(t.description) + '</div>' : '')
-    + snippetHtml
-    + '<div class="tech-footer">' + blogBtn + modBadge + exBadge + '</div>'
-    + '</div>';
+  el.innerHTML = allPill + pills;
 }
 
-function openReindex() {
-  var panel = document.getElementById('reindex-panel');
-  panel.style.display = panel.style.display === 'none' ? '' : 'none';
-  // reset step states when opening
-  if (panel.style.display !== 'none') {
-    ['library','embeddings','kb'].forEach(function(s) { setRstep(s,'idle',''); });
-    document.getElementById('reindex-status').textContent = '';
-    document.getElementById('btn-reindex-run').disabled = false;
-    document.getElementById('btn-reindex-run').textContent = '▶ Run';
-  }
-}
-function closeReindex() {
-  document.getElementById('reindex-panel').style.display = 'none';
+function setCat(cat) {
+  libCatFilter = cat;
+  document.querySelectorAll('#lib-cat-pills .filter-pill').forEach(p => p.classList.remove('active'));
+  document.getElementById('cat-' + cat)?.classList.add('active');
+  renderLibGrid();
 }
 
-var _RSTEP_ICONS = {idle:'⬜', running:'🔄', done:'✅', error:'❌', skip:'⏭️'};
-
-function setRstep(step, status, detail) {
-  var el = document.getElementById('rstep-' + step);
-  if (!el) return;
-  el.className = 'reindex-step rstep-' + status;
-  el.querySelector('.rstep-icon').textContent = _RSTEP_ICONS[status] || '⬜';
-  el.querySelector('.rstep-detail').textContent = detail || '';
+function setPlatform(plat) {
+  libPlatFilter = plat;
+  document.querySelectorAll('[id^="plat-"]').forEach(p => p.classList.remove('active'));
+  document.getElementById('plat-' + plat)?.classList.add('active');
+  renderLibGrid();
 }
 
-function runReindex() {
-  var btn = document.getElementById('btn-reindex-run');
-  btn.disabled = true;
-  btn.textContent = '…';
-  document.getElementById('reindex-status').textContent = 'running…';
-  ['library','embeddings','kb'].forEach(function(s){ setRstep(s,'idle',''); });
+function filterLibrary() {
+  libSearchQ = document.getElementById('lib-search').value.toLowerCase().trim();
+  renderLibGrid();
+}
 
-  var reader;
-  fetch('/api/reindex').then(function(resp) {
-    reader = resp.body.getReader();
-    var decoder = new TextDecoder();
-    function read() {
-      reader.read().then(function(result) {
-        if (result.done) { finishReindex(); return; }
-        decoder.decode(result.value, {stream:true}).split('\n').forEach(function(line) {
-          if (!line.startsWith('data: ')) return;
-          try {
-            var obj = JSON.parse(line.slice(6));
-            if (obj.step === 'done') { finishReindex(); return; }
-            if (obj.step && obj.status) {
-              var detail = obj.detail != null ? String(obj.detail) : (obj.msg || '');
-              setRstep(obj.step, obj.status, detail);
-            }
-          } catch(e) {}
-        });
-        read();
-      }).catch(function(e) {
-        document.getElementById('reindex-status').textContent = 'stream error: ' + e;
-        btn.disabled = false; btn.textContent = '▶ Run';
+function renderLibGrid() {
+  let mods = libModules;
+  if (libCatFilter !== 'all') mods = mods.filter(m => m.category === libCatFilter);
+  if (libPlatFilter !== 'all') mods = mods.filter(m => m.platform === libPlatFilter);
+  if (libSearchQ) mods = mods.filter(m =>
+    m.title.toLowerCase().includes(libSearchQ) ||
+    m.slug.includes(libSearchQ) ||
+    (m.attack_ids||[]).some(a => a.toLowerCase().includes(libSearchQ))
+  );
+  const grid = document.getElementById('lib-grid');
+  const empty = document.getElementById('lib-empty');
+  if (mods.length === 0) { grid.innerHTML = ''; empty.style.display = 'block'; return; }
+  empty.style.display = 'none';
+  const platIcon = {windows:'🪟', linux:'🐧', macos:'🍎'};
+  grid.innerHTML = mods.map(m => {
+    const ids = (m.attack_ids||[]).map(a => `<span class="badge badge-red" style="font-size:10px">${a}</span>`).join('');
+    const snippet = (m.snippet||'').split('\n').slice(0,3).join('\n');
+    return `
+      <div class="mod-card">
+        <div class="mod-card-bar" style="background:${m.color||'#636366'}"></div>
+        <div class="mod-card-body">
+          <div class="mod-card-title">${escHtml(m.title)}</div>
+          <div class="mod-card-meta">
+            <span class="badge" style="background:${m.color||'#333'}22;color:${m.color||'#999'};font-size:10px">${m.category}</span>
+            ${ids}
+            <span class="plat" title="${m.platform}">${platIcon[m.platform]||'💻'}</span>
+            <span class="mod-card-date" style="margin-left:auto">${m.date}</span>
+          </div>
+          ${snippet ? `<div class="mod-card-snippet">${escHtml(snippet)}</div>` : ''}
+        </div>
+        <div class="mod-card-foot">
+          <button class="btn btn-ghost btn-xs" onclick='openModModal(${JSON.stringify(m.id)})'>🔍 View</button>
+          ${m.has_post ? `<a href="${m.blog_url}" target="_blank" class="btn btn-ghost btn-xs">📖 Blog</a>` : '<span class="text-xs text-dim" style="padding:2px 8px">no post</span>'}
+          ${m.compilable ? `<button class="btn btn-blue btn-xs" onclick='quickCompile(${JSON.stringify(m.id)})'>⚡ Compile</button>` : '<span class="text-xs text-dim" style="padding:2px 8px">no compiler</span>'}
+        </div>
+      </div>`;
+  }).join('');
+}
+
+async function openModModal(moduleId) {
+  modalModId = moduleId;
+  document.getElementById('mm-title').textContent = '…';
+  document.getElementById('mm-meta').innerHTML = '';
+  document.getElementById('mm-code').textContent = 'loading…';
+  openModal('mod-modal');
+  try {
+    const m = await fetch(`/api/library/${encodeURIComponent(moduleId)}`).then(r => r.json());
+    document.getElementById('mm-title').textContent = m.title;
+    const blogLink = document.getElementById('mm-blog-link');
+    if (m.has_post && m.blog_url) {
+      blogLink.href = m.blog_url;
+      blogLink.style.display = '';
+    } else {
+      blogLink.style.display = 'none';
+    }
+    const platIcon = {windows:'🪟', linux:'🐧', macos:'🍎'};
+    const ids = (m.attack_ids||[]).map(a => `<span class="badge badge-red">${a}</span>`).join('');
+    const osIcon = platIcon[m.platform] || '💻';
+    document.getElementById('mm-meta').innerHTML = `
+      <span class="badge" style="background:${m.color||'#333'}22;color:${m.color||'#999'}">${m.category}</span>
+      ${ids}
+      <span class="badge badge-dim">${osIcon} ${m.platform}</span>
+      <span class="badge badge-dim">${m.compiler}</span>
+      <span class="badge badge-dim">${m.date}</span>
+    `;
+    // source tabs for multiple sources
+    const tabs = document.getElementById('mm-source-tabs');
+    tabs.innerHTML = '';
+    if ((m.all_sources||[]).length > 1) {
+      m.all_sources.forEach((s,i) => {
+        const btn = document.createElement('button');
+        btn.className = 'btn btn-ghost btn-xs' + (i===0?' active':'');
+        btn.textContent = s.name;
+        btn.onclick = () => loadSourceTab(s.path, btn);
+        tabs.appendChild(btn);
       });
     }
-    read();
-  }).catch(function(e) {
-    document.getElementById('reindex-status').textContent = 'failed: ' + e;
-    btn.disabled = false; btn.textContent = '▶ Run';
-  });
+    const src = m.full_source || m.snippet || '';
+    document.getElementById('mm-code').textContent = src;
+    if (typeof hljs !== 'undefined') { const el = document.getElementById('mm-code'); delete el.dataset.highlighted; hljs.highlightElement(el); }
+    document.getElementById('mm-compile-btn').disabled = !m.compilable;
+  } catch(e) {
+    document.getElementById('mm-code').textContent = 'Error: ' + e;
+  }
 }
 
-function finishReindex() {
-  var btn = document.getElementById('btn-reindex-run');
-  btn.disabled = false;
-  btn.textContent = '▶ Run';
-  document.getElementById('reindex-status').style.color = 'var(--green)';
-  document.getElementById('reindex-status').textContent = '✓ done - reload page to see updated counts';
-  // silently refresh mitre library data in the background
-  _mitreInitialized = false;
-  _libTechs = [];
+async function loadSourceTab(path, btn) {
+  document.querySelectorAll('#mm-source-tabs .btn').forEach(b => b.classList.remove('active'));
+  btn.classList.add('active');
+  try {
+    // path is absolute — fetch via module detail with src_name
+    document.getElementById('mm-code').textContent = 'loading…';
+    const src = await fetch(`/api/library/source?path=${encodeURIComponent(path)}`).then(r => r.text()).catch(() => '');
+    document.getElementById('mm-code').textContent = src;
+    if (typeof hljs !== 'undefined') { const el = document.getElementById('mm-code'); delete el.dataset.highlighted; hljs.highlightElement(el); }
+  } catch(e) {}
 }
 
-function copySnippet(uid) {
-  var el = document.getElementById(uid);
-  if (!el) return;
-  navigator.clipboard.writeText(el.textContent).catch(function(){});
+async function compileModal() {
+  if (!modalModId) return;
+  await doCompile(modalModId);
 }
 
-// ── Malpedia ──────────────────────────────────────────────────────────────────
-var _malpInit    = false;
-var _malpView    = 'actors';
-var _allActors   = [];
-var _allFamilies = [];
+async function quickCompile(moduleId) {
+  await doCompile(moduleId);
+}
 
-function initMalpedia() {
-  if (_malpInit) return;
-  _malpInit = true;
-
-  fetch('/api/semantic/status').then(function(r){ return r.json(); })
-  .then(function(d) {
-    var note = document.getElementById('malp-status-note');
-    if (d.available) {
-      note.innerHTML += ' <span style="color:var(--green);">● semantic</span> ' + d.embedded_posts + ' posts indexed';
-    } else {
-      note.innerHTML += ' <span style="color:var(--yellow);">● ollama offline</span>';
-    }
-  }).catch(function(){});
-
-  fetch('/api/malpedia/status').then(function(r){ return r.json(); })
-  .then(function(d) {
-    var note = document.getElementById('malp-status-note');
+async function doCompile(moduleId) {
+  document.getElementById('cm-status').innerHTML = '<div class="loading-full" style="padding:10px"><div class="spinner"></div> Compiling…</div>';
+  document.getElementById('cm-log').textContent = '';
+  document.getElementById('cm-download').style.display = 'none';
+  openModal('compile-modal');
+  try {
+    const r = await fetch(`/api/library/${encodeURIComponent(moduleId)}/compile`, {method:'POST'});
+    const d = await r.json();
     if (d.ok) {
-      note.innerHTML = '<span class="dot-ok">●</span> v' + d.version
-        + (d.authenticated ? ' · authenticated' : ' · anonymous');
+      document.getElementById('cm-status').innerHTML = `<div class="badge badge-green" style="font-size:13px;padding:6px 12px">✓ Compiled successfully</div>`;
+      document.getElementById('cm-log').textContent = d.log || '';
+      if (d.download) {
+        document.getElementById('cm-download').style.display = 'block';
+        document.getElementById('cm-download').innerHTML = `
+          <a href="${d.download}" class="btn btn-green"><span>⬇</span> Download ${d.file} (${(d.size/1024).toFixed(1)} KB)</a>`;
+      }
+      toast('Compiled: ' + moduleId.slice(-20), 'ok');
     } else {
-      note.innerHTML = '<span class="dot-err">●</span> ' + escapeHtml(d.error || 'unavailable');
+      document.getElementById('cm-status').innerHTML = `<div class="badge badge-red" style="font-size:13px;padding:6px 12px">✗ Compilation failed</div>`;
+      document.getElementById('cm-log').textContent = d.log || d.error || '';
+      toast('Compile failed', 'err');
     }
-  }).catch(function(){});
-
-  loadMalpActors();
-  loadMalpFamilies();
+  } catch(e) {
+    document.getElementById('cm-status').innerHTML = `<span class="text-red">Error: ${e}</span>`;
+  }
 }
 
-function setMalpView(el, view) {
-  document.querySelectorAll('#page-malpedia .mitre-tab').forEach(function(t){ t.classList.remove('active'); });
-  el.classList.add('active');
-  _malpView = view;
-  document.getElementById('malp-view-actors').style.display   = view === 'actors'   ? '' : 'none';
-  document.getElementById('malp-view-families').style.display = view === 'families' ? '' : 'none';
+async function rebuildRegistry() {
+  toast('Rebuilding module index…', 'info');
+  await fetch('/api/library/rebuild', {method:'POST'});
+  libModules = [];
+  loadLibrary();
 }
 
-function loadMalpActors(refresh) {
-  var url = '/api/malpedia/actors' + (refresh ? '?refresh=1' : '');
-  document.getElementById('malp-actor-list').innerHTML =
-    '<div class="malp-item" style="color:var(--dim);cursor:default;"><span class="spinner"></span> loading...</div>';
-  fetch(url).then(function(r){ return r.json(); })
-  .then(function(actors) {
-    _allActors = actors;
-    document.getElementById('malp-actor-count').textContent = '(' + actors.length + ')';
-    renderMalpList('actor', actors);
-  }).catch(function(e){
-    document.getElementById('malp-actor-list').innerHTML =
-      '<div class="malp-item" style="color:var(--red);">error: ' + escapeHtml(String(e)) + '</div>';
-  });
+// -----------------------------------------------------------------
+// Builder
+// -----------------------------------------------------------------
+function toggleInjectionMode() {
+  const mode = document.getElementById('b-malware').value;
+  document.getElementById('b-inj-wrap').style.display = mode === 'stealer' ? 'none' : 'block';
+  document.getElementById('b-stl-wrap').style.display = mode === 'stealer' ? 'block' : 'none';
 }
 
-function loadMalpFamilies(refresh) {
-  var url = '/api/malpedia/families' + (refresh ? '?refresh=1' : '');
-  document.getElementById('malp-family-list').innerHTML =
-    '<div class="malp-item" style="color:var(--dim);cursor:default;"><span class="spinner"></span> loading...</div>';
-  fetch(url).then(function(r){ return r.json(); })
-  .then(function(fams) {
-    _allFamilies = fams;
-    document.getElementById('malp-family-count').textContent = '(' + fams.length + ')';
-    renderMalpList('family', fams);
-  }).catch(function(){});
+async function startBuild() {
+  const params = {
+    payload:     document.getElementById('b-payload').value,
+    encryption:  document.getElementById('b-enc').value,
+    malware:     document.getElementById('b-malware').value,
+    injection:   document.getElementById('b-injection').value,
+    stealer:     document.getElementById('b-stealer').value,
+    persistence: document.getElementById('b-persistence').value,
+  };
+  const btn = document.getElementById('build-btn');
+  btn.disabled = true;
+  btn.innerHTML = '<span class="spinner"></span> Building…';
+  setBuildStatus('running', 'running…');
+  document.getElementById('build-output').textContent = 'starting build…';
+  document.getElementById('build-files').style.display = 'none';
+  const r = await fetch('/api/build', {method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify(params)});
+  const {build_id} = await r.json();
+  currentBuildId = build_id;
+  pollBuild(build_id);
 }
 
-function renderMalpList(type, items) {
-  var listEl  = document.getElementById('malp-' + type + '-list');
-  var countEl = document.getElementById('malp-' + type + '-list-count');
-  countEl.textContent = items.length + ' ' + (type === 'actor' ? 'actors' : 'families');
-  if (!items.length) {
-    listEl.innerHTML = '<div class="malp-item" style="color:var(--dim);cursor:default;">no results</div>';
+function setBuildStatus(state, label) {
+  const dot = document.getElementById('build-status-dot');
+  const lbl = document.getElementById('build-status-label');
+  lbl.textContent = label;
+  const colors = {running: 'var(--yellow)', success: 'var(--green)', failed: 'var(--red)', idle: 'var(--dim)'};
+  dot.style.background = colors[state] || colors.idle;
+  if (state === 'running') dot.style.animation = 'pulse 1s infinite';
+  else dot.style.animation = '';
+}
+
+function pollBuild(build_id) {
+  if (buildPoll) clearInterval(buildPoll);
+  buildPoll = setInterval(async () => {
+    const job = await fetch(`/api/build/${build_id}`).then(r=>r.json()).catch(()=>null);
+    if (!job) return;
+    document.getElementById('build-output').textContent = job.output || '';
+    const out = document.getElementById('build-output');
+    out.scrollTop = out.scrollHeight;
+    if (job.status === 'success' || job.status === 'failed' || job.status === 'error') {
+      clearInterval(buildPoll);
+      setBuildStatus(job.status, job.status);
+      const btn = document.getElementById('build-btn');
+      btn.disabled = false;
+      btn.innerHTML = '<span>⚡</span> Build Binary';
+      if (job.status === 'success') {
+        loadBuildFiles(build_id);
+        toast('Build succeeded!', 'ok');
+      } else {
+        toast('Build failed', 'err');
+      }
+      loadBuildHistory();
+    }
+  }, 1000);
+}
+
+async function loadBuildFiles(build_id) {
+  const d = await fetch(`/api/build/${build_id}/files`).then(r=>r.json());
+  if (!d.files?.length) return;
+  document.getElementById('build-files').style.display = 'block';
+  document.getElementById('build-files-list').innerHTML = d.files.map(f =>
+    `<a href="/api/build/${build_id}/download/${f.name}" class="btn btn-green btn-sm" style="margin-right:8px;margin-bottom:4px">⬇ ${f.name} (${(f.size/1024).toFixed(1)} KB)</a>`
+  ).join('');
+}
+
+async function loadBuildHistory() {
+  const logs = await fetch('/api/logs').then(r=>r.json()).catch(()=>[]);
+  const tbody = document.getElementById('build-history-tbody');
+  if (!logs.length) { tbody.innerHTML = '<tr><td colspan="7" class="text-dim text-sm" style="padding:14px">no builds yet</td></tr>'; return; }
+  tbody.innerHTML = logs.slice().reverse().slice(0,20).map(b => {
+    const p = b.params||{};
+    const st = b.status === 'success' ? 'badge-green' : 'badge-red';
+    return `<tr>
+      <td class="mono text-xs">${b.id}</td>
+      <td>${p.malware||'-'}</td>
+      <td>${p.encryption||'-'}</td>
+      <td>${p.injection||p.stealer||'-'}</td>
+      <td>${p.persistence||'none'}</td>
+      <td><span class="badge ${st}">${b.status}</span></td>
+      <td class="text-xs text-dim">${b.created?.slice(0,16)||''}</td>
+    </tr>`;
+  }).join('');
+}
+
+// -----------------------------------------------------------------
+// Samples
+// -----------------------------------------------------------------
+async function loadSamples() {
+  const tbody = document.getElementById('samples-tbody');
+  const empty = document.getElementById('samples-empty');
+  tbody.innerHTML = '<tr><td colspan="7"><div class="loading-full" style="padding:14px"><div class="spinner"></div></div></td></tr>';
+  const samples = await fetch('/api/samples').then(r=>r.json()).catch(()=>[]);
+  if (!samples.length) {
+    tbody.innerHTML = '';
+    empty.style.display = 'block';
     return;
   }
-  listEl.innerHTML = items.map(function(id) {
-    return '<div class="malp-item" onclick="loadMalp' + (type === 'actor' ? 'Actor' : 'Family') + '(\'' + escapeHtml(id) + '\',this)">'
-      + escapeHtml(id) + '</div>';
+  empty.style.display = 'none';
+  tbody.innerHTML = samples.map(s => {
+    const files = (s.files||[]).map(f =>
+      `<a href="/api/samples/${s.session_id}/download/${f.name}" class="btn btn-ghost btn-xs" style="margin-bottom:2px">⬇ ${f.name}</a>`
+    ).join(' ');
+    const st = s.status === 'success' ? 'badge-green' : (s.status === 'built' ? 'badge-blue' : 'badge-dim');
+    return `<tr>
+      <td class="mono text-xs">${s.session_id}</td>
+      <td>${s.actor || '<span class="text-dim">manual build</span>'}</td>
+      <td>${(s.files||[]).length}</td>
+      <td class="text-xs">${formatBytes(s.total_size||0)}</td>
+      <td><span class="badge ${st}">${s.status}</span></td>
+      <td class="text-xs text-dim">${s.created?.slice(0,16)||''}</td>
+      <td>${files}</td>
+    </tr>`;
   }).join('');
 }
 
-function filterMalpList(type) {
-  var q     = document.getElementById('malp-' + type + '-search').value.toLowerCase().trim();
-  var all   = type === 'actor' ? _allActors : _allFamilies;
-  var items = q ? all.filter(function(id){ return id.toLowerCase().indexOf(q) !== -1; }) : all;
-  renderMalpList(type, items);
+function formatBytes(n) {
+  if (n < 1024) return n + ' B';
+  if (n < 1048576) return (n/1024).toFixed(1) + ' KB';
+  return (n/1048576).toFixed(1) + ' MB';
 }
 
-function refreshMalpData(what) {
-  if (what === 'actors')   loadMalpActors(true);
-  if (what === 'families') loadMalpFamilies(true);
+// -----------------------------------------------------------------
+// APT Campaign Pipeline
+// -----------------------------------------------------------------
+let aptSuggestTimer = null;
+
+function aptActorSearch(val) {
+  clearTimeout(aptSuggestTimer);
+  const box = document.getElementById('apt-suggestions');
+  if (val.length < 2) { box.style.display = 'none'; return; }
+  aptSuggestTimer = setTimeout(async () => {
+    const d = await fetch(`/api/malpedia/search?q=${encodeURIComponent(val)}`).then(r=>r.json()).catch(()=>({actors:[],families:[]}));
+    const items = [...(d.actors||[]).slice(0,6).map(a=>({v:a,t:'actor'})), ...(d.families||[]).slice(0,6).map(f=>({v:f,t:'family'}))];
+    if (!items.length) { box.style.display = 'none'; return; }
+    box.innerHTML = items.map(i => `
+      <div onclick="selectActorSuggest('${escAttr(i.v)}')" style="padding:8px 12px;cursor:pointer;display:flex;align-items:center;gap:8px;border-bottom:1px solid var(--sep);transition:background .1s" onmouseover="this.style.background='var(--bg4)'" onmouseout="this.style.background=''">
+        <span class="badge ${i.t==='actor'?'badge-blue':'badge-purple'}" style="font-size:10px">${i.t}</span>
+        <span style="font-size:13px">${escHtml(i.v)}</span>
+      </div>`).join('');
+    box.style.display = 'block';
+  }, 250);
 }
 
-function loadMalpActor(id, el) {
-  document.querySelectorAll('#malp-actor-list .malp-item').forEach(function(i){ i.classList.remove('active'); });
-  if (el) el.classList.add('active');
-  var det = document.getElementById('malp-actor-detail');
-  det.innerHTML = '<div class="malp-placeholder"><span class="spinner"></span> loading ' + escapeHtml(id) + '...</div>';
-  fetch('/api/malpedia/actor/' + encodeURIComponent(id))
-  .then(function(r){ return r.json(); })
-  .then(function(d) {
-    if (d.error) { det.innerHTML = '<div class="malp-placeholder" style="color:var(--red);">' + escapeHtml(d.error) + '</div>'; return; }
-    det.innerHTML = renderActorDetail(d);
-  }).catch(function(e){
-    det.innerHTML = '<div class="malp-placeholder" style="color:var(--red);">error: ' + escapeHtml(String(e)) + '</div>';
+function selectActorSuggest(val) {
+  document.getElementById('apt-actor').value = val;
+  document.getElementById('apt-suggestions').style.display = 'none';
+}
+
+function resetPipelineSteps() {
+  for (let i = 1; i <= 5; i++) {
+    const icon = document.getElementById('psi-'+i);
+    const msg  = document.getElementById('psm-'+i);
+    icon.className = 'pipe-step-icon';
+    msg.textContent = ['Fetch actor / family data','Download threat reports','Extract ATT&CK techniques','Map TTPs to peekaboo modules','Compile custom binary'][i-1];
+  }
+}
+
+function setPipeStep(step, status, msg) {
+  const icon = document.getElementById('psi-'+step);
+  const msgEl = document.getElementById('psm-'+step);
+  icon.className = 'pipe-step-icon ' + status;
+  if (msg) msgEl.textContent = msg;
+  if (status === 'running') icon.innerHTML = '<div class="spinner" style="width:14px;height:14px;border-color:rgba(10,132,255,.2);border-top-color:var(--blue)"></div>';
+  if (status === 'done') icon.innerHTML = '✓';
+  if (status === 'error') icon.innerHTML = '✗';
+}
+
+async function runPipeline() {
+  const actorId = document.getElementById('apt-actor').value.trim();
+  if (!actorId) { toast('Enter an actor or family ID', 'err'); return; }
+  document.getElementById('apt-suggestions').style.display = 'none';
+  resetPipelineSteps();
+  document.getElementById('apt-run-btn').disabled = true;
+  document.getElementById('apt-results').innerHTML = '<div class="loading-full" style="padding:40px"><div class="spinner"></div> Running pipeline…</div>';
+
+  let lastData = {};
+
+  const resp = await fetch('/api/pipeline/run', {
+    method: 'POST',
+    headers: {'Content-Type':'application/json'},
+    body: JSON.stringify({actor_id: actorId})
   });
+
+  const reader = resp.body.getReader();
+  const dec    = new TextDecoder();
+  let buf = '';
+
+  while (true) {
+    const {done, value} = await reader.read();
+    if (done) break;
+    buf += dec.decode(value, {stream: true});
+    const lines = buf.split('\n');
+    buf = lines.pop();
+    for (const line of lines) {
+      if (!line.startsWith('data: ')) continue;
+      const raw = line.slice(6).trim();
+      if (raw === '[DONE]') break;
+      try {
+        const ev = JSON.parse(raw);
+        if (ev.step >= 1 && ev.step <= 5) {
+          setPipeStep(ev.step, ev.status, ev.msg);
+          if (ev.data) lastData[ev.step] = ev.data;
+        }
+        if (ev.step === 3 && ev.status === 'done') {
+          renderTTPResults(ev.data || [], lastData);
+        }
+        if (ev.step === 5 && ev.status === 'done') {
+          renderPipelineSuccess(ev.data, lastData);
+        }
+        if (ev.status === 'error') {
+          document.getElementById('apt-results').innerHTML =
+            `<div class="card"><div class="badge badge-red" style="margin-bottom:10px">Pipeline Error</div><div class="terminal">${escHtml(ev.msg||'unknown error')}</div></div>`;
+        }
+      } catch(e) {}
+    }
+  }
+
+  document.getElementById('apt-run-btn').disabled = false;
+  loadPipelineSessions();
 }
 
-function loadMalpFamily(id, el) {
-  document.querySelectorAll('#malp-family-list .malp-item').forEach(function(i){ i.classList.remove('active'); });
-  if (el) el.classList.add('active');
-  var det = document.getElementById('malp-family-detail');
-  det.innerHTML = '<div class="malp-placeholder"><span class="spinner"></span> loading ' + escapeHtml(id) + '...</div>';
-  fetch('/api/malpedia/family/' + encodeURIComponent(id))
-  .then(function(r){ return r.json(); })
-  .then(function(d) {
-    if (d.error) { det.innerHTML = '<div class="malp-placeholder" style="color:var(--red);">' + escapeHtml(d.error) + '</div>'; return; }
-    det.innerHTML = renderFamilyDetail(d);
-  }).catch(function(e){
-    det.innerHTML = '<div class="malp-placeholder" style="color:var(--red);">error: ' + escapeHtml(String(e)) + '</div>';
+function renderTTPResults(ttps, allData) {
+  if (!ttps.length) {
+    document.getElementById('apt-results').innerHTML = `<div class="empty"><div class="empty-icon">🔍</div><div>No TTPs extracted from reports</div></div>`;
+    return;
+  }
+  const tacticColors = {'execution':'#30D158','defense-evasion':'#FFD60A','persistence':'#0A84FF','command-and-control':'#FF453A','privilege-escalation':'#FF9F0A','credential-access':'#BF5AF2','unknown':'#636366'};
+  const rows = ttps.map(t => {
+    const col = tacticColors[t.tactic] || tacticColors.unknown;
+    return `<div class="ttp-row">
+      <span class="badge badge-red" style="font-family:var(--mono)">${t.id}</span>
+      <span style="font-size:13px;flex:1">${escHtml(t.name||t.id)}</span>
+      <span class="badge" style="background:${col}22;color:${col};font-size:10px">${t.tactic}</span>
+      ${t.evidence ? `<span class="text-xs text-dim" style="max-width:180px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap" title="${escAttr(t.evidence)}">"${escHtml(t.evidence.slice(0,40))}"</span>` : ''}
+    </div>`;
+  }).join('');
+  document.getElementById('apt-results').innerHTML = `
+    <div style="margin-bottom:14px;display:flex;align-items:center;justify-content:space-between">
+      <div class="fw-600">${ttps.length} TTPs Extracted</div>
+    </div>
+    <div style="border:1px solid var(--sep);border-radius:var(--rs);overflow:hidden">${rows}</div>`;
+}
+
+function renderPipelineSuccess(data, allData) {
+  const params = (allData[4] || {});
+  const files  = (data?.files || []);
+  const sid    = data?.session_id || '';
+  const mods   = (params.selected_modules || []).map(m =>
+    `<div style="display:flex;align-items:center;gap:8px;padding:6px 0;border-bottom:1px solid var(--sep)">
+      <span class="badge badge-red" style="font-size:10px">${m.attack_id}</span>
+      <span class="text-sm">${escHtml(m.title||m.module_id)}</span>
+      <span class="badge badge-dim text-xs" style="margin-left:auto">${m.category}</span>
+    </div>`).join('');
+
+  const dlBtns = files.map(f =>
+    `<a href="/api/samples/${sid}/download/${f}" class="btn btn-green btn-sm">⬇ ${f}</a>`).join(' ');
+
+  document.getElementById('apt-results').innerHTML = `
+    <div style="margin-bottom:12px">
+      <span class="badge badge-green" style="font-size:13px;padding:6px 12px">✓ Pipeline Complete</span>
+    </div>
+    <div class="card card-sm" style="margin-bottom:12px">
+      <div class="text-xs text-dim text-uppercase" style="letter-spacing:.5px;margin-bottom:8px">Selected Modules</div>
+      ${mods || '<div class="text-dim text-sm">no modules matched</div>'}
+    </div>
+    <div class="card card-sm">
+      <div class="text-xs text-dim" style="margin-bottom:8px">SESSION ${sid}</div>
+      <div style="display:flex;gap:8px">${dlBtns}</div>
+    </div>`;
+}
+
+async function loadPipelineSessions() {
+  const tbody = document.getElementById('sessions-tbody');
+  const sessions = await fetch('/api/pipeline/sessions').then(r=>r.json()).catch(()=>[]);
+  if (!sessions.length) {
+    tbody.innerHTML = '<tr><td colspan="5" class="text-dim text-sm" style="padding:14px">no sessions yet</td></tr>';
+    return;
+  }
+  tbody.innerHTML = sessions.slice(0,20).map(s => {
+    const st = s.status === 'success' ? 'badge-green' : (s.status === 'running' ? 'badge-yellow' : 'badge-red');
+    return `<tr>
+      <td class="mono text-xs">${s.session_id}</td>
+      <td>${escHtml(s.actor_id||'-')}</td>
+      <td>${s.ttps||0}</td>
+      <td><span class="badge ${st}">${s.status}</span></td>
+      <td class="text-xs text-dim">${(s.started||'').slice(0,16)}</td>
+    </tr>`;
+  }).join('');
+}
+
+// -----------------------------------------------------------------
+// Coverage Map
+// -----------------------------------------------------------------
+const TACTICS_ORDER = [
+  {id:'execution',name:'Execution'},
+  {id:'defense-evasion',name:'Defense Evasion'},
+  {id:'persistence',name:'Persistence'},
+  {id:'privilege-escalation',name:'Privilege Escalation'},
+  {id:'credential-access',name:'Credential Access'},
+  {id:'discovery',name:'Discovery'},
+  {id:'lateral-movement',name:'Lateral Movement'},
+  {id:'collection',name:'Collection'},
+  {id:'command-and-control',name:'C2'},
+  {id:'exfiltration',name:'Exfiltration'},
+  {id:'impact',name:'Impact'},
+  {id:'unknown',name:'Other'},
+];
+
+const TECHNIQUE_TACTIC = {
+  'T1059':'execution','T1106':'execution','T1204':'execution',
+  'T1027':'defense-evasion','T1055':'defense-evasion','T1562':'defense-evasion',
+  'T1564':'defense-evasion','T1622':'defense-evasion','T1112':'defense-evasion',
+  'T1036':'defense-evasion','T1070':'defense-evasion',
+  'T1547':'persistence','T1546':'persistence','T1053':'persistence',
+  'T1543':'persistence','T1183':'persistence',
+  'T1134':'privilege-escalation',
+  'T1003':'credential-access',
+  'T1082':'discovery','T1012':'discovery',
+  'T1102':'command-and-control','T1041':'command-and-control',
+  'T1071':'command-and-control','T1567':'command-and-control',
+  'T1574':'defense-evasion',
+};
+
+async function loadCoverage() {
+  document.getElementById('cov-loading').style.display = 'flex';
+  document.getElementById('cov-content').innerHTML = '';
+  const cov = await fetch('/api/coverage').then(r=>r.json()).catch(()=>({}));
+  document.getElementById('cov-loading').style.display = 'none';
+
+  // group by tactic
+  const byTactic = {};
+  TACTICS_ORDER.forEach(t => { byTactic[t.id] = []; });
+  byTactic['unknown'] = [];
+
+  Object.entries(cov).forEach(([aid, info]) => {
+    const base   = aid.split('.')[0];
+    const tactic = TECHNIQUE_TACTIC[aid] || TECHNIQUE_TACTIC[base] || 'unknown';
+    if (!byTactic[tactic]) byTactic[tactic] = [];
+    byTactic[tactic].push({aid, ...info});
   });
+
+  const total     = Object.keys(cov).length;
+  const covered   = Object.values(cov).filter(v => v.peekaboo || v.count > 0).length;
+  const peekaboo  = Object.values(cov).filter(v => v.peekaboo).length;
+  const libOnly   = Object.values(cov).filter(v => !v.peekaboo && v.count > 0).length;
+
+  document.getElementById('cov-stats').innerHTML = `
+    <div class="stat"><div class="stat-val text-purple">${total}</div><div class="stat-label">ATT&CK IDs tracked</div></div>
+    <div class="stat"><div class="stat-val text-green">${peekaboo}</div><div class="stat-label">peekaboo templates</div></div>
+    <div class="stat"><div class="stat-val" style="color:var(--yellow)">${libOnly}</div><div class="stat-label">library only</div></div>
+    <div class="stat"><div class="stat-val text-blue">${covered}</div><div class="stat-label">total covered</div></div>
+  `;
+
+  const cols = TACTICS_ORDER.filter(t => byTactic[t.id]?.length > 0);
+  if (!cols.length) { document.getElementById('cov-content').innerHTML = '<div class="empty">No coverage data available — rebuild the module index first</div>'; return; }
+
+  const maxRows = Math.max(...cols.map(t => byTactic[t.id].length));
+  const colWidth = Math.max(80, Math.floor(1020 / cols.length));
+
+  let html = '<div class="coverage-wrap"><table class="coverage-matrix"><thead><tr>';
+  cols.forEach(t => {
+    html += `<th style="min-width:${colWidth}px">${t.name}</th>`;
+  });
+  html += '</tr></thead><tbody>';
+
+  for (let row = 0; row < maxRows; row++) {
+    html += '<tr>';
+    cols.forEach(t => {
+      const items = byTactic[t.id];
+      const item  = items[row];
+      if (!item) { html += '<td class="cov-td"></td>'; return; }
+      let cls = 'cov-empty';
+      let title = item.aid;
+      if (item.peekaboo && item.count > 0) { cls = 'cov-both'; title += ' — template + library (' + item.count + ' modules)'; }
+      else if (item.peekaboo) { cls = 'cov-peekaboo'; title += ' — peekaboo template'; }
+      else if (item.count > 0) { cls = 'cov-library'; title += ' — library (' + item.count + ' module' + (item.count>1?'s':'') + ')'; }
+      html += `<td class="cov-td"><span class="cov-cell ${cls}" title="${escAttr(title)}" onclick="toast('${escAttr(item.aid)}: ${item.peekaboo?'template ':''}${item.count>0?item.count+' lib modules':'not covered'}','info')" style="display:flex;align-items:center;justify-content:center;font-size:8px;color:rgba(0,0,0,.5)">${item.aid.replace('T1','')}</span></td>`;
+    });
+    html += '</tr>';
+  }
+  html += '</tbody></table></div>';
+  document.getElementById('cov-content').innerHTML = html;
 }
 
-function renderActorDetail(d) {
-  var synonyms = (d.synonyms || []).map(function(s){
-    return '<span class="malp-chip">' + escapeHtml(s) + '</span>';
-  }).join('');
-  var targets = (d.targets || []).map(function(t){
-    return '<span class="malp-chip">' + escapeHtml(t) + '</span>';
-  }).join('');
-  var victims = (d.victims || []).slice(0,8).map(function(v){
-    return '<span class="malp-chip">' + escapeHtml(v) + '</span>';
-  }).join('');
-  var families = (d.families || []).map(function(f){
-    return '<span class="malp-chip family" onclick="jumpToFamily(\'' + escapeHtml(f.id) + '\')">' + escapeHtml(f.id) + '</span>';
-  }).join('');
-  var refs = (d.refs || []).slice(0,8).map(function(url){
-    return '<li><a href="' + escapeHtml(url) + '" target="_blank">' + escapeHtml(url) + '</a></li>';
-  }).join('');
-
-  return '<div class="malp-detail-title">' + escapeHtml(d.name || d.id) + '</div>'
-    + '<div class="malp-detail-id">' + escapeHtml(d.id) + ' &nbsp;·&nbsp; ' + escapeHtml(d.uuid || '') + '</div>'
-    + '<div class="malp-meta-row">'
-    + (d.country ? '<span class="malp-chip country">🌍 ' + escapeHtml(d.country) + '</span>' : '')
-    + (d.incident_type ? '<span class="malp-chip">' + escapeHtml(d.incident_type) + '</span>' : '')
-    + '</div>'
-    + (synonyms ? '<div class="malp-section-label">Also known as</div><div class="malp-meta-row">' + synonyms + '</div>' : '')
-    + (d.description ? '<div class="malp-section-label">Description</div><div class="malp-desc">' + escapeHtml(d.description) + '</div>' : '')
-    + (targets ? '<div class="malp-section-label">Target sectors</div><div class="malp-meta-row">' + targets + '</div>' : '')
-    + (victims ? '<div class="malp-section-label">Suspected victims</div><div class="malp-meta-row">' + victims + '</div>' : '')
-    + (families ? '<div class="malp-section-label">Malware families (' + d.families.length + ')</div><div class="malp-meta-row" style="max-height:140px;overflow-y:auto;">' + families + '</div>' : '')
-    + (refs ? '<div class="malp-section-label">References</div><ul class="malp-url-list">' + refs + '</ul>' : '')
-    + renderRelatedPosts(d.related_posts);
+// -----------------------------------------------------------------
+// MITRE ATT&CK
+// -----------------------------------------------------------------
+async function loadMitreGroups() {
+  const list = document.getElementById('mitre-groups-list');
+  list.innerHTML = '<div class="loading-full" style="padding:14px"><div class="spinner"></div></div>';
+  const groups = await fetch('/api/mitre/groups').then(r=>r.json()).catch(()=>[]);
+  mitreGroups = groups;
+  renderMitreGroups(groups);
 }
 
-function renderFamilyDetail(d) {
-  var alts = (d.alt_names || []).map(function(a){
-    return '<span class="malp-chip">' + escapeHtml(a) + '</span>';
-  }).join('');
-  var attrs = (d.attribution || []).map(function(a){
-    return '<span class="malp-chip actor" onclick="jumpToActor(\'' + escapeHtml(a) + '\')">' + escapeHtml(a) + '</span>';
-  }).join('');
-  var urls = (d.urls || []).slice(0,10).map(function(url){
-    return '<li><a href="' + escapeHtml(url) + '" target="_blank">' + escapeHtml(url) + '</a></li>';
-  }).join('');
-
-  return '<div class="malp-detail-title">' + escapeHtml(d.name || d.id) + '</div>'
-    + '<div class="malp-detail-id">' + escapeHtml(d.id) + (d.updated ? ' &nbsp;·&nbsp; updated: ' + escapeHtml(d.updated) : '') + '</div>'
-    + (alts ? '<div class="malp-section-label">Also known as</div><div class="malp-meta-row">' + alts + '</div>' : '')
-    + (d.description ? '<div class="malp-section-label">Description</div><div class="malp-desc">' + escapeHtml(d.description) + '</div>' : '<div class="malp-desc" style="color:var(--dim);font-style:italic;">no description available</div>')
-    + (attrs ? '<div class="malp-section-label">Attribution</div><div class="malp-meta-row">' + attrs + '</div>' : '')
-    + (urls ? '<div class="malp-section-label">Reports &amp; references (' + d.urls.length + ')</div><ul class="malp-url-list">' + urls + '</ul>' : '')
-    + renderRelatedPosts(d.related_posts);
+function renderMitreGroups(groups) {
+  const list = document.getElementById('mitre-groups-list');
+  if (!groups.length) { list.innerHTML = '<div class="text-dim text-sm">No groups</div>'; return; }
+  list.innerHTML = groups.map(g => `
+    <div onclick="loadGroupTechniques('${g.id}','${escAttr(g.name)}')" style="padding:7px 10px;border-radius:var(--rs);cursor:pointer;transition:background .12s" onmouseover="this.style.background='var(--bg3)'" onmouseout="this.style.background=''">
+      <div style="font-size:13px;font-weight:500">${escHtml(g.name)}</div>
+      ${g.aliases?.length ? `<div class="text-xs text-dim">${g.aliases.slice(0,3).join(', ')}</div>` : ''}
+    </div>`).join('');
 }
 
-function renderRelatedPosts(posts) {
-  if (!posts || !posts.length) return '';
-  var items = posts.map(function(p) {
-    var aids = (p.attack_ids || []).slice(0,3).map(function(a){
-      return '<span class="malp-chip" style="font-size:10px;padding:1px 5px;">' + escapeHtml(a) + '</span>';
-    }).join('');
-    var score = p.score ? ' <span style="color:var(--green);font-size:10px;">' + Math.round(p.score*100) + '%</span>' : '';
-    return '<li class="malp-rpost">'
-      + '<a href="' + escapeHtml(p.blog_url) + '" target="_blank">' + escapeHtml(p.title) + '</a>' + score
-      + '<span class="malp-rpost-meta">' + escapeHtml(p.date) + (aids ? ' &nbsp;' + aids : '') + '</span>'
-      + '</li>';
+function filterMitreGroups() {
+  const q = document.getElementById('mitre-group-search').value.toLowerCase();
+  renderMitreGroups(mitreGroups.filter(g =>
+    g.name.toLowerCase().includes(q) || (g.aliases||[]).some(a => a.toLowerCase().includes(q))
+  ));
+}
+
+async function loadGroupTechniques(stixId, name) {
+  document.getElementById('mitre-group-title').textContent = name;
+  const list = document.getElementById('mitre-techniques-list');
+  list.innerHTML = '<div class="loading-full" style="padding:14px"><div class="spinner"></div></div>';
+  const techs = await fetch(`/api/mitre/group/${stixId}/techniques`).then(r=>r.json()).catch(()=>[]);
+  if (!techs.length) {
+    list.innerHTML = '<div class="text-dim text-sm">No techniques found</div>';
+    const cnt = document.getElementById('mitre-tech-count');
+    cnt.style.display = 'none';
+    return;
+  }
+  const cnt = document.getElementById('mitre-tech-count');
+  cnt.textContent = techs.length + ' techniques';
+  cnt.style.display = '';
+  list.innerHTML = techs.map(t => `
+    <div style="padding:8px 0;border-bottom:1px solid var(--sep)">
+      <div style="display:flex;align-items:center;gap:8px">
+        <span class="badge badge-red mono">${t.attack_id}</span>
+        <span class="fw-600 text-sm">${escHtml(t.name)}</span>
+        ${t.has_example ? '<span class="badge badge-green text-xs">✓ implemented</span>' : ''}
+        <span class="badge badge-dim text-xs" style="margin-left:auto">${t.category}</span>
+      </div>
+      ${t.description ? `<div class="text-xs text-dim" style="margin-top:4px">${escHtml(t.description.slice(0,120))}…</div>` : ''}
+      ${t.snippet ? `<pre style="margin-top:6px;max-height:140px"><code class="language-c">${escHtml(t.snippet.slice(0,600))}</code></pre>` : ''}
+    </div>`).join('');
+  if (typeof hljs !== 'undefined') list.querySelectorAll('pre code').forEach(el => { delete el.dataset.highlighted; hljs.highlightElement(el); });
+}
+
+async function loadLibCategory() {
+  const cat = document.getElementById('lib-cat-filter')?.value || 'all';
+  const entries = await fetch(`/api/mitre/library?category=${cat}`).then(r=>r.json()).catch(()=>[]);
+  const el = document.getElementById('lib-entries');
+  if (!entries.length) { el.innerHTML = '<div class="text-dim text-sm">No entries</div>'; return; }
+  el.innerHTML = entries.map(e => `
+    <div style="border:1px solid var(--sep);border-radius:var(--rs);padding:12px">
+      <div style="display:flex;align-items:center;gap:8px;margin-bottom:6px">
+        ${(e.attack_ids||[]).map(a=>`<span class="badge badge-red mono">${a}</span>`).join('')}
+        <span class="fw-600 text-sm">${escHtml(e.title)}</span>
+        ${e.implemented ? '<span class="badge badge-green text-xs">✓ peekaboo</span>' : '<span class="badge badge-dim text-xs">library</span>'}
+        <span class="badge badge-dim text-xs" style="margin-left:auto">${e.category}</span>
+        ${e.has_post ? `<a href="${e.blog_url}" target="_blank" class="btn btn-ghost btn-xs">📖</a>` : ''}
+      </div>
+      ${e.snippet ? `<pre style="max-height:120px"><code class="language-c">${escHtml(e.snippet.slice(0,500))}</code></pre>` : ''}
+    </div>`).join('');
+  if (typeof hljs !== 'undefined') {
+    el.querySelectorAll('pre code').forEach(c => { delete c.dataset.highlighted; hljs.highlightElement(c); });
+  }
+}
+
+async function rebuildLibCache() {
+  toast('Rebuilding library cache…', 'info');
+  await fetch('/api/mitre/library/rebuild', {method:'POST'});
+  loadLibCategory();
+}
+
+// -----------------------------------------------------------------
+// Malpedia
+// -----------------------------------------------------------------
+async function searchMalpedia() {
+  const q = document.getElementById('malp-search').value.trim();
+  if (!q) return;
+  const el = document.getElementById('malp-results');
+  el.innerHTML = '<div class="loading-full" style="padding:10px"><div class="spinner"></div></div>';
+  const d = await fetch(`/api/malpedia/search?q=${encodeURIComponent(q)}&type=${malpType}`).then(r=>r.json()).catch(()=>({actors:[],families:[]}));
+  const items = [
+    ...(d.actors||[]).map(a=>({id:a,type:'actor'})),
+    ...(d.families||[]).map(f=>({id:f,type:'family'})),
+  ];
+  if (!items.length) { el.innerHTML = '<div class="text-dim text-sm">No results</div>'; return; }
+  el.innerHTML = items.map(i => `
+    <div onclick="loadMalpDetail('${escAttr(i.id)}','${i.type}')" style="padding:8px 10px;border-radius:var(--rs);cursor:pointer;display:flex;align-items:center;gap:8px;border:1px solid var(--sep);transition:border-color .12s" onmouseover="this.style.borderColor='rgba(255,255,255,.2)'" onmouseout="this.style.borderColor='var(--sep)'">
+      <span class="badge ${i.type==='actor'?'badge-blue':'badge-purple'} text-xs">${i.type}</span>
+      <span class="text-sm">${escHtml(i.id)}</span>
+    </div>`).join('');
+}
+
+function setMalpType(t) {
+  malpType = t;
+  document.querySelectorAll('[id^="malp-t-"]').forEach(p=>p.classList.remove('active'));
+  document.getElementById('malp-t-'+t)?.classList.add('active');
+}
+
+async function loadMalpDetail(id, type) {
+  const card = document.getElementById('malp-detail-card');
+  card.innerHTML = '<div class="loading-full" style="padding:20px"><div class="spinner"></div></div>';
+  const url  = type === 'actor' ? `/api/malpedia/actor/${encodeURIComponent(id)}` : `/api/malpedia/family/${encodeURIComponent(id)}`;
+  const data = await fetch(url).then(r=>r.json()).catch(()=>({}));
+  if (data.error) { card.innerHTML = `<div class="text-red text-sm">${escHtml(data.error)}</div>`; return; }
+  const families = (data.families||[]).slice(0,8).map(f => `<span class="badge badge-dim text-xs">${escHtml(f.id)}</span>`).join('');
+  const syns     = (data.synonyms||[]).slice(0,6).map(s => `<span class="badge badge-dim text-xs">${escHtml(s)}</span>`).join('');
+  const posts    = (data.related_posts||[]).slice(0,4).map(p => `
+    <div style="padding:6px 0;border-bottom:1px solid var(--sep);font-size:12px">
+      <a href="${p.url||'#'}" target="_blank" style="color:var(--blue)">${escHtml(p.title||p.url||'')}</a>
+      <span class="text-xs text-dim" style="margin-left:8px">${p.date||''}</span>
+    </div>`).join('');
+  card.innerHTML = `
+    <div class="card-header">
+      <div>
+        <div class="card-title">${escHtml(data.name||id)}</div>
+        ${data.country ? `<div class="card-sub">${data.country}</div>` : ''}
+      </div>
+    </div>
+    ${data.description ? `<div class="text-sm" style="margin-bottom:12px;line-height:1.6">${escHtml(data.description.slice(0,400))}</div>` : ''}
+    ${syns ? `<div style="margin-bottom:8px"><div class="text-xs text-dim" style="margin-bottom:4px">Aliases</div><div style="display:flex;gap:4px;flex-wrap:wrap">${syns}</div></div>` : ''}
+    ${families ? `<div style="margin-bottom:10px"><div class="text-xs text-dim" style="margin-bottom:4px">Malware Families</div><div style="display:flex;gap:4px;flex-wrap:wrap">${families}</div></div>` : ''}
+    ${posts ? `<div><div class="text-xs text-dim" style="margin-bottom:4px">Related Posts</div>${posts}</div>` : ''}
+    <div style="margin-top:12px">
+      <button class="btn btn-primary btn-sm" onclick="prefillAPT('${escAttr(id)}')">🎯 Run Pipeline</button>
+    </div>`;
+}
+
+function prefillAPT(actorId) {
+  showPanel('apt');
+  document.getElementById('apt-actor').value = actorId;
+}
+
+// -----------------------------------------------------------------
+// Malpedia Recent Reports
+// -----------------------------------------------------------------
+let malpReports = [];
+
+async function loadMalpReports() {
+  const el = document.getElementById('malp-rep-list');
+  const ld = document.getElementById('malp-rep-loading');
+  el.innerHTML = '';
+  ld.style.display = 'flex';
+  try {
+    malpReports = await fetch('/api/malpedia/reports?limit=50').then(r => r.json());
+    if (!Array.isArray(malpReports)) malpReports = [];
+  } catch(e) {
+    malpReports = [];
+  }
+  ld.style.display = 'none';
+  renderMalpReports(malpReports);
+}
+
+function renderMalpReports(reports) {
+  const el = document.getElementById('malp-rep-list');
+  if (!reports.length) {
+    el.innerHTML = '<div class="empty" style="padding:30px">No reports found</div>';
+    return;
+  }
+  el.innerHTML = reports.map(r => {
+    const fams = (r.families||[]).map(f =>
+      `<span class="badge badge-purple" style="font-size:9px;cursor:pointer" onclick="event.preventDefault();document.getElementById('malp-search').value='${escAttr(f)}';searchMalpedia()">${escHtml(f)}</span>`
+    ).join('');
+    const org = r.org ? `<span class="badge badge-dim" style="font-size:10px">${escHtml(r.org)}</span>` : '';
+    const author = r.author && r.author !== r.org ? ` · ${escHtml(r.author)}` : '';
+    return `<a class="rep-row" href="${escAttr(r.url)}" target="_blank" rel="noopener">
+      <div class="rep-date">${escHtml(r.date||'')}</div>
+      <div class="rep-body">
+        <div class="rep-title">${escHtml(r.title)}</div>
+        <div class="rep-meta">${org}${author}</div>
+        ${fams ? `<div class="rep-families">${fams}</div>` : ''}
+      </div>
+      <span style="color:var(--dim);font-size:16px;padding-top:1px">↗</span>
+    </a>`;
   }).join('');
-  return '<div class="malp-section-label">Related research (' + posts.length + ')</div>'
-    + '<ul class="malp-rpost-list">' + items + '</ul>';
 }
 
-function jumpToFamily(id) {
-  setMalpView(document.querySelector('#page-malpedia .mitre-tab:nth-child(2)'), 'families');
-  var search = document.getElementById('malp-family-search');
-  search.value = id;
-  filterMalpList('family');
-  setTimeout(function(){
-    var item = document.querySelector('#malp-family-list .malp-item');
-    if (item) { item.click(); }
-  }, 100);
+function filterMalpReports() {
+  const q = document.getElementById('malp-rep-search').value.toLowerCase().trim();
+  if (!q) { renderMalpReports(malpReports); return; }
+  renderMalpReports(malpReports.filter(r =>
+    (r.title||'').toLowerCase().includes(q) ||
+    (r.org||'').toLowerCase().includes(q) ||
+    (r.author||'').toLowerCase().includes(q) ||
+    (r.families||[]).some(f => f.toLowerCase().includes(q))
+  ));
 }
 
-function jumpToActor(id) {
-  setMalpView(document.querySelector('#page-malpedia .mitre-tab:nth-child(1)'), 'actors');
-  var search = document.getElementById('malp-actor-search');
-  search.value = id;
-  filterMalpList('actor');
-  setTimeout(function(){
-    var item = document.querySelector('#malp-actor-list .malp-item');
-    if (item) { item.click(); }
-  }, 100);
+// -----------------------------------------------------------------
+// C2 Panel
+// -----------------------------------------------------------------
+async function checkC2Status() {
+  const row = document.getElementById('c2-status-row');
+  row.innerHTML = '<div class="loading-full" style="padding:10px"><div class="spinner"></div></div>';
+  const d = await fetch('/api/c2/status').then(r=>r.json()).catch(()=>({}));
+  const channels = ['telegram','github','bitbucket','virustotal'];
+  row.innerHTML = channels.map(ch => {
+    const info = d[ch] || {};
+    const ok   = info.ok;
+    const col  = ok ? 'var(--green)' : 'var(--dim)';
+    const icon = {telegram:'📨',github:'🐙',bitbucket:'🪣',virustotal:'🦠'}[ch];
+    return `<div class="card card-sm" style="border-color:${ok?'rgba(48,209,88,.3)':'var(--sep)'}">
+      <div style="display:flex;align-items:center;gap:8px;margin-bottom:4px">
+        <span>${icon}</span><span class="fw-600 text-sm">${ch}</span>
+        <span style="width:7px;height:7px;border-radius:50%;background:${col};margin-left:auto;${ok?'box-shadow:0 0 6px var(--green)':''}"></span>
+      </div>
+      <div class="text-xs" style="color:${col}">${ok ? '✓ ' + (info.name||'connected') : info.error||'not configured'}</div>
+    </div>`;
+  }).join('');
 }
 
-// ── clock ──────────────────────────────────────────────────────────────────────
-function tick() { document.getElementById('clock').textContent = new Date().toUTCString(); }
-setInterval(tick, 1000); tick();
+async function checkBinaryInfo() {
+  const d = await fetch('/api/c2/binary_info').then(r=>r.json()).catch(()=>({}));
+  const el = document.getElementById('c2-binary-info');
+  if (d.found) {
+    el.textContent = `${d.name} — ${(d.size/1024).toFixed(1)} KB — ${d.modified?.slice(0,16)}`;
+  } else {
+    el.textContent = 'no binary built yet';
+  }
+}
 
-// ── init ───────────────────────────────────────────────────────────────────────
-loadBeacons();
-loadHistory();
-loadBinaryInfo();
-loadC2Status();
-loadProviders();
+async function deliver(channel) {
+  const out = document.getElementById('deliver-output');
+  out.style.display = 'block';
+  out.textContent = `delivering to ${channel}…`;
+  const r = await fetch(`/api/c2/deliver/${channel}`, {method:'POST', headers:{'Content-Type':'application/json'}, body:'{}'}).then(r=>r.json()).catch(e=>({ok:false,error:String(e)}));
+  out.textContent = JSON.stringify(r, null, 2);
+  toast(r.ok ? `Delivered via ${channel}` : 'Delivery failed: ' + r.error, r.ok ? 'ok' : 'err');
+}
 
-var total = document.querySelectorAll('.module-tag').length;
-var badge = document.getElementById('module-count-badge');
-if (badge) badge.textContent = total + ' total';
+// -----------------------------------------------------------------
+// Beacons
+// -----------------------------------------------------------------
+async function loadBeacons() {
+  const list  = document.getElementById('beacons-list');
+  const empty = document.getElementById('beacons-empty');
+  const d = await fetch('/api/beacons').then(r=>r.json()).catch(()=>({messages:[]}));
+  const msgs = d.messages || [];
+  document.getElementById('beacon-badge').textContent = msgs.length;
+  if (!msgs.length) { list.innerHTML = ''; empty.style.display = 'block'; return; }
+  empty.style.display = 'none';
+  list.innerHTML = msgs.map(m => `
+    <div class="beacon-msg">
+      <div class="beacon-from">@${escHtml(m.from||'unknown')} · ${new Date(m.date*1000).toLocaleString()}</div>
+      <div class="beacon-text">${escHtml(m.text||'')}</div>
+    </div>`).join('');
+}
 
-setInterval(loadC2Status, 60000);
-setInterval(loadBinaryInfo, 15000);
+function toggleAutoRefresh() {
+  const btn = document.getElementById('auto-refresh-btn');
+  if (autoRefresh) {
+    clearInterval(autoRefresh);
+    autoRefresh = null;
+    btn.textContent = 'Auto: OFF';
+    btn.classList.remove('btn-primary');
+  } else {
+    autoRefresh = setInterval(loadBeacons, 10000);
+    btn.textContent = 'Auto: ON';
+    btn.classList.add('btn-primary');
+    toast('Auto-refresh enabled (10s)', 'info');
+  }
+}
+
+// -----------------------------------------------------------------
+// Chat
+// -----------------------------------------------------------------
+function setProvider(p) {
+  chatProvider = p;
+  document.querySelectorAll('.provider-btn').forEach(b => b.classList.remove('active'));
+  document.getElementById('prov-' + p).classList.add('active');
+}
+
+async function loadChatStatus() {
+  const kb = await fetch('/api/chat/kb_info').then(r=>r.json()).catch(()=>({}));
+  document.getElementById('kb-info').innerHTML = `
+    <span class="badge badge-blue">${kb.posts||0} posts</span>
+    <span class="text-xs text-dim" style="margin-left:6px">${kb.last_updated?.slice(0,10)||'never'}</span>`;
+  const providers = await fetch('/api/chat/providers').then(r=>r.json()).catch(()=>({}));
+  document.getElementById('providers-info').innerHTML = Object.entries(providers).map(([k,v]) =>
+    `<span class="badge ${v.ok?'badge-green':'badge-dim'}">${k}: ${v.ok?'✓':'✗'}</span>`
+  ).join('');
+}
+
+async function sendChat() {
+  const input = document.getElementById('chat-input');
+  const msg   = input.value.trim();
+  if (!msg) return;
+  input.value = '';
+  chatHistory.push({role:'user', content:msg});
+  appendChatMsg('user', msg);
+  const btn = document.getElementById('chat-send-btn');
+  btn.disabled = true;
+
+  const aiDiv = appendChatMsg('ai', '…');
+  try {
+    const resp = await fetch('/api/chat', {
+      method: 'POST',
+      headers: {'Content-Type':'application/json'},
+      body: JSON.stringify({messages: chatHistory, provider: chatProvider}),
+    });
+    const reader = resp.body.getReader();
+    const dec    = new TextDecoder();
+    let buf = '', full = '';
+    aiDiv.textContent = '';
+    while (true) {
+      const {done, value} = await reader.read();
+      if (done) break;
+      buf += dec.decode(value, {stream:true});
+      const lines = buf.split('\n');
+      buf = lines.pop();
+      for (const line of lines) {
+        if (!line.startsWith('data:')) continue;
+        const raw = line.slice(5).trim();
+        if (raw === '[DONE]') break;
+        try {
+          const ev = JSON.parse(raw);
+          if (ev.text) { full += ev.text; aiDiv.innerHTML = marked.parse(full); scrollChat(); }
+        } catch(e) {}
+      }
+    }
+    chatHistory.push({role:'assistant', content:full});
+    if (typeof hljs !== 'undefined') aiDiv.querySelectorAll('pre code').forEach(el => hljs.highlightElement(el));
+  } catch(e) {
+    aiDiv.textContent = 'Error: ' + e;
+  } finally {
+    btn.disabled = false;
+    scrollChat();
+  }
+}
+
+function appendChatMsg(role, text) {
+  const msgs = document.getElementById('chat-msgs');
+  const d    = document.createElement('div');
+  d.className = `msg msg-${role}`;
+  d.textContent = text;
+  msgs.appendChild(d);
+  scrollChat();
+  return d;
+}
+function scrollChat() {
+  const el = document.getElementById('chat-msgs');
+  el.scrollTop = el.scrollHeight;
+}
+
+async function scrapeKB() {
+  toast('Indexing knowledge base…', 'info');
+  await fetch('/api/chat/scrape', {method:'POST'});
+}
+
+// -----------------------------------------------------------------
+// Settings
+// -----------------------------------------------------------------
+const CONFIGS = [
+  {name:'anthropic_config',  label:'Anthropic (Claude)', fields:[{k:'api_key',l:'API Key',secret:true}]},
+  {name:'gemini_config',     label:'Gemini',             fields:[{k:'api_key',l:'API Key',secret:true}]},
+  {name:'telegram_config',   label:'Telegram C2',        fields:[{k:'bot_token',l:'Bot Token',secret:true},{k:'chat_id',l:'Chat ID'}]},
+  {name:'github_config',     label:'GitHub C2',          fields:[{k:'github_token',l:'Token',secret:true},{k:'repo_owner',l:'Owner'},{k:'repo_name',l:'Repo'},{k:'issue_number',l:'Issue #'}]},
+  {name:'virustotal_config', label:'VirusTotal',         fields:[{k:'vt_api_key',l:'API Key',secret:true}]},
+  {name:'bitbucket_config',  label:'Bitbucket C2',       fields:[{k:'bitbucket_token_base64',l:'Token (b64)',secret:true},{k:'bitbucket_workspace',l:'Workspace'},{k:'bitbucket_repo',l:'Repo'}]},
+  {name:'azure_config',      label:'Azure DevOps C2',    fields:[{k:'azure_org',l:'Org'},{k:'azure_project',l:'Project'},{k:'azure_pat',l:'PAT',secret:true}]},
+  {name:'malpedia_config',   label:'Malpedia',           fields:[{k:'api_token',l:'API Token',secret:true}]},
+  {name:'ollama_config',     label:'Ollama',             fields:[{k:'base_url',l:'Base URL'},{k:'model',l:'Model'}]},
+];
+
+async function loadSettings() {
+  const grid = document.getElementById('settings-grid');
+  grid.innerHTML = '';
+  for (const cfg of CONFIGS) {
+    const data = await fetch(`/api/config/${cfg.name}`).then(r=>r.json()).catch(()=>({}));
+    const card = document.createElement('div');
+    card.className = 'card';
+    card.innerHTML = `
+      <div class="card-header" style="margin-bottom:12px">
+        <div class="card-title">${cfg.label}</div>
+        <span class="badge badge-dim text-xs" style="margin-left:auto">${cfg.name}</span>
+      </div>
+      ${cfg.fields.map(f => `
+        <div style="margin-bottom:10px">
+          <label>${f.l}</label>
+          <input type="${f.secret?'password':'text'}" id="cfg-${cfg.name}-${f.k}" value="${escAttr(data[f.k]||'')}">
+        </div>`).join('')}
+      <button class="btn btn-ghost btn-sm" onclick="saveConfig('${cfg.name}',[${cfg.fields.map(f=>`'${f.k}'`).join(',')}])">💾 Save</button>`;
+    grid.appendChild(card);
+  }
+}
+
+async function saveConfig(name, keys) {
+  const data = {};
+  keys.forEach(k => {
+    const el = document.getElementById(`cfg-${name}-${k}`);
+    if (el) data[k] = el.value;
+  });
+  const r = await fetch(`/api/config/${name}`, {method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify(data)});
+  const d = await r.json();
+  toast(d.ok ? `Saved ${name}` : 'Save failed', d.ok ? 'ok' : 'err');
+}
+
+// -----------------------------------------------------------------
+// Utilities
+// -----------------------------------------------------------------
+function escHtml(s) {
+  return String(s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+}
+function escAttr(s) {
+  return String(s||'').replace(/"/g,'&quot;').replace(/'/g,'&#39;');
+}
+
+// -----------------------------------------------------------------
+// Init
+// -----------------------------------------------------------------
+document.addEventListener('DOMContentLoaded', () => {
+  loadBuildHistory();
+  // preload library count
+  fetch('/api/library/stats').then(r=>r.json()).then(s => {
+    document.getElementById('lib-count').textContent = s.total || '…';
+  }).catch(()=>{});
+  // check malpedia status
+  fetch('/api/malpedia/status').then(r=>r.json()).then(s => {
+    const dot = document.getElementById('malpedia-status-dot');
+    if (dot) dot.style.background = s.ok ? 'var(--green)' : 'var(--dim)';
+  }).catch(()=>{});
+});
 </script>
 </body>
 </html>

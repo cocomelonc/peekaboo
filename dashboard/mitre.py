@@ -280,7 +280,7 @@ def get_library(category: str = "all") -> list[dict]:
     return [e for e in entries if e["category"] == category]
 
 
-# ── ATT&CK data ────────────────────────────────────────────────────────────────
+# -- ATT&CK data ----------------------------------------------------------------
 
 _attack_data              = None
 _tech_lookup: dict | None = None

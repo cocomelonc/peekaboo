@@ -6,11 +6,14 @@ from __future__ import annotations
 import base64
 import json
 import os
+import re
 import subprocess
 import threading
 import uuid
 from datetime import datetime
 from pathlib import Path
+
+import sys
 
 from flask import Flask, Response, jsonify, render_template, request, send_file, stream_with_context
 
@@ -40,20 +43,34 @@ try:
 except ImportError:
     HAS_MALPEDIA = False
 
+try:
+    import discovery as _discovery
+    HAS_DISCOVERY = True
+except ImportError:
+    HAS_DISCOVERY = False
+
+try:
+    import compiler as _compiler
+    HAS_COMPILER = True
+except ImportError:
+    HAS_COMPILER = False
+
 app = Flask(__name__)
 
-BASE_DIR    = Path(__file__).parent.parent
-CONFIG_DIR  = BASE_DIR / "config"
-MALWARE_DIR = BASE_DIR / "malware"
+BASE_DIR     = Path(__file__).parent.parent
+CONFIG_DIR   = BASE_DIR / "config"
+MALWARE_DIR  = BASE_DIR / "malware"
 PAYLOADS_DIR = BASE_DIR / "payloads"
-LOG_FILE    = Path(__file__).parent / "builds.json"
+SAMPLES_DIR  = BASE_DIR / "samples"
+LOG_FILE     = Path(__file__).parent / "builds.json"
+PIPELINE_DIR = BASE_DIR / "pipeline" / "sessions"
 
-# ── in-memory job store ────────────────────────────────────────────────────────
+# -- in-memory job store --------------------------------------------------------
 _builds: dict = {}
 _lock = threading.Lock()
 
 
-# ── helpers ────────────────────────────────────────────────────────────────────
+# -- helpers --------------------------------------------------------------------
 
 def get_modules() -> dict:
     def _dirs(p: Path) -> list[str]:
@@ -132,7 +149,7 @@ def _run_build(build_id: str, params: dict) -> None:
     _save_build(build_id)
 
 
-# ── standard routes ────────────────────────────────────────────────────────────
+# -- standard routes ------------------------------------------------------------
 
 @app.route("/")
 def index():
@@ -312,7 +329,7 @@ def api_config_save(name: str):
     return jsonify({"ok": True})
 
 
-# ── C2 binary delivery routes ──────────────────────────────────────────────────
+# -- C2 binary delivery routes --------------------------------------------------
 
 @app.route("/api/c2/status")
 def api_c2_status():
@@ -664,7 +681,7 @@ def api_binary_info():
     })
 
 
-# ── chatbot routes ─────────────────────────────────────────────────────────────
+# -- chatbot routes -------------------------------------------------------------
 
 @app.route("/api/chat", methods=["POST"])
 def api_chat():
@@ -730,7 +747,7 @@ def api_scrape():
     return jsonify({"ok": True, "message": "indexer started - check /api/chat/kb_info for status"})
 
 
-# ── MITRE ATT&CK routes ───────────────────────────────────────────────────────
+# -- MITRE ATT&CK routes -------------------------------------------------------
 
 @app.route("/api/mitre/available")
 def api_mitre_available():
@@ -783,7 +800,7 @@ def api_reindex():
                 obj["detail"] = detail
             return f"data: {json.dumps(obj)}\n\n"
 
-        # ── step 1: blog post library cache ──────────────────────────────────
+        # -- step 1: blog post library cache ----------------------------------
         yield evt("library", "running", "scanning blog posts…")
         try:
             if HAS_MITRE:
@@ -795,7 +812,7 @@ def api_reindex():
         except Exception as e:
             yield evt("library", "error", str(e))
 
-        # ── step 2: semantic embeddings ───────────────────────────────────────
+        # -- step 2: semantic embeddings ---------------------------------------
         yield evt("embeddings", "running", "building semantic embeddings via Ollama…")
         try:
             import sys as _sys, os as _os
@@ -814,7 +831,7 @@ def api_reindex():
         except Exception as e:
             yield evt("embeddings", "error", str(e))
 
-        # ── step 3: knowledge base (chatbot KB scrape) ────────────────────────
+        # -- step 3: knowledge base (chatbot KB scrape) ------------------------
         yield evt("kb", "running", "scraping knowledge base from blog…")
         try:
             if HAS_CHATBOT:
@@ -857,7 +874,7 @@ def api_mitre_techniques(stix_id: str):
     return jsonify(get_group_techniques(stix_id, category))
 
 
-# ── Malpedia routes ────────────────────────────────────────────────────────────
+# -- Malpedia routes ------------------------------------------------------------
 
 @app.route("/api/malpedia/status")
 def api_malpedia_status():
@@ -896,6 +913,14 @@ def api_malpedia_family(family_id: str):
     return jsonify(_malpedia.get_family(family_id))
 
 
+@app.route("/api/malpedia/reports")
+def api_malpedia_reports():
+    if not HAS_MALPEDIA:
+        return jsonify({"error": "unavailable"}), 503
+    limit = min(int(request.args.get("limit", 50)), 200)
+    return jsonify(_malpedia.get_recent_reports(limit=limit))
+
+
 @app.route("/api/malpedia/search")
 def api_malpedia_search():
     if not HAS_MALPEDIA:
@@ -930,6 +955,223 @@ def api_semantic_rebuild():
         return jsonify({"ok": ok})
     except Exception as e:
         return jsonify({"ok": False, "error": str(e)}), 500
+
+
+# -- Module Library (discovery) ------------------------------------------------
+
+@app.route("/api/library")
+def api_library():
+    if not HAS_DISCOVERY:
+        return jsonify({"error": "discovery module not available"}), 503
+    category = request.args.get("category", "all")
+    platform = request.args.get("platform", "all")
+    q        = request.args.get("q", "").lower().strip()
+    modules  = _discovery.scan_all()
+    if category != "all":
+        modules = [m for m in modules if m["category"] == category]
+    if platform != "all":
+        modules = [m for m in modules if m["platform"] == platform]
+    if q:
+        modules = [m for m in modules if
+                   q in m["title"].lower() or
+                   q in m["slug"].lower() or
+                   any(q in a.lower() for a in m["attack_ids"])]
+    # strip heavy snippet for list view
+    return jsonify([{k: v for k, v in m.items() if k != "snippet"} for m in modules])
+
+
+@app.route("/api/library/stats")
+def api_library_stats():
+    if not HAS_DISCOVERY:
+        return jsonify({"error": "discovery module not available"}), 503
+    return jsonify(_discovery.get_stats())
+
+
+@app.route("/api/library/rebuild", methods=["POST"])
+def api_library_rebuild():
+    if not HAS_DISCOVERY:
+        return jsonify({"error": "discovery module not available"}), 503
+    def _rebuild():
+        _discovery.build_registry()
+    threading.Thread(target=_rebuild, daemon=True).start()
+    return jsonify({"ok": True, "msg": "rebuilding in background"})
+
+
+@app.route("/api/library/source")
+def api_library_source():
+    path = request.args.get("path", "")
+    if not path:
+        return "missing path", 400
+    p = Path(path)
+    if not p.exists() or not p.is_file():
+        return "not found", 404
+    try:
+        return p.read_text(encoding="utf-8", errors="replace"), 200, {"Content-Type": "text/plain; charset=utf-8"}
+    except Exception as e:
+        return str(e), 500
+
+
+@app.route("/api/library/<path:module_id>")
+def api_library_module(module_id: str):
+    if not HAS_DISCOVERY:
+        return jsonify({"error": "discovery module not available"}), 503
+    mod = _discovery.get_module(module_id)
+    if not mod:
+        return jsonify({"error": "not found"}), 404
+    # include full snippet + source text
+    src_path = Path(mod["src_path"])
+    full_src = ""
+    if src_path.exists():
+        try:
+            full_src = src_path.read_text(encoding="utf-8", errors="replace")
+        except Exception:
+            pass
+    return jsonify({**mod, "full_source": full_src})
+
+
+@app.route("/api/library/<path:module_id>/compile", methods=["POST"])
+def api_library_compile(module_id: str):
+    if not HAS_COMPILER:
+        return jsonify({"error": "compiler module not available"}), 503
+    session_id = uuid.uuid4().hex[:8]
+    result_holder: list = []
+
+    def _compile():
+        ok, log, out = _compiler.compile_module(module_id, session_id)
+        result_holder.append((ok, log, str(out) if out else None))
+
+    t = threading.Thread(target=_compile, daemon=True)
+    t.start()
+    t.join(timeout=90)
+
+    if not result_holder:
+        return jsonify({"ok": False, "error": "compilation timed out"}), 500
+
+    ok, log, out_path = result_holder[0]
+    resp: dict = {"ok": ok, "session_id": session_id, "log": log}
+    if ok and out_path:
+        p = Path(out_path)
+        resp["file"]     = p.name
+        resp["size"]     = p.stat().st_size if p.exists() else 0
+        resp["download"] = f"/api/samples/{session_id}/download/{p.name}"
+    return jsonify(resp), 200 if ok else 500
+
+
+# -- Samples -------------------------------------------------------------------
+
+def _list_samples() -> list[dict]:
+    if not SAMPLES_DIR.exists():
+        return []
+    out: list[dict] = []
+    for d in sorted(SAMPLES_DIR.iterdir(), reverse=True):
+        if not d.is_dir():
+            continue
+        files = [
+            {"name": f.name, "size": f.stat().st_size}
+            for f in d.iterdir()
+            if f.is_file() and not f.name.startswith(".")
+        ]
+        if not files:
+            continue
+        # check for pipeline session metadata
+        meta_path = PIPELINE_DIR / d.name / "meta.json"
+        meta: dict = {}
+        if meta_path.exists():
+            try:
+                meta = json.loads(meta_path.read_text())
+            except Exception:
+                pass
+        out.append({
+            "session_id": d.name,
+            "files":      files,
+            "total_size": sum(f["size"] for f in files),
+            "created":    datetime.fromtimestamp(d.stat().st_mtime).isoformat(),
+            "actor":      meta.get("actor_id", ""),
+            "ttps":       meta.get("ttps", 0),
+            "status":     meta.get("status", "built"),
+        })
+    return out
+
+
+@app.route("/api/samples")
+def api_samples():
+    return jsonify(_list_samples())
+
+
+@app.route("/api/samples/<session_id>")
+def api_sample(session_id: str):
+    if not re.match(r'^[a-f0-9]{8}$', session_id):
+        return jsonify({"error": "invalid session id"}), 400
+    d = SAMPLES_DIR / session_id
+    if not d.exists():
+        return jsonify({"error": "not found"}), 404
+    files = [{"name": f.name, "size": f.stat().st_size} for f in d.iterdir() if f.is_file()]
+    meta: dict = {}
+    meta_path = PIPELINE_DIR / session_id / "meta.json"
+    if meta_path.exists():
+        try:
+            meta = json.loads(meta_path.read_text())
+        except Exception:
+            pass
+    return jsonify({"session_id": session_id, "files": files, "meta": meta})
+
+
+@app.route("/api/samples/<session_id>/download/<filename>")
+def api_sample_download(session_id: str, filename: str):
+    if not re.match(r'^[a-f0-9]{8}$', session_id):
+        return jsonify({"error": "invalid id"}), 400
+    safe = re.sub(r'[^a-zA-Z0-9._-]', '', filename)
+    path = SAMPLES_DIR / session_id / safe
+    if not path.exists() or not path.is_file():
+        return jsonify({"error": "not found"}), 404
+    return send_file(path, as_attachment=True, download_name=safe,
+                     mimetype="application/octet-stream")
+
+
+# -- APT Pipeline --------------------------------------------------------------
+
+@app.route("/api/pipeline/run", methods=["POST"])
+def api_pipeline_run():
+    data     = request.get_json(silent=True) or {}
+    actor_id = data.get("actor_id", "").strip()
+    if not actor_id:
+        return jsonify({"error": "actor_id required"}), 400
+
+    def generate():
+        try:
+            sys.path.insert(0, str(BASE_DIR / "pipeline"))
+            from apt_pipeline import run_pipeline
+            for event in run_pipeline(actor_id):
+                yield f"data: {json.dumps(event)}\n\n"
+        except Exception as e:
+            yield f"data: {json.dumps({'step': 0, 'status': 'error', 'msg': str(e)})}\n\n"
+        finally:
+            yield "data: [DONE]\n\n"
+
+    return Response(
+        stream_with_context(generate()),
+        content_type="text/event-stream",
+        headers={"Cache-Control": "no-cache", "X-Accel-Buffering": "no"},
+    )
+
+
+@app.route("/api/pipeline/sessions")
+def api_pipeline_sessions():
+    try:
+        sys.path.insert(0, str(BASE_DIR / "pipeline"))
+        from apt_pipeline import list_sessions
+        return jsonify(list_sessions())
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
+
+
+# -- Coverage map --------------------------------------------------------------
+
+@app.route("/api/coverage")
+def api_coverage():
+    if not HAS_DISCOVERY:
+        return jsonify({}), 503
+    return jsonify(_discovery.coverage_map())
 
 
 if __name__ == "__main__":

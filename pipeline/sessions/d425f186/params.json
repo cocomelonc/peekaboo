@@ -1,0 +1,31 @@
+{
+  "payload": "meow",
+  "encryption": "speck",
+  "malware": "injection",
+  "injection": "virtualallocex",
+  "stealer": "telegram",
+  "persistence": "none",
+  "selected_modules": [
+    {
+      "attack_id": "T1203",
+      "module_id": "2021-10-20-buffer-overflow-1",
+      "title": "Buffer Overflow 1",
+      "category": "exploitation",
+      "platform": "windows"
+    },
+    {
+      "attack_id": "T1027",
+      "module_id": "2024-02-29-malware-av-evasion-19",
+      "title": "Malware Av Evasion 19",
+      "category": "evasion",
+      "platform": "windows"
+    },
+    {
+      "attack_id": "T1056.003",
+      "module_id": "2022-03-08-basic-hooking-2",
+      "title": "Windows API hooking part 2. Simple C++ example.",
+      "category": "hooking",
+      "platform": "windows"
+    }
+  ]
+}

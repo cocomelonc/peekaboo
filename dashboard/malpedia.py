@@ -5,6 +5,7 @@ https://malpedia.caad.fkie.fraunhofer.de
 """
 from __future__ import annotations
 import json
+import re
 from pathlib import Path
 
 _BASE          = Path(__file__).parent.parent
@@ -199,7 +200,7 @@ def find_family(needle: str) -> list[str]:
         needle_l = needle.lower()
         return [f for f in list_families() if needle_l in f.lower()]
 
-# ── semantic related post matching via local Ollama embeddings ──────────────
+# -- semantic related post matching via local Ollama embeddings --------------
 
 def _actor_query(actor: dict) -> str:
     parts = [actor.get("name", actor.get("id", ""))]
@@ -246,3 +247,60 @@ def _match_posts_for_actor(actor: dict, max_results: int = 8) -> list[dict]:
 
 def _match_posts_for_family(family: dict, max_results: int = 8) -> list[dict]:
     return _match_posts(_family_query(family), max_results)
+
+
+def get_recent_reports(limit: int = 50) -> list[dict]:
+    try:
+        import requests as _req
+    except ImportError:
+        return []
+
+    cfg = json.loads(_CONFIG.read_text()) if _CONFIG.exists() else {}
+    token = cfg.get("api_token", "").strip()
+    headers = {"User-Agent": "Mozilla/5.0"}
+    if token:
+        headers["Authorization"] = f"apitoken {token}"
+
+    try:
+        r = _req.get(
+            "https://malpedia.caad.fkie.fraunhofer.de/library",
+            headers=headers, timeout=15,
+        )
+        if r.status_code != 200:
+            return []
+    except Exception:
+        return []
+
+    reports: list[dict] = []
+    for row in re.finditer(
+        r'<tr class="clickable-row[^"]*"\s+data-href="([^"]+)">(.*?)</tr>',
+        r.text, re.DOTALL
+    ):
+        url  = row.group(1)
+        body = row.group(2)
+
+        date  = (re.search(r'class="date[^"]*">([^<]+)', body) or ["", ""])[1].strip() or \
+                (re.search(r'<span class="date mono-font">([^<]+)', body) or ["", ""])[1].strip()
+        org   = (re.search(r'class="organization[^"]*"[^>]*>(?:<[^>]+>)?([^<]+)', body) or ["", ""])[1].strip()
+        title = (re.search(r'class="title mono-font">([^<]+)', body) or ["", ""])[1].strip()
+
+        authors = re.findall(r'class="authors[^"]*"[^>]*>(?:<[^>]+>)?([^<]+)', body)
+        author  = authors[0].strip() if authors else ""
+
+        families = re.findall(r'data-family_name="([^"]+)"', body)
+
+        if not title or not url:
+            continue
+
+        reports.append({
+            "url":      url,
+            "title":    title,
+            "date":     date,
+            "org":      org,
+            "author":   author,
+            "families": families,
+        })
+        if len(reports) >= limit:
+            break
+
+    return reports

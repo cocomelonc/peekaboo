@@ -18,8 +18,10 @@ CLAUDE_MODEL = "claude-opus-4-6"
 GEMINI_MODEL_DEFAULT = "gemini-2.0-flash"
 OLLAMA_MODEL_DEFAULT = "qwen3:4b"
 
-# ── system prompt ──────────────────────────────────────────────────────────────
-_SYSTEM_BASE = """You are Peekaboo AI - an educational assistant for the Peekaboo Threat Simulation Framework, created by Zhassulan Zhussupov (@cocomelonc).
+# -- system prompt --------------------------------------------------------------
+_SYSTEM_BASE = """You are Peekaboo AI - a high-end technical and educational assistant for the Peekaboo Threat Simulation Framework, created by Zhassulan Zhussupov (@cocomelonc).
+
+Your primary goal is to bridge the gap between offensive research, practice and defensive implementation. You analyze the ~/hacking/meow codebase to explain how adversarial techniques operate at the binary and kernel levels.
 
 Your knowledge is grounded in the ~/hacking/meow codebase - real, working code covering:
 - **C2 (Command & Control) channels**: GitHub Issues/Comments, Telegram webhooks, Bitbucket, VirusTotal, Discord/Slack abuse
@@ -57,7 +59,7 @@ Avoid vague explanations - give concrete details about APIs, memory layouts, Win
 """
 
 
-# ── config loaders ─────────────────────────────────────────────────────────────
+# -- config loaders -------------------------------------------------------------
 
 def _get_anthropic_key() -> str:
     cfg_path = CONFIG_DIR / "anthropic_config.json"
@@ -103,7 +105,7 @@ def _get_ollama_config() -> dict:
     return defaults
 
 
-# ── knowledge base ─────────────────────────────────────────────────────────────
+# -- knowledge base -------------------------------------------------------------
 
 def _load_knowledge_base() -> str:
     if not KB_FILE.exists():
@@ -151,7 +153,7 @@ def _build_gemini_system() -> str:
     return _SYSTEM_BASE + kb_text
 
 
-# ── Claude streaming ───────────────────────────────────────────────────────────
+# -- Claude streaming -----------------------------------------------------------
 
 def _stream_claude(messages: list[dict]) -> Generator[str, None, None]:
     import anthropic
@@ -180,7 +182,7 @@ def _stream_claude(messages: list[dict]) -> Generator[str, None, None]:
         yield f"[!] Claude error: {e}"
 
 
-# ── Gemini streaming ───────────────────────────────────────────────────────────
+# -- Gemini streaming -----------------------------------------------------------
 
 def _stream_gemini(messages: list[dict]) -> Generator[str, None, None]:
     from google import genai
@@ -219,7 +221,7 @@ def _stream_gemini(messages: list[dict]) -> Generator[str, None, None]:
             yield f"[!] Gemini error: {e}"
 
 
-# ── Ollama RAG streaming ───────────────────────────────────────────────────────
+# -- Ollama RAG streaming -------------------------------------------------------
 
 def _rag_context(question: str, n: int = 6) -> str:
     """Retrieve top-n relevant posts via semantic search, return formatted context block."""
@@ -389,7 +391,7 @@ def _ollama_available() -> tuple[bool, str]:
         return False, "ollama offline"
 
 
-# ── public interface ───────────────────────────────────────────────────────────
+# -- public interface -----------------------------------------------------------
 
 def stream_chat(messages: list[dict], provider: str = "claude") -> Generator[str, None, None]:
     """
