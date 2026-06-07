@@ -1,0 +1,9 @@
+{
+  "payload": "meow",
+  "encryption": "speck",
+  "malware": "injection",
+  "injection": "virtualallocex",
+  "stealer": "telegram",
+  "persistence": "none",
+  "selected_modules": []
+}

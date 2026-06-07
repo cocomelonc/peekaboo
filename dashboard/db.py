@@ -55,6 +55,18 @@ def init() -> None:
         """)
         db.execute("CREATE INDEX IF NOT EXISTS idx_samples_created ON samples(created DESC)")
 
+        db.execute("""
+            CREATE TABLE IF NOT EXISTS reports (
+                session_id  TEXT NOT NULL,
+                idx         INTEGER NOT NULL,
+                url         TEXT NOT NULL DEFAULT '',
+                content     TEXT NOT NULL DEFAULT '',
+                created     TEXT,
+                PRIMARY KEY (session_id, idx)
+            )
+        """)
+        db.execute("CREATE INDEX IF NOT EXISTS idx_reports_session ON reports(session_id)")
+
 
 # --------------------------------------------------------------------------- #
 #  Helpers                                                                      #
@@ -79,7 +91,7 @@ def _sample_row(row: sqlite3.Row) -> dict:
 
 
 # --------------------------------------------------------------------------- #
-#  Builds — writes                                                              #
+#  Builds - writes                                                              #
 # --------------------------------------------------------------------------- #
 
 def save_build(build: dict) -> None:
@@ -109,7 +121,7 @@ def clear_builds() -> None:
 
 
 # --------------------------------------------------------------------------- #
-#  Builds — reads                                                               #
+#  Builds - reads                                                               #
 # --------------------------------------------------------------------------- #
 
 def get_build(build_id: str) -> dict | None:
@@ -127,7 +139,7 @@ def get_builds(limit: int = 200) -> list[dict]:
 
 
 # --------------------------------------------------------------------------- #
-#  Samples — writes                                                             #
+#  Samples - writes                                                             #
 # --------------------------------------------------------------------------- #
 
 def save_sample(sample: dict) -> None:
@@ -156,7 +168,7 @@ def clear_samples() -> None:
 
 
 # --------------------------------------------------------------------------- #
-#  Samples — reads                                                              #
+#  Samples - reads                                                              #
 # --------------------------------------------------------------------------- #
 
 def get_samples(limit: int = 200) -> list[dict]:
@@ -165,6 +177,44 @@ def get_samples(limit: int = 200) -> list[dict]:
             "SELECT * FROM samples ORDER BY created DESC LIMIT ?", (limit,)
         ).fetchall()
     return [_sample_row(r) for r in rows]
+
+
+# --------------------------------------------------------------------------- #
+#  Reports - writes                                                             #
+# --------------------------------------------------------------------------- #
+
+def save_report(session_id: str, idx: int, url: str, content: str) -> None:
+    with _conn() as db:
+        db.execute(
+            """
+            INSERT OR REPLACE INTO reports (session_id, idx, url, content, created)
+            VALUES (?, ?, ?, ?, ?)
+            """,
+            (session_id, idx, url, content, datetime.now().isoformat()),
+        )
+
+
+def clear_reports() -> None:
+    with _conn() as db:
+        db.execute("DELETE FROM reports")
+
+
+def clear_reports_for_session(session_id: str) -> None:
+    with _conn() as db:
+        db.execute("DELETE FROM reports WHERE session_id = ?", (session_id,))
+
+
+# --------------------------------------------------------------------------- #
+#  Reports - reads                                                              #
+# --------------------------------------------------------------------------- #
+
+def get_reports(session_id: str) -> list[dict]:
+    with _conn() as db:
+        rows = db.execute(
+            "SELECT idx, url, content FROM reports WHERE session_id = ? ORDER BY idx",
+            (session_id,),
+        ).fetchall()
+    return [dict(r) for r in rows]
 
 
 # --------------------------------------------------------------------------- #

@@ -1089,6 +1089,7 @@ def api_samples():
 def api_samples_clear():
     try:
         _db.clear_samples()
+        _db.clear_reports()
         import shutil
         if SAMPLES_DIR.exists():
             for d in SAMPLES_DIR.iterdir():

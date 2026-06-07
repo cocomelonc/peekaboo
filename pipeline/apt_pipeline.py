@@ -19,6 +19,7 @@ _SAMPLES  = _BASE / "samples"
 _CFG      = _BASE / "config"
 
 sys.path.insert(0, str(_BASE / "dashboard"))
+import db as _db
 
 ATTACK_RE = re.compile(r'\bT1\d{3}(?:\.\d{3})?\b')
 
@@ -66,14 +67,12 @@ def agent_fetch(actor_id: str) -> tuple[bool, dict]:
 
 # --- Agent 2: Report downloader ----------------------------------------------
 
-def agent_download(actor_data: dict, session_dir: Path) -> list[Path]:
+def agent_download(actor_data: dict, session_id: str) -> list[str]:
+    """Download reports, store content in DB, return list of content strings."""
     try:
         import requests as _req
     except ImportError:
         return []
-
-    reports_dir = session_dir / "reports"
-    reports_dir.mkdir(parents=True, exist_ok=True)
 
     urls: list[str] = []
     for fam in actor_data.get("families", []):
@@ -81,40 +80,38 @@ def agent_download(actor_data: dict, session_dir: Path) -> list[Path]:
     urls.extend(actor_data.get("refs", [])[:6])
     urls = list(dict.fromkeys(urls))[:10]
 
-    downloaded: list[Path] = []
-    for i, url in enumerate(urls):
+    contents: list[str] = []
+    idx = 0
+    for url in urls:
         try:
             r = _req.get(url, timeout=15, headers={"User-Agent": "Mozilla/5.0"})
             if r.status_code == 200:
                 text = re.sub(r'<[^>]+>', ' ', r.text)
-                text = re.sub(r'\s+', ' ', text).strip()
-                p = reports_dir / f"report_{i:02d}.txt"
-                p.write_text(text[:60000], encoding="utf-8", errors="replace")
-                downloaded.append(p)
+                text = re.sub(r'\s+', ' ', text).strip()[:60000]
+                _db.save_report(session_id, idx, url, text)
+                contents.append(text)
+                idx += 1
         except Exception:
             continue
-    return downloaded
+    return contents
 
 
 # --- Agent 3: TTP extractor --------------------------------------------------
 
-def _extract_regex(paths: list[Path]) -> list[dict]:
+def _extract_regex(contents: list[str]) -> list[dict]:
     found: dict[str, dict] = {}
-    for p in paths:
-        try:
-            text = p.read_text(encoding="utf-8", errors="replace")
-            for m in ATTACK_RE.finditer(text):
-                aid = m.group()
-                if aid not in found:
-                    base   = aid.split(".")[0]
-                    tactic = _TACTIC_MAP.get(aid) or _TACTIC_MAP.get(base) or "unknown"
-                    found[aid] = {"id": aid, "name": aid, "tactic": tactic, "source": p.name}
-        except Exception:
-            continue
+    for i, text in enumerate(contents):
+        for m in ATTACK_RE.finditer(text):
+            aid = m.group()
+            if aid not in found:
+                base   = aid.split(".")[0]
+                tactic = _TACTIC_MAP.get(aid) or _TACTIC_MAP.get(base) or "unknown"
+                found[aid] = {"id": aid, "name": aid, "tactic": tactic,
+                               "source": f"report_{i:02d}"}
     return list(found.values())
 
 
-def _extract_claude(paths: list[Path]) -> list[dict]:
+def _extract_claude(contents: list[str]) -> list[dict]:
     try:
         import anthropic
         cfg     = _load_cfg("anthropic_config")
@@ -122,12 +119,7 @@ def _extract_claude(paths: list[Path]) -> list[dict]:
         if not api_key or "xxx" in api_key:
             return []
 
-        chunks = []
-        for p in paths[:4]:
-            try:
-                chunks.append(p.read_text(encoding="utf-8", errors="replace")[:8000])
-            except Exception:
-                continue
+        chunks = [c[:8000] for c in contents[:4] if c]
         if not chunks:
             return []
 
@@ -160,10 +152,10 @@ def _extract_claude(paths: list[Path]) -> list[dict]:
     return []
 
 
-def agent_extract_ttps(report_paths: list[Path], actor_data: dict) -> list[dict]:
-    ttps = _extract_claude(report_paths)
+def agent_extract_ttps(report_contents: list[str], actor_data: dict) -> list[dict]:
+    ttps = _extract_claude(report_contents)
     if not ttps:
-        ttps = _extract_regex(report_paths)
+        ttps = _extract_regex(report_contents)
 
     seen: set[str]      = set()
     validated: list[dict] = []
@@ -301,15 +293,15 @@ def run_pipeline(actor_id: str) -> Generator[dict, None, None]:
     yield {"step": 1, "status": "done", "msg": f"fetched: {actor_name}",
            "data": {k: v for k, v in actor_data.items() if k not in ("snippet", "related_posts")}}
 
-    # 2. Download reports
+    # 2. Download reports (stored in DB, not filesystem)
     yield {"step": 2, "status": "running", "msg": "downloading threat reports…"}
-    report_paths = agent_download(actor_data, session_dir)
-    yield {"step": 2, "status": "done", "msg": f"{len(report_paths)} report(s) downloaded",
-           "data": [p.name for p in report_paths]}
+    report_contents = agent_download(actor_data, session_id)
+    yield {"step": 2, "status": "done", "msg": f"{len(report_contents)} report(s) downloaded",
+           "data": [f"report_{i:02d}" for i in range(len(report_contents))]}
 
     # 3. Extract TTPs
     yield {"step": 3, "status": "running", "msg": "extracting TTPs (Claude API + regex)…"}
-    ttps = agent_extract_ttps(report_paths, actor_data)
+    ttps = agent_extract_ttps(report_contents, actor_data)
     (session_dir / "ttps.json").write_text(json.dumps(ttps, indent=2))
     yield {"step": 3, "status": "done", "msg": f"{len(ttps)} TTPs extracted", "data": ttps}
 
