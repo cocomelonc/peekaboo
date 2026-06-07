@@ -492,6 +492,7 @@ code{font-family:var(--mono);font-size:12px;background:var(--bg4);padding:1px 5p
       <span style="font-size:18px">💾</span>
       <div class="card-title">Compiled Samples</div>
       <button class="btn btn-ghost btn-sm" style="margin-left:auto" onclick="loadSamples()">↻ Refresh</button>
+      <button class="btn btn-sm" style="margin-left:8px;background:rgba(255,80,80,.12);border-color:rgba(255,80,80,.35);color:#ff6b6b" onclick="clearSamples()">clear</button>
     </div>
     <table class="tbl">
       <thead><tr>
@@ -1193,6 +1194,12 @@ async function loadBuildHistory() {
 // -----------------------------------------------------------------
 // Samples
 // -----------------------------------------------------------------
+async function clearSamples() {
+  if (!confirm('Clear all compiled samples? This will delete the files from disk.')) return;
+  await fetch('/api/samples', {method:'DELETE'});
+  loadSamples();
+}
+
 async function loadSamples() {
   const tbody = document.getElementById('samples-tbody');
   const empty = document.getElementById('samples-empty');

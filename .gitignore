@@ -3,4 +3,5 @@
 *.exe
 dashboard/__pycache__/
 dashboard/peekaboo.db*
+dashboard/builds.json
 data/enterprise-attack.json

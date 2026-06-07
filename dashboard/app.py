@@ -70,6 +70,9 @@ _db.init()
 _migrated = _db.migrate_json(_LEGACY_JSON)
 if _migrated:
     print(f"[db] migrated {_migrated} builds from builds.json → peekaboo.db")
+_migrated_s = _db.migrate_samples(SAMPLES_DIR, PIPELINE_DIR)
+if _migrated_s:
+    print(f"[db] migrated {_migrated_s} samples from filesystem → peekaboo.db")
 
 # -- in-memory job store --------------------------------------------------------
 _builds: dict = {}
@@ -1060,51 +1063,40 @@ def api_library_compile(module_id: str):
     resp: dict = {"ok": ok, "session_id": session_id, "log": log}
     if ok and out_path:
         p = Path(out_path)
+        size = p.stat().st_size if p.exists() else 0
         resp["file"]     = p.name
-        resp["size"]     = p.stat().st_size if p.exists() else 0
+        resp["size"]     = size
         resp["download"] = f"/api/samples/{session_id}/download/{p.name}"
+        _db.save_sample({
+            "session_id": session_id,
+            "files":      [{"name": p.name, "size": size}],
+            "total_size": size,
+            "actor":      "",
+            "ttps":       0,
+            "status":     "built",
+        })
     return jsonify(resp), 200 if ok else 500
 
 
 # -- Samples -------------------------------------------------------------------
 
-def _list_samples() -> list[dict]:
-    if not SAMPLES_DIR.exists():
-        return []
-    out: list[dict] = []
-    for d in sorted(SAMPLES_DIR.iterdir(), reverse=True):
-        if not d.is_dir():
-            continue
-        files = [
-            {"name": f.name, "size": f.stat().st_size}
-            for f in d.iterdir()
-            if f.is_file() and not f.name.startswith(".")
-        ]
-        if not files:
-            continue
-        # check for pipeline session metadata
-        meta_path = PIPELINE_DIR / d.name / "meta.json"
-        meta: dict = {}
-        if meta_path.exists():
-            try:
-                meta = json.loads(meta_path.read_text())
-            except Exception:
-                pass
-        out.append({
-            "session_id": d.name,
-            "files":      files,
-            "total_size": sum(f["size"] for f in files),
-            "created":    datetime.fromtimestamp(d.stat().st_mtime).isoformat(),
-            "actor":      meta.get("actor_id", ""),
-            "ttps":       meta.get("ttps", 0),
-            "status":     meta.get("status", "built"),
-        })
-    return out
-
-
 @app.route("/api/samples")
 def api_samples():
-    return jsonify(_list_samples())
+    return jsonify(_db.get_samples())
+
+
+@app.route("/api/samples", methods=["DELETE"])
+def api_samples_clear():
+    try:
+        _db.clear_samples()
+        import shutil
+        if SAMPLES_DIR.exists():
+            for d in SAMPLES_DIR.iterdir():
+                if d.is_dir():
+                    shutil.rmtree(d, ignore_errors=True)
+        return jsonify({"ok": True})
+    except Exception as e:
+        return jsonify({"ok": False, "error": str(e)}), 500
 
 
 @app.route("/api/samples/<session_id>")
@@ -1152,6 +1144,35 @@ def api_pipeline_run():
             from apt_pipeline import run_pipeline
             for event in run_pipeline(actor_id):
                 yield f"data: {json.dumps(event)}\n\n"
+                # persist completed pipeline sample to DB
+                if event.get("status") == "complete":
+                    d = event.get("data", {})
+                    sid = d.get("session_id", "")
+                    if sid:
+                        fnames = d.get("files", [])
+                        files, total = [], 0
+                        for fn in fnames:
+                            fp = SAMPLES_DIR / sid / fn
+                            sz = fp.stat().st_size if fp.exists() else 0
+                            files.append({"name": fn, "size": sz})
+                            total += sz
+                        # ttps count from step 3 event is already in meta.json;
+                        # read it back for accuracy
+                        meta: dict = {}
+                        meta_path = PIPELINE_DIR / sid / "meta.json"
+                        if meta_path.exists():
+                            try:
+                                meta = json.loads(meta_path.read_text())
+                            except Exception:
+                                pass
+                        _db.save_sample({
+                            "session_id": sid,
+                            "files":      files,
+                            "total_size": total,
+                            "actor":      actor_id,
+                            "ttps":       meta.get("ttps", 0),
+                            "status":     "success",
+                        })
         except Exception as e:
             yield f"data: {json.dumps({'step': 0, 'status': 'error', 'msg': str(e)})}\n\n"
         finally:
