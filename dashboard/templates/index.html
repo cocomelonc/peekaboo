@@ -597,39 +597,46 @@ code{font-family:var(--mono);font-size:12px;background:var(--bg4);padding:1px 5p
 
 <!-- ════════ MITRE ATT&CK ════════ -->
 <div id="panel-mitre" class="panel">
+  <div class="grid-stats mb-16" id="mitre-stats-row"></div>
+
   <div class="grid-2" style="margin-bottom:18px;align-items:start">
     <div class="card">
-      <div class="card-header"><div class="card-title">ATT&amp;CK Groups</div>
+      <div class="card-header">
+        <span style="font-size:20px">👥</span>
+        <div><div class="card-title">ATT&amp;CK Groups</div><div class="card-sub">click a group to browse techniques</div></div>
         <button class="btn btn-ghost btn-sm" style="margin-left:auto" onclick="loadMitreGroups()">Load</button>
       </div>
       <input type="text" id="mitre-group-search" placeholder="🔍 search groups…" style="margin-bottom:10px" oninput="filterMitreGroups()">
-      <div id="mitre-groups-list" style="max-height:400px;overflow-y:auto" class="flex flex-col gap-8"></div>
+      <div id="mitre-groups-list" style="max-height:460px;overflow-y:auto;display:flex;flex-direction:column;gap:4px">
+        <div class="text-dim text-sm" style="padding:8px 0;text-align:center">click Load to fetch ATT&amp;CK groups</div>
+      </div>
     </div>
-    <div class="card" style="display:flex;flex-direction:column;max-height:520px">
+
+    <div class="card" style="display:flex;flex-direction:column;min-height:360px">
       <div class="card-header" style="flex-shrink:0">
+        <span style="font-size:20px">🛡️</span>
         <div class="card-title" id="mitre-group-title">Select a group</div>
         <span id="mitre-tech-count" class="badge badge-dim" style="margin-left:auto;display:none"></span>
       </div>
-      <div id="mitre-techniques-list" style="overflow-y:auto;flex:1;padding-right:4px"></div>
-    </div>
-  </div>
-  <div class="card">
-    <div class="card-header">
-      <div class="card-title">peekaboo Technique Library</div>
-      <div style="margin-left:auto;display:flex;gap:8px">
-        <select id="lib-cat-filter" onchange="loadLibCategory()" style="font-size:12px;padding:5px 8px">
-          <option value="all">All categories</option>
-          <option value="injection">Injection</option>
-          <option value="evasion">Evasion</option>
-          <option value="persistence">Persistence</option>
-          <option value="cryptography">Cryptography</option>
-          <option value="tricks">Tricks</option>
-          <option value="c2">C2</option>
-        </select>
-        <button class="btn btn-ghost btn-sm" onclick="rebuildLibCache()">↻ Rebuild</button>
+      <div id="mitre-techniques-grid" style="overflow-y:auto;flex:1;padding:4px 2px">
+        <div class="empty" style="padding:50px 20px"><div class="empty-icon">👈</div><div>Select a group from the left panel</div></div>
       </div>
     </div>
-    <div id="lib-entries" style="display:flex;flex-direction:column;gap:10px"></div>
+  </div>
+
+  <div class="card">
+    <div class="card-header">
+      <span style="font-size:20px">📚</span>
+      <div><div class="card-title">peekaboo Technique Library</div><div class="card-sub" id="mitre-lib-sub">blog posts mapped to ATT&amp;CK techniques</div></div>
+      <button class="btn btn-ghost btn-sm" style="margin-left:auto" onclick="rebuildLibCache()">↻ Rebuild</button>
+    </div>
+    <div class="filter-bar">
+      <div id="mitre-lib-cat-pills" style="display:flex;gap:5px;flex-wrap:wrap"></div>
+      <input type="text" placeholder="🔍  search…" id="mitre-lib-search" oninput="filterMitreLib()" style="flex:1;min-width:140px;max-width:220px">
+    </div>
+    <div id="lib-entries" class="grid-3"></div>
+    <div id="lib-entries-empty" class="empty" style="display:none"><div class="empty-icon">🔍</div><div>No techniques match your filters</div></div>
+    <div id="lib-entries-loading" class="loading-full"><div class="spinner"></div> loading technique library…</div>
   </div>
 </div>
 
@@ -879,7 +886,7 @@ function showPanel(id) {
   if (id === 'coverage')  loadCoverage();
   if (id === 'beacons')   loadBeacons();
   if (id === 'malpedia')  { if (!malpReports.length) loadMalpReports(); }
-  if (id === 'mitre')     loadLibCategory();
+  if (id === 'mitre')     loadMitreLib();
   if (id === 'settings')  loadSettings();
   if (id === 'chat')      loadChatStatus();
   if (id === 'c2')        { checkC2Status(); checkBinaryInfo(); }
@@ -1755,6 +1762,22 @@ async function loadCoverage() {
 // -----------------------------------------------------------------
 // MITRE ATT&CK
 // -----------------------------------------------------------------
+const MITRE_CAT_COLORS = {
+  injection:    '#FF453A',
+  evasion:      '#FFD60A',
+  persistence:  '#0A84FF',
+  cryptography: '#BF5AF2',
+  tricks:       '#FF9F0A',
+  c2:           '#30D158',
+  linux:        '#64D2FF',
+  macos:        '#8E8E93',
+  other:        '#636366',
+};
+
+let mitreCatFilter = 'all';
+let mitreLibSearch  = '';
+let mitreLibAll     = [];
+
 async function loadMitreGroups() {
   const list = document.getElementById('mitre-groups-list');
   list.innerHTML = '<div class="loading-full" style="padding:14px"><div class="spinner"></div></div>';
@@ -1765,11 +1788,17 @@ async function loadMitreGroups() {
 
 function renderMitreGroups(groups) {
   const list = document.getElementById('mitre-groups-list');
-  if (!groups.length) { list.innerHTML = '<div class="text-dim text-sm">No groups</div>'; return; }
+  if (!groups.length) {
+    list.innerHTML = '<div class="text-dim text-sm" style="padding:10px 0;text-align:center">No groups found</div>';
+    return;
+  }
   list.innerHTML = groups.map(g => `
-    <div onclick="loadGroupTechniques('${g.id}','${escAttr(g.name)}')" style="padding:7px 10px;border-radius:var(--rs);cursor:pointer;transition:background .12s" onmouseover="this.style.background='var(--bg3)'" onmouseout="this.style.background=''">
+    <div onclick="loadGroupTechniques('${escAttr(g.id)}','${escAttr(g.name)}')"
+         style="padding:9px 12px;border-radius:var(--rs);cursor:pointer;border:1px solid var(--sep);background:var(--bg3);transition:all .15s"
+         onmouseover="this.style.borderColor='rgba(181,123,255,.4)';this.style.background='var(--bg4)'"
+         onmouseout="this.style.borderColor='var(--sep)';this.style.background='var(--bg3)'">
       <div style="font-size:13px;font-weight:500">${escHtml(g.name)}</div>
-      ${g.aliases?.length ? `<div class="text-xs text-dim">${g.aliases.slice(0,3).join(', ')}</div>` : ''}
+      ${g.aliases?.length ? `<div class="text-xs text-dim" style="margin-top:2px">${g.aliases.slice(0,3).join(' · ')}</div>` : ''}
     </div>`).join('');
 }
 
@@ -1782,57 +1811,144 @@ function filterMitreGroups() {
 
 async function loadGroupTechniques(stixId, name) {
   document.getElementById('mitre-group-title').textContent = name;
-  const list = document.getElementById('mitre-techniques-list');
-  list.innerHTML = '<div class="loading-full" style="padding:14px"><div class="spinner"></div></div>';
+  const grid = document.getElementById('mitre-techniques-grid');
+  grid.innerHTML = '<div class="loading-full" style="padding:30px"><div class="spinner"></div></div>';
+  const cnt = document.getElementById('mitre-tech-count');
+  cnt.style.display = 'none';
+
   const techs = await fetch(`/api/mitre/group/${stixId}/techniques`).then(r=>r.json()).catch(()=>[]);
   if (!techs.length) {
-    list.innerHTML = '<div class="text-dim text-sm">No techniques found</div>';
-    const cnt = document.getElementById('mitre-tech-count');
-    cnt.style.display = 'none';
+    grid.innerHTML = '<div class="empty" style="padding:40px"><div class="empty-icon">🔍</div><div>No techniques found for this group</div></div>';
     return;
   }
-  const cnt = document.getElementById('mitre-tech-count');
-  cnt.textContent = techs.length + ' techniques';
+  cnt.textContent = techs.length + ' technique' + (techs.length !== 1 ? 's' : '');
   cnt.style.display = '';
-  list.innerHTML = techs.map(t => `
-    <div style="padding:8px 0;border-bottom:1px solid var(--sep)">
-      <div style="display:flex;align-items:center;gap:8px">
-        <span class="badge badge-red mono">${t.attack_id}</span>
-        <span class="fw-600 text-sm">${escHtml(t.name)}</span>
-        ${t.has_example ? '<span class="badge badge-green text-xs">✓ implemented</span>' : ''}
-        <span class="badge badge-dim text-xs" style="margin-left:auto">${t.category}</span>
-      </div>
-      ${t.description ? `<div class="text-xs text-dim" style="margin-top:4px">${escHtml(t.description.slice(0,120))}…</div>` : ''}
-      ${t.snippet ? `<pre style="margin-top:6px;max-height:140px"><code class="language-c">${escHtml(t.snippet.slice(0,600))}</code></pre>` : ''}
-    </div>`).join('');
-  if (typeof hljs !== 'undefined') list.querySelectorAll('pre code').forEach(el => { delete el.dataset.highlighted; hljs.highlightElement(el); });
+
+  const cards = techs.map(t => {
+    const c       = MITRE_CAT_COLORS[t.category] || MITRE_CAT_COLORS.other;
+    const tactics = (t.tactics||[]).slice(0,2).map(tc =>
+      `<span class="badge badge-dim" style="font-size:9px">${tc.replace(/-/g,' ')}</span>`).join('');
+    const snippet = (t.snippet||'').split('\n').slice(0,3).join('\n');
+    return `
+      <div class="mod-card">
+        <div class="mod-card-bar" style="background:${c}"></div>
+        <div class="mod-card-body">
+          <div class="mod-card-meta" style="margin-bottom:6px">
+            <span class="badge badge-red" style="font-family:var(--mono);font-size:10px">${escHtml(t.attack_id)}</span>
+            ${t.has_example ? '<span class="badge badge-green" style="font-size:9px">✓ peekaboo</span>' : ''}
+            <span class="mod-card-date" style="margin-left:auto">${escHtml(t.category)}</span>
+          </div>
+          <div class="mod-card-title">${escHtml(t.name)}</div>
+          <div class="mod-card-meta" style="margin-top:4px">${tactics}</div>
+          ${t.description ? `<div class="text-xs text-dim" style="margin-top:5px;line-height:1.45">${escHtml(t.description.slice(0,110))}…</div>` : ''}
+          ${snippet ? `<div class="mod-card-snippet">${escHtml(snippet)}</div>` : ''}
+        </div>
+        <div class="mod-card-foot">
+          ${t.blog_url ? `<a href="${t.blog_url}" target="_blank" class="btn btn-ghost btn-xs">📖 Blog</a>` : '<span class="text-xs text-dim" style="padding:2px 8px">no post</span>'}
+        </div>
+      </div>`;
+  }).join('');
+
+  grid.innerHTML = `<div class="grid-3" style="padding:4px 0">${cards}</div>`;
 }
 
-async function loadLibCategory() {
-  const cat = document.getElementById('lib-cat-filter')?.value || 'all';
-  const entries = await fetch(`/api/mitre/library?category=${cat}`).then(r=>r.json()).catch(()=>[]);
-  const el = document.getElementById('lib-entries');
-  if (!entries.length) { el.innerHTML = '<div class="text-dim text-sm">No entries</div>'; return; }
-  el.innerHTML = entries.map(e => `
-    <div style="border:1px solid var(--sep);border-radius:var(--rs);padding:12px">
-      <div style="display:flex;align-items:center;gap:8px;margin-bottom:6px">
-        ${(e.attack_ids||[]).map(a=>`<span class="badge badge-red mono">${a}</span>`).join('')}
-        <span class="fw-600 text-sm">${escHtml(e.title)}</span>
-        ${e.implemented ? '<span class="badge badge-green text-xs">✓ peekaboo</span>' : '<span class="badge badge-dim text-xs">library</span>'}
-        <span class="badge badge-dim text-xs" style="margin-left:auto">${e.category}</span>
-        ${e.has_post ? `<a href="${e.blog_url}" target="_blank" class="btn btn-ghost btn-xs">📖</a>` : ''}
-      </div>
-      ${e.snippet ? `<pre style="max-height:120px"><code class="language-c">${escHtml(e.snippet.slice(0,500))}</code></pre>` : ''}
-    </div>`).join('');
-  if (typeof hljs !== 'undefined') {
-    el.querySelectorAll('pre code').forEach(c => { delete c.dataset.highlighted; hljs.highlightElement(c); });
+// ----- Technique Library -----
+
+async function loadMitreLib() {
+  document.getElementById('lib-entries').innerHTML = '';
+  document.getElementById('lib-entries-empty').style.display = 'none';
+  document.getElementById('lib-entries-loading').style.display = 'flex';
+
+  mitreLibAll = await fetch('/api/mitre/library').then(r=>r.json()).catch(()=>[]);
+  document.getElementById('lib-entries-loading').style.display = 'none';
+
+  if (!mitreLibAll.length) {
+    document.getElementById('lib-entries-empty').style.display = 'block';
+    return;
   }
+
+  // build category pills from loaded data
+  const cats = [...new Set(mitreLibAll.map(e => e.category))].sort();
+  const impl  = mitreLibAll.filter(e => e.implemented).length;
+  document.getElementById('mitre-lib-sub').textContent =
+    `${mitreLibAll.length} posts · ${impl} implemented in peekaboo`;
+
+  // stats row
+  document.getElementById('mitre-stats-row').innerHTML = `
+    <div class="stat"><div class="stat-val text-purple">${mitreLibAll.length}</div><div class="stat-label">Blog posts</div></div>
+    <div class="stat"><div class="stat-val text-green">${impl}</div><div class="stat-label">Implemented</div></div>
+    <div class="stat"><div class="stat-val" style="color:var(--yellow)">${mitreLibAll.length - impl}</div><div class="stat-label">Library only</div></div>
+    <div class="stat"><div class="stat-val text-blue">${cats.length}</div><div class="stat-label">Categories</div></div>
+  `;
+
+  const pils = document.getElementById('mitre-lib-cat-pills');
+  pils.innerHTML = `<span class="filter-pill active" id="mcat-all" onclick="setMitreCat('all')">All <span style="opacity:.6;font-size:10px">${mitreLibAll.length}</span></span>`
+    + cats.map(cat => {
+        const n = mitreLibAll.filter(e => e.category === cat).length;
+        const c = MITRE_CAT_COLORS[cat] || '#636366';
+        return `<span class="filter-pill" id="mcat-${cat}" onclick="setMitreCat('${cat}')"
+                  style="--cat-col:${c}">${cat} <span style="opacity:.6;font-size:10px">${n}</span></span>`;
+      }).join('');
+
+  mitreCatFilter = 'all';
+  mitreLibSearch  = '';
+  renderMitreLibGrid();
+}
+
+function setMitreCat(cat) {
+  mitreCatFilter = cat;
+  document.querySelectorAll('#mitre-lib-cat-pills .filter-pill').forEach(p => p.classList.remove('active'));
+  document.getElementById('mcat-' + cat)?.classList.add('active');
+  renderMitreLibGrid();
+}
+
+function filterMitreLib() {
+  mitreLibSearch = document.getElementById('mitre-lib-search').value.toLowerCase().trim();
+  renderMitreLibGrid();
+}
+
+function renderMitreLibGrid() {
+  let entries = mitreLibAll;
+  if (mitreCatFilter !== 'all') entries = entries.filter(e => e.category === mitreCatFilter);
+  if (mitreLibSearch) entries = entries.filter(e =>
+    e.title.toLowerCase().includes(mitreLibSearch) ||
+    (e.attack_ids||[]).some(a => a.toLowerCase().includes(mitreLibSearch)) ||
+    e.category.includes(mitreLibSearch)
+  );
+
+  const grid  = document.getElementById('lib-entries');
+  const empty = document.getElementById('lib-entries-empty');
+  if (!entries.length) { grid.innerHTML = ''; empty.style.display = 'block'; return; }
+  empty.style.display = 'none';
+
+  grid.innerHTML = entries.map(e => {
+    const c       = MITRE_CAT_COLORS[e.category] || MITRE_CAT_COLORS.other;
+    const ids     = (e.attack_ids||[]).map(a => `<span class="badge badge-red" style="font-size:10px">${a}</span>`).join('');
+    const snippet = (e.snippet||'').split('\n').slice(0,3).join('\n');
+    return `
+      <div class="mod-card">
+        <div class="mod-card-bar" style="background:${c}"></div>
+        <div class="mod-card-body">
+          <div class="mod-card-title">${escHtml(e.title)}</div>
+          <div class="mod-card-meta">
+            <span class="badge" style="background:${c}22;color:${c};font-size:10px">${e.category}</span>
+            ${ids}
+            ${e.implemented ? '<span class="badge badge-green" style="font-size:10px">✓ peekaboo</span>' : ''}
+            <span class="mod-card-date" style="margin-left:auto">${e.date}</span>
+          </div>
+          ${snippet ? `<div class="mod-card-snippet">${escHtml(snippet)}</div>` : ''}
+        </div>
+        <div class="mod-card-foot">
+          ${e.blog_url ? `<a href="${e.blog_url}" target="_blank" class="btn btn-ghost btn-xs">📖 Blog</a>` : '<span class="text-xs text-dim" style="padding:2px 8px">no post</span>'}
+        </div>
+      </div>`;
+  }).join('');
 }
 
 async function rebuildLibCache() {
   toast('Rebuilding library cache…', 'info');
   await fetch('/api/mitre/library/rebuild', {method:'POST'});
-  loadLibCategory();
+  loadMitreLib();
 }
 
 // -----------------------------------------------------------------
