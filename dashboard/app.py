@@ -62,8 +62,14 @@ CONFIG_DIR   = BASE_DIR / "config"
 MALWARE_DIR  = BASE_DIR / "malware"
 PAYLOADS_DIR = BASE_DIR / "payloads"
 SAMPLES_DIR  = BASE_DIR / "samples"
-LOG_FILE     = Path(__file__).parent / "builds.json"
 PIPELINE_DIR = BASE_DIR / "pipeline" / "sessions"
+_LEGACY_JSON = Path(__file__).parent / "builds.json"
+
+import db as _db
+_db.init()
+_migrated = _db.migrate_json(_LEGACY_JSON)
+if _migrated:
+    print(f"[db] migrated {_migrated} builds from builds.json → peekaboo.db")
 
 # -- in-memory job store --------------------------------------------------------
 _builds: dict = {}
@@ -105,16 +111,9 @@ def _find_latest_binary() -> Path | None:
 
 
 def _save_build(build_id: str) -> None:
-    logs: list = []
-    if LOG_FILE.exists():
-        try:
-            logs = json.loads(LOG_FILE.read_text())
-        except Exception:
-            logs = []
     with _lock:
         entry = dict(_builds.get(build_id, {}))
-    logs.append(entry)
-    LOG_FILE.write_text(json.dumps(logs[-100:], indent=2))
+    _db.save_build(entry)
 
 
 def _run_build(build_id: str, params: dict) -> None:
@@ -183,6 +182,8 @@ def api_build():
 def api_build_status(build_id: str):
     with _lock:
         job = dict(_builds.get(build_id, {}))
+    if not job:
+        job = _db.get_build(build_id) or {}
     if not job:
         return jsonify({"error": "not found"}), 404
     return jsonify(job)
@@ -274,10 +275,9 @@ def api_beacons():
 
 @app.route("/api/logs")
 def api_logs():
-    if not LOG_FILE.exists():
-        return jsonify([])
     try:
-        return jsonify(json.loads(LOG_FILE.read_text()))
+        limit = min(int(request.args.get("limit", 10)), 200)
+        return jsonify(_db.get_builds(limit))
     except Exception:
         return jsonify([])
 

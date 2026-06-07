@@ -2,4 +2,5 @@
 *.dll
 *.exe
 dashboard/__pycache__/
+dashboard/peekaboo.db*
 data/enterprise-attack.json

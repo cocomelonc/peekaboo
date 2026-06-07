@@ -1168,7 +1168,7 @@ async function loadBuildHistory() {
   const logs = await fetch('/api/logs').then(r=>r.json()).catch(()=>[]);
   const tbody = document.getElementById('build-history-tbody');
   if (!logs.length) { tbody.innerHTML = '<tr><td colspan="7" class="text-dim text-sm" style="padding:14px">no builds yet</td></tr>'; return; }
-  tbody.innerHTML = logs.slice().reverse().slice(0,20).map(b => {
+  tbody.innerHTML = logs.slice(0,10).map(b => {
     const p = b.params||{};
     const st = b.status === 'success' ? 'badge-green' : 'badge-red';
     return `<tr>
