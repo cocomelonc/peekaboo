@@ -22,6 +22,7 @@ Peekaboo is a modular framework designed to safely emulate malware behavior. It 
 - **MITRE ATT&CK R&D** - browse 200+ blog post techniques mapped to ATT&CK IDs with inline source code (C, C++, Nim, assembly).
 - **Malpedia integration** - threat actor and malware family lookup with semantic blog post matching via local LLM embeddings.
 - **AI assistant** - local RAG chatbot (Ollama/qwen3) trained on blog posts and codebase; also supports Claude and Gemini.
+- **APT campaign pipeline** - end-to-end automated pipeline: Malpedia actor → threat reports → TTP extraction (Claude API + regex) → module selection → binary compile. Full session history stored in SQLite with per-session report links, TTPs, and download access.
 - **safe by design:** Focuses on telemetry generation (process creation, network connections) rather than actual system damage.      
 
 ## architecture
@@ -67,6 +68,7 @@ cd dashboard && python3 app.py
 | **C2** | Deliver compiled binaries over Telegram, GitHub, VirusTotal, Bitbucket |
 | **Config** | Inline editor for all API keys and service configs (Telegram, GitHub, Azure, Angelcam, Ollama, Gemini, etc.) |
 | **AI Assistant** | RAG chatbot with support for Claude, Gemini, and local Ollama (qwen3); answers questions about the codebase and blog posts |
+| **APT Campaign** | Fully automated pipeline: actor → reports → TTP extraction → module selection → binary compile |
 | **MITRE ATT&CK** | Browse 200+ blog posts mapped to ATT&CK techniques with inline source code viewer |
 | **Malpedia** | Threat actor and malware family lookup with semantic blog post matching |
 
@@ -89,6 +91,32 @@ The Malpedia tab connects to the [Malpedia REST API](https://malpedia.caad.fkie.
 - search actors by name, country, or malware family
 - expand any actor/family to see techniques, aliases, and semantically matched blog posts with similarity score
 - requires a Malpedia API key in `config/malpedia_config.json`
+
+### APT campaign pipeline
+
+The APT Campaign tab runs a fully automated, five-stage pipeline that takes a Malpedia actor or family identifier and produces a ready-to-test compiled binary in one shot.
+
+![img](./screenshots/2026-06-07_23-57.png)
+
+**Pipeline stages:**
+
+| # | Stage | What it does |
+|---|-------|--------------|
+| 1 | **Malpedia Fetch** | Resolves the actor or family ID against the Malpedia REST API and retrieves associated metadata (country, aliases, malware families, report URLs) |
+| 2 | **Report Download** | Downloads up to 10 linked threat intelligence reports and stores raw content in SQLite for later inspection |
+| 3 | **TTP Extraction** | Extracts MITRE ATT&CK technique IDs from report text - uses the Claude API for structured extraction with a regex fallback when no API key is configured |
+| 4 | **Module Selection** | Maps extracted TTPs to available peekaboo modules (injection, crypto, stealer, persistence) and selects the best match per technique |
+| 5 | **Binary Compile** | Runs the peekaboo builder with the selected parameters and produces a Windows PE ready for EDR testing |
+
+![img](./screenshots/2026-06-08_00-01.png)
+
+All pipeline progress streams live to the right panel as it runs - reports appear as clickable links the moment they are downloaded, TTPs and selected modules are appended on completion of each stage, and the final binary is immediately available for download. Every session is persisted to SQLite; click any row in **Past Sessions** to open a drawer showing:
+
+- **Reports** tab - list of downloaded reports with a direct link to the original URL and character count
+- **TTPs** tab - full list of extracted ATT&CK techniques with tactic and evidence quote
+- **Binary** tab - build configuration badges, per-file download links, and selected modules
+
+**Configuration:** set `api_key` in `config/anthropic_config.json` to enable Claude-powered TTP extraction. Without it the pipeline falls back to regex matching of `T1xxx` IDs in report text.
 
 ### AI assistant
 
