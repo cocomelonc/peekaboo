@@ -297,7 +297,7 @@ def run_pipeline(actor_id: str) -> Generator[dict, None, None]:
     yield {"step": 1, "status": "done", "msg": f"fetched: {actor_name}",
            "data": {k: v for k, v in actor_data.items() if k not in ("snippet", "related_posts")}}
 
-    # 2. Download reports — stream one event per report as they land in DB
+    # 2. Download reports - stream one event per report as they land in DB
     yield {"step": 2, "status": "running", "msg": "downloading threat reports…"}
     report_contents: list[str] = []
     for ev in agent_download(actor_data, session_id):

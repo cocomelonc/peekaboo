@@ -248,7 +248,7 @@ def get_reports(session_id: str) -> list[dict]:
 
 
 # --------------------------------------------------------------------------- #
-#  Pipeline sessions — writes                                                   #
+#  Pipeline sessions - writes                                                   #
 # --------------------------------------------------------------------------- #
 
 def save_pipeline_session(session: dict) -> None:
@@ -294,7 +294,7 @@ def clear_pipeline_sessions() -> None:
 
 
 # --------------------------------------------------------------------------- #
-#  Pipeline sessions — reads                                                    #
+#  Pipeline sessions - reads                                                    #
 # --------------------------------------------------------------------------- #
 
 def _psession_row(row: sqlite3.Row) -> dict:

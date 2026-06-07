@@ -158,6 +158,8 @@ code{font-family:var(--mono);font-size:12px;background:var(--bg4);padding:1px 5p
 .terminal{background:#0D0B14;border:1px solid var(--sep);border-radius:var(--rs);padding:14px;font-family:var(--mono);font-size:12px;line-height:1.7;max-height:320px;overflow-y:auto;white-space:pre-wrap;word-break:break-all}
 .terminal::-webkit-scrollbar{width:4px}
 .terminal::-webkit-scrollbar-thumb{background:var(--sep)}
+#build-output{background:#0a0a0a;color:#33FF57;border-color:#1a3320;text-shadow:0 0 6px rgba(51,255,87,.2)}
+#build-output::-webkit-scrollbar-thumb{background:#1a3320}
 
 /* -- module card -- */
 .mod-card{background:var(--bg2);border:1px solid var(--sep);border-radius:var(--r);overflow:hidden;display:flex;flex-direction:column;transition:border-color .15s,transform .15s}
@@ -837,6 +839,43 @@ code{font-family:var(--mono);font-size:12px;background:var(--bg4);padding:1px 5p
 
 <script>
 // -----------------------------------------------------------------
+// ANSI escape → HTML (for build output)
+// -----------------------------------------------------------------
+function ansiToHtml(raw) {
+  const FG = {
+    '30':'#555555','31':'#e06c75','32':'#98c379','33':'#e5c07b',
+    '34':'#61afef','35':'#c678dd','36':'#56b6c2','37':'#abb2bf',
+    '90':'#777777','91':'#ff7875','92':'#56d98a','93':'#ffd166',
+    '94':'#78b4ff','95':'#b57bff','96':'#72d9f5','97':'#eae6ff',
+  };
+  const parts = raw.split(/(\x1b\[[0-9;]*m)/g);
+  let out = '';
+  let open = false;
+  for (const part of parts) {
+    if (part.startsWith('\x1b[')) {
+      if (open) { out += '</span>'; open = false; }
+      const codes = part.slice(2, -1).split(';');
+      const reset = codes[0] === '' || codes.includes('0');
+      if (!reset) {
+        const fg   = codes.find(c => { const n=+c; return (n>=30&&n<=37)||(n>=90&&n<=97); });
+        const bold = codes.includes('1');
+        const ul   = codes.includes('4');
+        if (fg || bold || ul) {
+          const s = [fg?`color:${FG[fg]}`:'', bold?'font-weight:700':'', ul?'text-decoration:underline':'']
+                      .filter(Boolean).join(';');
+          out += `<span style="${s}">`;
+          open = true;
+        }
+      }
+    } else {
+      out += part.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+    }
+  }
+  if (open) out += '</span>';
+  return out;
+}
+
+// -----------------------------------------------------------------
 // Global state
 // -----------------------------------------------------------------
 let currentPanel   = 'builder';
@@ -1167,7 +1206,7 @@ async function startBuild() {
   btn.disabled = true;
   btn.innerHTML = '<span class="spinner"></span> Building…';
   setBuildStatus('running', 'running…');
-  document.getElementById('build-output').textContent = 'starting build…';
+  document.getElementById('build-output').innerHTML = 'starting build…';
   document.getElementById('build-files').style.display = 'none';
   const r = await fetch('/api/build', {method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify(params)});
   const {build_id} = await r.json();
@@ -1190,8 +1229,8 @@ function pollBuild(build_id) {
   buildPoll = setInterval(async () => {
     const job = await fetch(`/api/build/${build_id}`).then(r=>r.json()).catch(()=>null);
     if (!job) return;
-    document.getElementById('build-output').textContent = job.output || '';
     const out = document.getElementById('build-output');
+    out.innerHTML = ansiToHtml(job.output || '');
     out.scrollTop = out.scrollHeight;
     if (job.status === 'success' || job.status === 'failed' || job.status === 'error') {
       clearInterval(buildPoll);
