@@ -67,12 +67,12 @@ def agent_fetch(actor_id: str) -> tuple[bool, dict]:
 
 # --- Agent 2: Report downloader ----------------------------------------------
 
-def agent_download(actor_data: dict, session_id: str) -> list[str]:
-    """Download reports, store content in DB, return list of content strings."""
+def agent_download(actor_data: dict, session_id: str):
+    """Download reports, store each in DB, yield SSE-style dicts as they land."""
     try:
         import requests as _req
     except ImportError:
-        return []
+        return
 
     urls: list[str] = []
     for fam in actor_data.get("families", []):
@@ -80,20 +80,22 @@ def agent_download(actor_data: dict, session_id: str) -> list[str]:
     urls.extend(actor_data.get("refs", [])[:6])
     urls = list(dict.fromkeys(urls))[:10]
 
-    contents: list[str] = []
     idx = 0
     for url in urls:
         try:
             r = _req.get(url, timeout=15, headers={"User-Agent": "Mozilla/5.0"})
             if r.status_code == 200:
-                text = re.sub(r'<[^>]+>', ' ', r.text)
-                text = re.sub(r'\s+', ' ', text).strip()[:60000]
-                _db.save_report(session_id, idx, url, text)
-                contents.append(text)
+                # keep raw HTML stripped to readable text; also store a short HTML
+                # snippet so the frontend can render a preview
+                raw_html = r.text[:120000]
+                plain    = re.sub(r'<[^>]+>', ' ', raw_html)
+                plain    = re.sub(r'\s+', ' ', plain).strip()[:60000]
+                _db.save_report(session_id, idx, url, plain)
+                yield {"report_idx": idx, "url": url,
+                       "preview": plain[:500], "chars": len(plain)}
                 idx += 1
         except Exception:
             continue
-    return contents
 
 
 # --- Agent 3: TTP extractor --------------------------------------------------
@@ -275,60 +277,61 @@ def run_pipeline(actor_id: str) -> Generator[dict, None, None]:
     session_id  = uuid.uuid4().hex[:8]
     session_dir = _SESSIONS / session_id
     session_dir.mkdir(parents=True, exist_ok=True)
+    started = datetime.now().isoformat()
 
-    meta: dict = {
-        "session_id": session_id,
-        "actor_id":   actor_id,
-        "started":    datetime.now().isoformat(),
-        "status":     "running",
-    }
+    # persist session skeleton immediately so the UI can track it
+    _db.save_pipeline_session({
+        "session_id": session_id, "actor_id": actor_id,
+        "started": started, "status": "running",
+    })
 
     # 1. Fetch
     yield {"step": 1, "status": "running", "msg": f"fetching actor data: {actor_id}"}
     ok, actor_data = agent_fetch(actor_id)
     if not ok:
+        _db.update_pipeline_session(session_id, status="failed",
+                                    finished=datetime.now().isoformat())
         yield {"step": 1, "status": "error", "msg": actor_data.get("error", "malpedia fetch failed")}
         return
     actor_name = actor_data.get("name", actor_id)
     yield {"step": 1, "status": "done", "msg": f"fetched: {actor_name}",
            "data": {k: v for k, v in actor_data.items() if k not in ("snippet", "related_posts")}}
 
-    # 2. Download reports (stored in DB, not filesystem)
+    # 2. Download reports — stream one event per report as they land in DB
     yield {"step": 2, "status": "running", "msg": "downloading threat reports…"}
-    report_contents = agent_download(actor_data, session_id)
-    yield {"step": 2, "status": "done", "msg": f"{len(report_contents)} report(s) downloaded",
-           "data": [f"report_{i:02d}" for i in range(len(report_contents))]}
+    report_contents: list[str] = []
+    for ev in agent_download(actor_data, session_id):
+        report_contents.append(_db.get_reports(session_id)[ev["report_idx"]]["content"])
+        yield {"step": 2, "status": "running",
+               "msg": f"downloaded report {ev['report_idx']+1}: {ev['url'][:60]}",
+               "data": {"report": ev}}
+    yield {"step": 2, "status": "done",
+           "msg": f"{len(report_contents)} report(s) downloaded",
+           "data": {"count": len(report_contents)}}
 
     # 3. Extract TTPs
     yield {"step": 3, "status": "running", "msg": "extracting TTPs (Claude API + regex)…"}
     ttps = agent_extract_ttps(report_contents, actor_data)
-    (session_dir / "ttps.json").write_text(json.dumps(ttps, indent=2))
+    _db.update_pipeline_session(session_id, ttps=ttps)
     yield {"step": 3, "status": "done", "msg": f"{len(ttps)} TTPs extracted", "data": ttps}
 
     # 4. Select modules
     yield {"step": 4, "status": "running", "msg": "mapping TTPs to modules…"}
     params = agent_select_modules(ttps)
-    (session_dir / "params.json").write_text(json.dumps(params, indent=2))
-    yield {"step": 4, "status": "done", "msg": f"{len(params['selected_modules'])} module(s) selected",
-           "data": params}
+    _db.update_pipeline_session(session_id, params=params)
+    yield {"step": 4, "status": "done",
+           "msg": f"{len(params['selected_modules'])} module(s) selected", "data": params}
 
     # 5. Build
     yield {"step": 5, "status": "running", "msg": "compiling sample binary…"}
     ok, log, files = agent_build(params, session_id)
+    finished = datetime.now().isoformat()
     if ok:
-        meta.update({
-            "status":  "success",
-            "samples": [str(f) for f in files],
-            "ttps":    len(ttps),
-            "params":  params,
-            "finished": datetime.now().isoformat(),
-        })
-        (session_dir / "meta.json").write_text(json.dumps(meta, indent=2))
+        _db.update_pipeline_session(session_id, status="success", finished=finished)
         yield {"step": 5, "status": "done", "msg": f"binary compiled ({len(files)} file(s))",
                "data": {"session_id": session_id, "files": [f.name for f in files]}}
     else:
-        meta.update({"status": "failed", "finished": datetime.now().isoformat()})
-        (session_dir / "meta.json").write_text(json.dumps(meta, indent=2))
+        _db.update_pipeline_session(session_id, status="failed", finished=finished)
         yield {"step": 5, "status": "error", "msg": log[:300]}
         return
 
@@ -337,16 +340,4 @@ def run_pipeline(actor_id: str) -> Generator[dict, None, None]:
 
 
 def list_sessions() -> list[dict]:
-    if not _SESSIONS.exists():
-        return []
-    out: list[dict] = []
-    for d in sorted(_SESSIONS.iterdir(), reverse=True):
-        if not d.is_dir():
-            continue
-        meta_f = d / "meta.json"
-        if meta_f.exists():
-            try:
-                out.append(json.loads(meta_f.read_text()))
-            except Exception:
-                pass
-    return out
+    return _db.get_pipeline_sessions()

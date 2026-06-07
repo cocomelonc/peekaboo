@@ -67,6 +67,19 @@ def init() -> None:
         """)
         db.execute("CREATE INDEX IF NOT EXISTS idx_reports_session ON reports(session_id)")
 
+        db.execute("""
+            CREATE TABLE IF NOT EXISTS pipeline_sessions (
+                session_id  TEXT PRIMARY KEY,
+                actor_id    TEXT NOT NULL DEFAULT '',
+                started     TEXT,
+                finished    TEXT,
+                status      TEXT NOT NULL DEFAULT 'running',
+                ttps        TEXT NOT NULL DEFAULT '[]',
+                params      TEXT NOT NULL DEFAULT '{}'
+            )
+        """)
+        db.execute("CREATE INDEX IF NOT EXISTS idx_psessions_started ON pipeline_sessions(started DESC)")
+
 
 # --------------------------------------------------------------------------- #
 #  Helpers                                                                      #
@@ -215,6 +228,82 @@ def get_reports(session_id: str) -> list[dict]:
             (session_id,),
         ).fetchall()
     return [dict(r) for r in rows]
+
+
+# --------------------------------------------------------------------------- #
+#  Pipeline sessions — writes                                                   #
+# --------------------------------------------------------------------------- #
+
+def save_pipeline_session(session: dict) -> None:
+    with _conn() as db:
+        db.execute(
+            """
+            INSERT OR REPLACE INTO pipeline_sessions
+              (session_id, actor_id, started, finished, status, ttps, params)
+            VALUES (?, ?, ?, ?, ?, ?, ?)
+            """,
+            (
+                session["session_id"],
+                session.get("actor_id", ""),
+                session.get("started"),
+                session.get("finished"),
+                session.get("status", "running"),
+                json.dumps(session.get("ttps", [])),
+                json.dumps(session.get("params", {})),
+            ),
+        )
+
+
+def update_pipeline_session(session_id: str, **kwargs) -> None:
+    if not kwargs:
+        return
+    sets, vals = [], []
+    for k, v in kwargs.items():
+        if k in ("ttps", "params"):
+            v = json.dumps(v)
+        sets.append(f"{k} = ?")
+        vals.append(v)
+    vals.append(session_id)
+    with _conn() as db:
+        db.execute(
+            f"UPDATE pipeline_sessions SET {', '.join(sets)} WHERE session_id = ?",
+            vals,
+        )
+
+
+def clear_pipeline_sessions() -> None:
+    with _conn() as db:
+        db.execute("DELETE FROM pipeline_sessions")
+
+
+# --------------------------------------------------------------------------- #
+#  Pipeline sessions — reads                                                    #
+# --------------------------------------------------------------------------- #
+
+def _psession_row(row: sqlite3.Row) -> dict:
+    d = dict(row)
+    for k in ("ttps", "params"):
+        try:
+            d[k] = json.loads(d[k] or "[]" if k == "ttps" else "{}")
+        except Exception:
+            d[k] = [] if k == "ttps" else {}
+    return d
+
+
+def get_pipeline_sessions(limit: int = 100) -> list[dict]:
+    with _conn() as db:
+        rows = db.execute(
+            "SELECT * FROM pipeline_sessions ORDER BY started DESC LIMIT ?", (limit,)
+        ).fetchall()
+    return [_psession_row(r) for r in rows]
+
+
+def get_pipeline_session(session_id: str) -> dict | None:
+    with _conn() as db:
+        row = db.execute(
+            "SELECT * FROM pipeline_sessions WHERE session_id = ?", (session_id,)
+        ).fetchone()
+    return _psession_row(row) if row else None
 
 
 # --------------------------------------------------------------------------- #

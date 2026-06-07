@@ -1090,6 +1090,7 @@ def api_samples_clear():
     try:
         _db.clear_samples()
         _db.clear_reports()
+        _db.clear_pipeline_sessions()
         import shutil
         if SAMPLES_DIR.exists():
             for d in SAMPLES_DIR.iterdir():
@@ -1188,12 +1189,23 @@ def api_pipeline_run():
 
 @app.route("/api/pipeline/sessions")
 def api_pipeline_sessions():
-    try:
-        sys.path.insert(0, str(BASE_DIR / "pipeline"))
-        from apt_pipeline import list_sessions
-        return jsonify(list_sessions())
-    except Exception as e:
-        return jsonify({"error": str(e)}), 500
+    return jsonify(_db.get_pipeline_sessions())
+
+
+@app.route("/api/pipeline/session/<session_id>")
+def api_pipeline_session(session_id: str):
+    if not re.match(r'^[a-f0-9]{8}$', session_id):
+        return jsonify({"error": "invalid id"}), 400
+    session = _db.get_pipeline_session(session_id)
+    if not session:
+        return jsonify({"error": "not found"}), 404
+    reports = _db.get_reports(session_id)
+    sample  = next((s for s in _db.get_samples() if s["session_id"] == session_id), None)
+    return jsonify({
+        "session": session,
+        "reports": reports,
+        "sample":  sample,
+    })
 
 
 # -- Coverage map --------------------------------------------------------------

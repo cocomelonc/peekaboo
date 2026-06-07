@@ -192,6 +192,29 @@ code{font-family:var(--mono);font-size:12px;background:var(--bg4);padding:1px 5p
 .pipe-step-name{font-size:13px;font-weight:600}
 .pipe-step-msg{font-size:12px;color:var(--dim);margin-top:2px}
 
+/* -- session detail drawer -- */
+.drawer-overlay{position:fixed;inset:0;background:rgba(0,0,0,.55);z-index:200;display:none;align-items:flex-start;justify-content:flex-end}
+.drawer-overlay.open{display:flex}
+.drawer{width:min(860px,95vw);height:100vh;background:var(--bg2);border-left:1px solid var(--sep);display:flex;flex-direction:column;animation:slideIn .2s ease}
+@keyframes slideIn{from{transform:translateX(60px);opacity:0}to{transform:translateX(0);opacity:1}}
+.drawer-header{padding:18px 20px 14px;border-bottom:1px solid var(--sep);display:flex;align-items:center;gap:10px;flex-shrink:0}
+.drawer-body{flex:1;overflow-y:auto;padding:18px 20px}
+.drawer-tabs{display:flex;gap:0;border-bottom:1px solid var(--sep);margin-bottom:18px}
+.dtab{padding:8px 16px;font-size:12px;cursor:pointer;color:var(--text2);border-bottom:2px solid transparent;transition:all .15s}
+.dtab:hover{color:var(--text)}
+.dtab.active{color:var(--purple);border-bottom-color:var(--purple);font-weight:600}
+.report-card{background:var(--bg3);border:1px solid var(--sep);border-radius:var(--rs);margin-bottom:12px;overflow:hidden}
+.report-card-header{padding:10px 14px;display:flex;align-items:center;gap:8px;cursor:pointer;user-select:none}
+.report-card-header:hover{background:rgba(255,255,255,.03)}
+.report-content{padding:14px;font-size:11.5px;line-height:1.6;color:var(--text2);white-space:pre-wrap;word-break:break-word;max-height:320px;overflow-y:auto;border-top:1px solid var(--sep);display:none}
+.report-content.open{display:block}
+.ttp-grid{display:flex;flex-direction:column;gap:6px}
+.ttp-item{display:flex;align-items:center;gap:10px;padding:8px 12px;background:var(--bg3);border:1px solid var(--sep);border-radius:var(--rs);font-size:12px}
+.live-download-feed{background:var(--bg3);border:1px solid var(--sep);border-radius:var(--rs);padding:12px;margin-top:10px;max-height:200px;overflow-y:auto;font-size:11.5px;display:none}
+.live-download-feed.active{display:block}
+.live-report-line{padding:4px 0;border-bottom:1px solid rgba(255,255,255,.04);color:var(--text2)}
+.live-report-line:last-child{border-bottom:none;color:var(--text)}
+
 /* -- coverage heatmap -- */
 .coverage-wrap{overflow-x:auto}
 .coverage-matrix{border-collapse:collapse;font-size:11px;min-width:100%}
@@ -525,7 +548,7 @@ code{font-family:var(--mono);font-size:12px;background:var(--bg4);padding:1px 5p
         <div class="fw-600 mb-8" style="font-size:13px;color:var(--dim);text-transform:uppercase;letter-spacing:.5px">Pipeline Steps</div>
         <div class="pipe-steps" id="pipe-steps">
           <div class="pipe-step" id="ps-1"><div class="pipe-step-icon" id="psi-1">🗄️</div><div class="pipe-step-body"><div class="pipe-step-name">Malpedia Fetch</div><div class="pipe-step-msg" id="psm-1">Fetch actor / family data</div></div></div>
-          <div class="pipe-step" id="ps-2"><div class="pipe-step-icon" id="psi-2">⬇️</div><div class="pipe-step-body"><div class="pipe-step-name">Report Download</div><div class="pipe-step-msg" id="psm-2">Download threat reports</div></div></div>
+          <div class="pipe-step" id="ps-2"><div class="pipe-step-icon" id="psi-2">⬇️</div><div class="pipe-step-body"><div class="pipe-step-name">Report Download</div><div class="pipe-step-msg" id="psm-2">Download threat reports</div><div class="live-download-feed" id="live-download-feed"></div></div></div>
           <div class="pipe-step" id="ps-3"><div class="pipe-step-icon" id="psi-3">🔍</div><div class="pipe-step-body"><div class="pipe-step-name">TTP Extraction</div><div class="pipe-step-msg" id="psm-3">Extract ATT&amp;CK techniques</div></div></div>
           <div class="pipe-step" id="ps-4"><div class="pipe-step-icon" id="psi-4">🧩</div><div class="pipe-step-body"><div class="pipe-step-name">Module Selection</div><div class="pipe-step-msg" id="psm-4">Map TTPs to peekaboo modules</div></div></div>
           <div class="pipe-step" id="ps-5"><div class="pipe-step-icon" id="psi-5">⚡</div><div class="pipe-step-body"><div class="pipe-step-name">Binary Compile</div><div class="pipe-step-msg" id="psm-5">Compile custom binary</div></div></div>
@@ -548,10 +571,11 @@ code{font-family:var(--mono);font-size:12px;background:var(--bg4);padding:1px 5p
       <div class="card-header">
         <span style="font-size:16px">🕐</span>
         <div class="card-title">Past Sessions</div>
+        <span class="text-xs text-dim" style="margin-left:8px">click a row to inspect</span>
         <button class="btn btn-ghost btn-sm" style="margin-left:auto" onclick="loadPipelineSessions()">↻ Refresh</button>
       </div>
       <table class="tbl">
-        <thead><tr><th>Session</th><th>Actor</th><th>TTPs</th><th>Status</th><th>Started</th></tr></thead>
+        <thead><tr><th>Session</th><th>Actor</th><th>Reports</th><th>TTPs</th><th>Status</th><th>Started</th></tr></thead>
         <tbody id="sessions-tbody"></tbody>
       </table>
     </div>
@@ -784,6 +808,31 @@ code{font-family:var(--mono);font-size:12px;background:var(--bg4);padding:1px 5p
 
 <!-- ═══════ TOASTS ═══════ -->
 <div class="toasts" id="toasts"></div>
+
+<!-- ═══════ SESSION DETAIL DRAWER ═══════ -->
+<div class="drawer-overlay" id="session-drawer-overlay" onclick="closeSessionDrawer(event)">
+  <div class="drawer" id="session-drawer">
+    <div class="drawer-header">
+      <span style="font-size:18px">🎯</span>
+      <div>
+        <div class="fw-600" id="drawer-title">Session</div>
+        <div class="text-xs text-dim" id="drawer-subtitle"></div>
+      </div>
+      <span id="drawer-status-badge" class="badge" style="margin-left:auto"></span>
+      <button class="btn btn-ghost btn-sm" style="margin-left:10px" onclick="closeSessionDrawer()">✕</button>
+    </div>
+    <div class="drawer-body">
+      <div class="drawer-tabs">
+        <div class="dtab active" id="dtab-reports" onclick="switchDrawerTab('reports')">Reports</div>
+        <div class="dtab" id="dtab-ttps" onclick="switchDrawerTab('ttps')">TTPs</div>
+        <div class="dtab" id="dtab-binary" onclick="switchDrawerTab('binary')">Binary</div>
+      </div>
+      <div id="drawer-tab-reports"></div>
+      <div id="drawer-tab-ttps" style="display:none"></div>
+      <div id="drawer-tab-binary" style="display:none"></div>
+    </div>
+  </div>
+</div>
 
 <script>
 // -----------------------------------------------------------------
@@ -1268,6 +1317,9 @@ function resetPipelineSteps() {
     icon.className = 'pipe-step-icon';
     msg.textContent = ['Fetch actor / family data','Download threat reports','Extract ATT&CK techniques','Map TTPs to peekaboo modules','Compile custom binary'][i-1];
   }
+  const feed = document.getElementById('live-download-feed');
+  feed.innerHTML = '';
+  feed.classList.remove('active');
 }
 
 function setPipeStep(step, status, msg) {
@@ -1278,6 +1330,18 @@ function setPipeStep(step, status, msg) {
   if (status === 'running') icon.innerHTML = '<div class="spinner" style="width:14px;height:14px;border-color:rgba(10,132,255,.2);border-top-color:var(--blue)"></div>';
   if (status === 'done') icon.innerHTML = '✓';
   if (status === 'error') icon.innerHTML = '✗';
+}
+
+function appendLiveReport(rep) {
+  const feed = document.getElementById('live-download-feed');
+  feed.classList.add('active');
+  const line = document.createElement('div');
+  line.className = 'live-report-line';
+  line.innerHTML = `<span class="badge badge-dim" style="font-size:9px;margin-right:6px">#${rep.report_idx}</span>`
+    + `<span class="mono text-xs" style="color:var(--blue)">${escHtml(rep.url.slice(0,70))}${rep.url.length>70?'…':''}</span>`
+    + ` <span class="text-dim" style="font-size:10px">${(rep.chars||0).toLocaleString()} chars</span>`;
+  feed.appendChild(line);
+  feed.scrollTop = feed.scrollHeight;
 }
 
 async function runPipeline() {
@@ -1313,8 +1377,16 @@ async function runPipeline() {
       try {
         const ev = JSON.parse(raw);
         if (ev.step >= 1 && ev.step <= 5) {
-          setPipeStep(ev.step, ev.status, ev.msg);
+          // for step 2 running events with a single report, don't overwrite the
+          // step-level message — let the feed show the detail
+          if (!(ev.step === 2 && ev.status === 'running' && ev.data?.report)) {
+            setPipeStep(ev.step, ev.status, ev.msg);
+          }
           if (ev.data) lastData[ev.step] = ev.data;
+        }
+        // live report download feed
+        if (ev.step === 2 && ev.status === 'running' && ev.data?.report) {
+          appendLiveReport(ev.data.report);
         }
         if (ev.step === 3 && ev.status === 'done') {
           renderTTPResults(ev.data || [], lastData);
@@ -1334,14 +1406,15 @@ async function runPipeline() {
   loadPipelineSessions();
 }
 
+const TACTIC_COLORS = {'execution':'#30D158','defense-evasion':'#FFD60A','persistence':'#0A84FF','command-and-control':'#FF453A','privilege-escalation':'#FF9F0A','credential-access':'#BF5AF2','discovery':'#64D2FF','unknown':'#636366'};
+
 function renderTTPResults(ttps, allData) {
   if (!ttps.length) {
     document.getElementById('apt-results').innerHTML = `<div class="empty"><div class="empty-icon">🔍</div><div>No TTPs extracted from reports</div></div>`;
     return;
   }
-  const tacticColors = {'execution':'#30D158','defense-evasion':'#FFD60A','persistence':'#0A84FF','command-and-control':'#FF453A','privilege-escalation':'#FF9F0A','credential-access':'#BF5AF2','unknown':'#636366'};
   const rows = ttps.map(t => {
-    const col = tacticColors[t.tactic] || tacticColors.unknown;
+    const col = TACTIC_COLORS[t.tactic] || TACTIC_COLORS.unknown;
     return `<div class="ttp-row">
       <span class="badge badge-red" style="font-family:var(--mono)">${t.id}</span>
       <span style="font-size:13px;flex:1">${escHtml(t.name||t.id)}</span>
@@ -1373,6 +1446,7 @@ function renderPipelineSuccess(data, allData) {
   document.getElementById('apt-results').innerHTML = `
     <div style="margin-bottom:12px">
       <span class="badge badge-green" style="font-size:13px;padding:6px 12px">✓ Pipeline Complete</span>
+      <button class="btn btn-ghost btn-sm" style="margin-left:10px" onclick="openSessionDrawer('${sid}')">🔍 Inspect Session</button>
     </div>
     <div class="card card-sm" style="margin-bottom:12px">
       <div class="text-xs text-dim text-uppercase" style="letter-spacing:.5px;margin-bottom:8px">Selected Modules</div>
@@ -1388,19 +1462,152 @@ async function loadPipelineSessions() {
   const tbody = document.getElementById('sessions-tbody');
   const sessions = await fetch('/api/pipeline/sessions').then(r=>r.json()).catch(()=>[]);
   if (!sessions.length) {
-    tbody.innerHTML = '<tr><td colspan="5" class="text-dim text-sm" style="padding:14px">no sessions yet</td></tr>';
+    tbody.innerHTML = '<tr><td colspan="6" class="text-dim text-sm" style="padding:14px">no sessions yet</td></tr>';
     return;
   }
   tbody.innerHTML = sessions.slice(0,20).map(s => {
-    const st = s.status === 'success' ? 'badge-green' : (s.status === 'running' ? 'badge-yellow' : 'badge-red');
-    return `<tr>
+    const st  = s.status === 'success' ? 'badge-green' : (s.status === 'running' ? 'badge-yellow' : 'badge-red');
+    const nR  = s.report_count ?? (s.ttps?.length >= 0 ? '?' : '?');
+    const nT  = Array.isArray(s.ttps) ? s.ttps.length : (s.ttps || 0);
+    return `<tr style="cursor:pointer" onclick="openSessionDrawer('${s.session_id}')" title="click to inspect">
       <td class="mono text-xs">${s.session_id}</td>
       <td>${escHtml(s.actor_id||'-')}</td>
-      <td>${s.ttps||0}</td>
+      <td class="text-dim text-xs" id="rcount-${s.session_id}">…</td>
+      <td>${nT}</td>
       <td><span class="badge ${st}">${s.status}</span></td>
       <td class="text-xs text-dim">${(s.started||'').slice(0,16)}</td>
     </tr>`;
   }).join('');
+  // backfill report counts async
+  sessions.slice(0,20).forEach(s => {
+    fetch(`/api/pipeline/session/${s.session_id}`)
+      .then(r=>r.json()).then(d => {
+        const el = document.getElementById(`rcount-${s.session_id}`);
+        if (el) el.textContent = (d.reports||[]).length;
+      }).catch(()=>{});
+  });
+}
+
+// -----------------------------------------------------------------
+// Session detail drawer
+// -----------------------------------------------------------------
+let _drawerTab = 'reports';
+
+function switchDrawerTab(tab) {
+  _drawerTab = tab;
+  ['reports','ttps','binary'].forEach(t => {
+    document.getElementById('dtab-'+t).classList.toggle('active', t === tab);
+    document.getElementById('drawer-tab-'+t).style.display = t === tab ? '' : 'none';
+  });
+}
+
+function closeSessionDrawer(e) {
+  if (e && e.target !== document.getElementById('session-drawer-overlay')) return;
+  document.getElementById('session-drawer-overlay').classList.remove('open');
+}
+
+async function openSessionDrawer(sessionId) {
+  const overlay = document.getElementById('session-drawer-overlay');
+  overlay.classList.add('open');
+  document.getElementById('drawer-title').textContent = `Session ${sessionId}`;
+  document.getElementById('drawer-subtitle').textContent = 'loading…';
+  document.getElementById('drawer-status-badge').textContent = '';
+  ['reports','ttps','binary'].forEach(t => {
+    document.getElementById('drawer-tab-'+t).innerHTML =
+      '<div class="loading-full" style="padding:30px"><div class="spinner"></div></div>';
+  });
+  switchDrawerTab('reports');
+
+  let d;
+  try {
+    d = await fetch(`/api/pipeline/session/${sessionId}`).then(r=>r.json());
+  } catch(e) {
+    document.getElementById('drawer-tab-reports').innerHTML = '<div class="text-dim">failed to load</div>';
+    return;
+  }
+
+  const sess = d.session || {};
+  document.getElementById('drawer-subtitle').textContent = sess.actor_id || '';
+  const stCls = sess.status === 'success' ? 'badge-green' : (sess.status === 'running' ? 'badge-yellow' : 'badge-red');
+  document.getElementById('drawer-status-badge').className = `badge ${stCls}`;
+  document.getElementById('drawer-status-badge').textContent = sess.status || '';
+
+  // ---- Reports tab ----
+  const reports = d.reports || [];
+  if (!reports.length) {
+    document.getElementById('drawer-tab-reports').innerHTML =
+      '<div class="empty" style="padding:40px"><div class="empty-icon">📄</div><div>No reports in DB for this session</div></div>';
+  } else {
+    document.getElementById('drawer-tab-reports').innerHTML = reports.map((r, i) => `
+      <div class="report-card">
+        <div class="report-card-header" onclick="toggleReport(this)">
+          <span class="badge badge-dim" style="font-size:10px">#${r.idx}</span>
+          <span class="mono text-xs" style="flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;color:var(--blue)">${escHtml(r.url)}</span>
+          <span class="text-xs text-dim">${(r.content||'').length.toLocaleString()} chars</span>
+          <span style="margin-left:8px;color:var(--dim);font-size:10px">▶</span>
+        </div>
+        <pre class="report-content" id="rc-${sessionId}-${i}">${escHtml((r.content||'').slice(0,8000))}${(r.content||'').length>8000?'\n\n[truncated…]':''}</pre>
+      </div>`).join('');
+  }
+
+  // ---- TTPs tab ----
+  const ttps = sess.ttps || [];
+  if (!ttps.length) {
+    document.getElementById('drawer-tab-ttps').innerHTML =
+      '<div class="empty" style="padding:40px"><div class="empty-icon">🔍</div><div>No TTPs recorded</div></div>';
+  } else {
+    document.getElementById('drawer-tab-ttps').innerHTML = `
+      <div style="margin-bottom:10px" class="text-xs text-dim">${ttps.length} technique(s) extracted</div>
+      <div class="ttp-grid">${ttps.map(t => {
+        const col = TACTIC_COLORS[t.tactic] || TACTIC_COLORS.unknown;
+        return `<div class="ttp-item">
+          <span class="badge badge-red" style="font-family:var(--mono);min-width:70px;text-align:center">${t.id}</span>
+          <span style="flex:1">${escHtml(t.name||t.id)}</span>
+          <span class="badge" style="background:${col}22;color:${col};font-size:10px">${t.tactic}</span>
+          ${t.source ? `<span class="text-xs text-dim">${escHtml(t.source)}</span>` : ''}
+        </div>`;
+      }).join('')}</div>`;
+  }
+
+  // ---- Binary tab ----
+  const sample = d.sample;
+  const params = sess.params || {};
+  if (!sample) {
+    document.getElementById('drawer-tab-binary').innerHTML =
+      '<div class="empty" style="padding:40px"><div class="empty-icon">💾</div><div>No compiled binary for this session</div></div>';
+  } else {
+    const files = (sample.files||[]).map(f =>
+      `<div style="display:flex;align-items:center;gap:10px;padding:10px 0;border-bottom:1px solid var(--sep)">
+        <span style="font-size:20px">💾</span>
+        <div style="flex:1"><div class="mono text-sm">${escHtml(f.name)}</div><div class="text-xs text-dim">${formatBytes(f.size)}</div></div>
+        <a href="/api/samples/${sessionId}/download/${encodeURIComponent(f.name)}" class="btn btn-green btn-sm">⬇ Download</a>
+      </div>`).join('');
+    const mods = (params.selected_modules||[]).map(m =>
+      `<div style="display:flex;align-items:center;gap:8px;padding:5px 0">
+        <span class="badge badge-red" style="font-size:10px">${m.attack_id}</span>
+        <span class="text-sm">${escHtml(m.title||m.module_id)}</span>
+        <span class="badge badge-dim text-xs" style="margin-left:auto">${m.category}</span>
+      </div>`).join('');
+    document.getElementById('drawer-tab-binary').innerHTML = `
+      <div class="card card-sm" style="margin-bottom:14px">
+        <div class="text-xs text-dim" style="margin-bottom:6px">Build params</div>
+        <div style="display:flex;flex-wrap:wrap;gap:6px">
+          ${['encryption','malware','injection','persistence'].map(k => params[k]?`<span class="badge badge-dim">${k}: ${escHtml(params[k])}</span>`:'').join('')}
+        </div>
+      </div>
+      <div class="card card-sm" style="margin-bottom:14px">
+        <div class="text-xs text-dim" style="margin-bottom:8px">Files — total ${formatBytes(sample.total_size||0)}</div>
+        ${files}
+      </div>
+      ${mods ? `<div class="card card-sm"><div class="text-xs text-dim" style="margin-bottom:8px">Selected modules</div>${mods}</div>` : ''}`;
+  }
+}
+
+function toggleReport(header) {
+  const content = header.nextElementSibling;
+  const arrow   = header.querySelector('span:last-child');
+  content.classList.toggle('open');
+  arrow.textContent = content.classList.contains('open') ? '▼' : '▶';
 }
 
 // -----------------------------------------------------------------
