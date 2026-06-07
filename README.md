@@ -116,6 +116,8 @@ All pipeline progress streams live to the right panel as it runs - reports appea
 - **TTPs** tab - full list of extracted ATT&CK techniques with tactic and evidence quote
 - **Binary** tab - build configuration badges, per-file download links, and selected modules
 
+![img](./screenshots/2026-06-08_00-04.png)
+
 **Configuration:** set `api_key` in `config/anthropic_config.json` to enable Claude-powered TTP extraction. Without it the pipeline falls back to regex matching of `T1xxx` IDs in report text.
 
 ### AI assistant
