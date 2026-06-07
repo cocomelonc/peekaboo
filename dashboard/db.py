@@ -1,5 +1,5 @@
 """
-peekaboo SQLite store — builds (and future tables)
+peekaboo SQLite store - builds (and future tables)
 single file: dashboard/peekaboo.db
 """
 from __future__ import annotations
