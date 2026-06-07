@@ -282,6 +282,15 @@ def api_logs():
         return jsonify([])
 
 
+@app.route("/api/logs", methods=["DELETE"])
+def api_logs_clear():
+    try:
+        _db.clear_builds()
+        return jsonify({"ok": True})
+    except Exception as e:
+        return jsonify({"ok": False, "error": str(e)}), 500
+
+
 _SAFE_CONFIGS = {
     "telegram_config", "github_config", "bitbucket_config", "virustotal_config",
     "anthropic_config", "gemini_config", "malpedia_config",

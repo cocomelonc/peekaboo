@@ -102,6 +102,15 @@ def get_builds(limit: int = 200) -> list[dict]:
 #  Migration: import legacy builds.json → DB (runs once, idempotent)           #
 # --------------------------------------------------------------------------- #
 
+def clear_builds() -> None:
+    with _conn() as db:
+        db.execute("DELETE FROM builds")
+
+
+# --------------------------------------------------------------------------- #
+#  Migration: import legacy builds.json → DB (runs once, idempotent)           #
+# --------------------------------------------------------------------------- #
+
 def migrate_json(json_path: Path) -> int:
     if not json_path.exists():
         return 0

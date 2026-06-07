@@ -449,6 +449,7 @@ code{font-family:var(--mono);font-size:12px;background:var(--bg4);padding:1px 5p
     <div class="card-header">
       <span style="font-size:18px">🕐</span>
       <div class="card-title">Build History</div>
+      <button class="btn btn-sm" style="margin-left:auto;background:rgba(255,80,80,.12);border-color:rgba(255,80,80,.35);color:#ff6b6b" onclick="clearBuildHistory()">clear</button>
     </div>
     <table class="tbl">
       <thead><tr>
@@ -1162,6 +1163,12 @@ async function loadBuildFiles(build_id) {
   document.getElementById('build-files-list').innerHTML = d.files.map(f =>
     `<a href="/api/build/${build_id}/download/${f.name}" class="btn btn-green btn-sm" style="margin-right:8px;margin-bottom:4px">⬇ ${f.name} (${(f.size/1024).toFixed(1)} KB)</a>`
   ).join('');
+}
+
+async function clearBuildHistory() {
+  if (!confirm('Clear all build history?')) return;
+  await fetch('/api/logs', {method:'DELETE'});
+  loadBuildHistory();
 }
 
 async function loadBuildHistory() {
