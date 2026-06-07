@@ -171,7 +171,7 @@ def _find_meow_source(date_str: str) -> str | None:
         if not (d.is_dir() and d.name.startswith(date_str)):
             continue
         preferred_stems = {"hack", "evil", "main", "pers", "inject", "mal", "shellcode"}
-        # search order: C/C++ first, then assembly — root level before recursive
+        # search order: C/C++ first, then assembly - root level before recursive
         for glob_fn, exts in [
             (d.glob,  ("*.c", "*.cpp", "*.nim", "*.asm", "*.s")),
             (d.rglob, ("*.c", "*.cpp", "*.nim", "*.asm", "*.s")),

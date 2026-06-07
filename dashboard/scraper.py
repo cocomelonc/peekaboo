@@ -21,7 +21,7 @@ def _parse_post(path: Path) -> dict | None:
     try:
         raw = path.read_text(errors="replace")
     except Exception as e:
-        print(f"  [!] read error {path.name}: {e}")
+        print(f"  [=^..^=] read error {path.name}: {e}")
         return None
 
     title = path.stem  # fallback
@@ -81,7 +81,7 @@ def scrape() -> dict:
         "posts":      posts,
     }
     OUTPUT.write_text(json.dumps(kb, indent=2, ensure_ascii=False))
-    print(f"\n[+] indexed {len(posts)} posts → {OUTPUT}")
+    print(f"\n[=^..^=] indexed {len(posts)} posts → {OUTPUT}")
     return kb
 
 

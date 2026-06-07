@@ -107,7 +107,7 @@ def compile_module(
     """
     Compile a single meow module standalone.
     Returns (success, log, output_path).
-    Source files are copied to a temp dir — meow repo is never modified.
+    Source files are copied to a temp dir - meow repo is never modified.
     """
     import sys
     sys.path.insert(0, str(Path(__file__).parent))

@@ -694,7 +694,7 @@ def api_chat():
 
     data = request.get_json(silent=True) or {}
     messages  = data.get("messages", [])
-    provider  = data.get("provider", "claude")  # "claude" | "gemini"
+    provider  = data.get("provider", "claude")  # "claude" | "gemini" | "ollama"
     if not messages:
         return jsonify({"error": "no messages provided"}), 400
 

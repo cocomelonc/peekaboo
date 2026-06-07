@@ -4,6 +4,7 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>peekaboo // simulation lab</title>
+<link rel="icon" type="image/x-icon" href="{{ url_for('static', filename='favicon.ico') }}">
 <script src="https://cdn.jsdelivr.net/npm/marked@9/marked.min.js"></script>
 <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/styles/atom-one-dark.min.css">
 <script src="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/highlight.min.js"></script>
@@ -108,6 +109,16 @@ label{font-size:12px;color:var(--dim);display:block;margin-bottom:4px}
 select,input[type=text],input[type=password],textarea{width:100%;background:var(--bg3);border:1px solid var(--sep);border-radius:var(--rs);color:var(--text);font-family:var(--font);font-size:13px;padding:7px 10px;outline:none;transition:border .15s}
 select:focus,input:focus,textarea:focus{border-color:var(--purple)}
 textarea{resize:vertical;font-family:var(--mono);font-size:12px}
+/* -- pill selector -- */
+.pill-select{display:flex;flex-wrap:wrap;gap:5px;padding-top:4px}
+.pill-opt{padding:3px 11px;border-radius:20px;border:1px solid var(--sep);background:var(--bg3);color:var(--text2);font-size:11.5px;cursor:pointer;transition:all .15s;user-select:none;font-family:var(--mono);white-space:nowrap}
+.pill-opt:hover{border-color:var(--purple);color:var(--text)}
+.pill-opt.sel{background:rgba(181,123,255,.18);border-color:var(--purple);color:var(--purple);font-weight:600}
+/* -- segment toggle -- */
+.seg-toggle{display:flex;background:var(--bg3);border-radius:var(--rs);border:1px solid var(--sep);overflow:hidden;margin-top:4px}
+.seg-opt{flex:1;padding:6px 10px;text-align:center;cursor:pointer;font-size:12px;color:var(--text2);transition:all .15s;user-select:none}
+.seg-opt:hover{color:var(--text)}
+.seg-opt.sel{background:var(--purple);color:#fff;font-weight:500}
 
 /* -- badges -- */
 .badge{display:inline-flex;align-items:center;padding:2px 7px;border-radius:4px;font-size:11px;font-weight:600;letter-spacing:.2px}
@@ -230,6 +241,14 @@ code{font-family:var(--mono);font-size:12px;background:var(--bg4);padding:1px 5p
 .chat-provider{display:flex;gap:6px}
 .provider-btn{padding:4px 10px;border-radius:var(--rs);border:1px solid var(--sep);background:var(--bg3);color:var(--dim);font-size:11px;cursor:pointer;transition:all .15s}
 .provider-btn.active{border-color:var(--purple);color:var(--purple);background:rgba(181,123,255,.14)}
+.chat-suggestions{display:flex;flex-wrap:wrap;gap:6px;padding:8px 0 4px}
+.chat-suggestion{padding:5px 11px;border-radius:20px;border:1px solid var(--sep);background:var(--bg3);color:var(--text2);font-size:11px;cursor:pointer;transition:all .15s;white-space:nowrap}
+.chat-suggestion:hover{border-color:var(--purple);color:var(--purple);background:rgba(181,123,255,.1)}
+.chat-status{font-size:11px;color:var(--dim);padding:4px 14px 2px;display:flex;align-items:center;gap:6px;min-height:20px;transition:opacity .2s}
+.chat-status-dot{width:6px;height:6px;border-radius:50%;background:var(--purple);animation:pulse 1s infinite}
+.chat-status-dot.thinking{background:var(--yellow)}
+.chat-status-dot.rag{background:var(--cyan)}
+@keyframes pulse{0%,100%{opacity:1}50%{opacity:.3}}
 
 /* -- modals -- */
 .modal-bg{position:fixed;inset:0;background:rgba(8,6,18,.82);z-index:200;display:flex;align-items:center;justify-content:center;padding:20px;opacity:0;pointer-events:none;transition:opacity .2s}
@@ -374,32 +393,40 @@ code{font-family:var(--mono);font-size:12px;background:var(--bg4);padding:1px 5p
         <span style="font-size:20px">🔨</span>
         <div><div class="card-title">Combo Builder</div><div class="card-sub">encrypt + inject + persist + exfil</div></div>
       </div>
-      <div class="form-row">
-        <div><label>Payload</label>
-          <select id="b-payload">{% for p in modules.payloads %}<option value="{{p}}">{{p}}</option>{% endfor %}</select>
+      <div style="margin-bottom:14px">
+        <label>Payload</label>
+        <div class="pill-select" id="b-pay-pills">{% for p in modules.payloads %}<span class="pill-opt" data-val="{{p}}" onclick="pickPill('b-payload','b-pay-pills',this)">{{p}}</span>{% endfor %}</div>
+        <input type="hidden" id="b-payload">
+      </div>
+      <div style="margin-bottom:14px">
+        <label>Encryption</label>
+        <div class="pill-select" id="b-enc-pills">{% for c in modules.crypto %}<span class="pill-opt" data-val="{{c}}" onclick="pickPill('b-enc','b-enc-pills',this)">{{c}}</span>{% endfor %}</div>
+        <input type="hidden" id="b-enc">
+      </div>
+      <div class="form-row" style="margin-bottom:14px">
+        <div>
+          <label>Mode</label>
+          <div class="seg-toggle" id="b-mode-seg">
+            <span class="seg-opt" data-val="injection" onclick="pickSeg('b-malware','b-mode-seg',this)">injection</span>
+            <span class="seg-opt" data-val="stealer" onclick="pickSeg('b-malware','b-mode-seg',this)">stealer</span>
+          </div>
+          <input type="hidden" id="b-malware">
         </div>
-        <div><label>Encryption</label>
-          <select id="b-enc">{% for c in modules.crypto %}<option value="{{c}}">{{c}}</option>{% endfor %}</select>
+        <div id="b-inj-wrap">
+          <label>Injection</label>
+          <div class="pill-select" id="b-inj-pills">{% for i in modules.injection %}<span class="pill-opt" data-val="{{i}}" onclick="pickPill('b-injection','b-inj-pills',this)">{{i}}</span>{% endfor %}</div>
+          <input type="hidden" id="b-injection">
+        </div>
+        <div id="b-stl-wrap" style="display:none">
+          <label>Stealer API</label>
+          <div class="pill-select" id="b-stl-pills">{% for s in modules.stealer %}<span class="pill-opt" data-val="{{s}}" onclick="pickPill('b-stealer','b-stl-pills',this)">{{s}}</span>{% endfor %}</div>
+          <input type="hidden" id="b-stealer">
         </div>
       </div>
-      <div class="form-row">
-        <div><label>Mode</label>
-          <select id="b-malware" onchange="toggleInjectionMode()">
-            <option value="injection">injection</option>
-            <option value="stealer">stealer</option>
-          </select>
-        </div>
-        <div id="b-inj-wrap"><label>Injection</label>
-          <select id="b-injection">{% for i in modules.injection %}<option value="{{i}}">{{i}}</option>{% endfor %}</select>
-        </div>
-        <div id="b-stl-wrap" style="display:none"><label>Stealer API</label>
-          <select id="b-stealer">{% for s in modules.stealer %}<option value="{{s}}">{{s}}</option>{% endfor %}</select>
-        </div>
-      </div>
-      <div class="form-row">
-        <div><label>Persistence</label>
-          <select id="b-persistence">{% for r in modules.persistence %}<option value="{{r}}">{{r}}</option>{% endfor %}</select>
-        </div>
+      <div style="margin-bottom:14px">
+        <label>Persistence</label>
+        <div class="pill-select" id="b-per-pills">{% for r in modules.persistence %}<span class="pill-opt" data-val="{{r}}" onclick="pickPill('b-persistence','b-per-pills',this)">{{r}}</span>{% endfor %}{% if not modules.persistence %}<span style="font-size:11px;color:var(--dim);padding:4px 0">no persistence modules</span>{% endif %}</div>
+        <input type="hidden" id="b-persistence" value="">
       </div>
       <button class="btn btn-primary" onclick="startBuild()" id="build-btn">
         <span>⚡</span> Build Binary
@@ -475,7 +502,7 @@ code{font-family:var(--mono);font-size:12px;background:var(--bg4);padding:1px 5p
     </table>
     <div id="samples-empty" class="empty" style="display:none">
       <div class="empty-icon">📦</div>
-      <div>No samples compiled yet — use the Builder or run an APT Campaign</div>
+      <div>No samples compiled yet - use the Builder or run an APT Campaign</div>
     </div>
   </div>
 </div>
@@ -667,7 +694,7 @@ code{font-family:var(--mono);font-size:12px;background:var(--bg4);padding:1px 5p
     <div id="beacons-list" class="flex flex-col gap-8"></div>
     <div id="beacons-empty" class="empty" style="display:none">
       <div class="empty-icon">📶</div>
-      <div>No beacon messages — configure Telegram and run the payload</div>
+      <div>No beacon messages - configure Telegram and run the payload</div>
     </div>
   </div>
 </div>
@@ -689,10 +716,20 @@ code{font-family:var(--mono);font-size:12px;background:var(--bg4);padding:1px 5p
       <div class="chat-msgs" id="chat-msgs">
         <div class="msg msg-ai">Hi! I'm your malware research assistant. Ask me about techniques, TTPs, or the codebase.</div>
       </div>
+      <div id="chat-suggestions" class="chat-suggestions">
+        <span class="chat-suggestion" onclick="askSuggestion(this)">What is peekaboo?</span>
+        <span class="chat-suggestion" onclick="askSuggestion(this)">How does Telegram C2 work?</span>
+        <span class="chat-suggestion" onclick="askSuggestion(this)">Process injection techniques</span>
+        <span class="chat-suggestion" onclick="askSuggestion(this)">AV/EDR evasion methods</span>
+        <span class="chat-suggestion" onclick="askSuggestion(this)">MITRE ATT&amp;CK coverage</span>
+        <span class="chat-suggestion" onclick="askSuggestion(this)">Persistence techniques</span>
+      </div>
+      <div id="chat-status" class="chat-status" style="opacity:0"></div>
       <div class="chat-input-row">
         <div class="chat-provider">
           <button class="provider-btn active" id="prov-claude" onclick="setProvider('claude')">Claude</button>
           <button class="provider-btn" id="prov-gemini" onclick="setProvider('gemini')">Gemini</button>
+          <button class="provider-btn" id="prov-ollama" onclick="setProvider('ollama')">Ollama</button>
         </div>
         <input class="chat-input" type="text" id="chat-input" placeholder="Ask about TTPs, techniques, code…" onkeydown="if(event.key==='Enter')sendChat()">
         <button class="btn btn-primary btn-sm" onclick="sendChat()" id="chat-send-btn">Send</button>
@@ -983,7 +1020,7 @@ async function loadSourceTab(path, btn) {
   document.querySelectorAll('#mm-source-tabs .btn').forEach(b => b.classList.remove('active'));
   btn.classList.add('active');
   try {
-    // path is absolute — fetch via module detail with src_name
+    // path is absolute - fetch via module detail with src_name
     document.getElementById('mm-code').textContent = 'loading…';
     const src = await fetch(`/api/library/source?path=${encodeURIComponent(path)}`).then(r => r.text()).catch(() => '');
     document.getElementById('mm-code').textContent = src;
@@ -1037,6 +1074,27 @@ async function rebuildRegistry() {
 // -----------------------------------------------------------------
 // Builder
 // -----------------------------------------------------------------
+function pickPill(hiddenId, gridId, el) {
+  document.querySelectorAll('#'+gridId+' .pill-opt').forEach(p=>p.classList.remove('sel'));
+  el.classList.add('sel');
+  document.getElementById(hiddenId).value = el.dataset.val;
+}
+function pickSeg(hiddenId, gridId, el) {
+  document.querySelectorAll('#'+gridId+' .seg-opt').forEach(p=>p.classList.remove('sel'));
+  el.classList.add('sel');
+  document.getElementById(hiddenId).value = el.dataset.val;
+  toggleInjectionMode();
+}
+function initBuilderPills() {
+  [['b-payload','b-pay-pills'],['b-enc','b-enc-pills'],['b-injection','b-inj-pills'],['b-stealer','b-stl-pills'],['b-persistence','b-per-pills']].forEach(([id,grid])=>{
+    const first = document.querySelector('#'+grid+' .pill-opt');
+    if (first) pickPill(id, grid, first);
+  });
+  const firstSeg = document.querySelector('#b-mode-seg .seg-opt');
+  if (firstSeg) { firstSeg.classList.add('sel'); document.getElementById('b-malware').value = firstSeg.dataset.val; }
+  toggleInjectionMode();
+}
+
 function toggleInjectionMode() {
   const mode = document.getElementById('b-malware').value;
   document.getElementById('b-inj-wrap').style.display = mode === 'stealer' ? 'none' : 'block';
@@ -1397,7 +1455,7 @@ async function loadCoverage() {
   `;
 
   const cols = TACTICS_ORDER.filter(t => byTactic[t.id]?.length > 0);
-  if (!cols.length) { document.getElementById('cov-content').innerHTML = '<div class="empty">No coverage data available — rebuild the module index first</div>'; return; }
+  if (!cols.length) { document.getElementById('cov-content').innerHTML = '<div class="empty">No coverage data available - rebuild the module index first</div>'; return; }
 
   const maxRows = Math.max(...cols.map(t => byTactic[t.id].length));
   const colWidth = Math.max(80, Math.floor(1020 / cols.length));
@@ -1416,9 +1474,9 @@ async function loadCoverage() {
       if (!item) { html += '<td class="cov-td"></td>'; return; }
       let cls = 'cov-empty';
       let title = item.aid;
-      if (item.peekaboo && item.count > 0) { cls = 'cov-both'; title += ' — template + library (' + item.count + ' modules)'; }
-      else if (item.peekaboo) { cls = 'cov-peekaboo'; title += ' — peekaboo template'; }
-      else if (item.count > 0) { cls = 'cov-library'; title += ' — library (' + item.count + ' module' + (item.count>1?'s':'') + ')'; }
+      if (item.peekaboo && item.count > 0) { cls = 'cov-both'; title += ' - template + library (' + item.count + ' modules)'; }
+      else if (item.peekaboo) { cls = 'cov-peekaboo'; title += ' - peekaboo template'; }
+      else if (item.count > 0) { cls = 'cov-library'; title += ' - library (' + item.count + ' module' + (item.count>1?'s':'') + ')'; }
       html += `<td class="cov-td"><span class="cov-cell ${cls}" title="${escAttr(title)}" onclick="toast('${escAttr(item.aid)}: ${item.peekaboo?'template ':''}${item.count>0?item.count+' lib modules':'not covered'}','info')" style="display:flex;align-items:center;justify-content:center;font-size:8px;color:rgba(0,0,0,.5)">${item.aid.replace('T1','')}</span></td>`;
     });
     html += '</tr>';
@@ -1653,7 +1711,7 @@ async function checkBinaryInfo() {
   const d = await fetch('/api/c2/binary_info').then(r=>r.json()).catch(()=>({}));
   const el = document.getElementById('c2-binary-info');
   if (d.found) {
-    el.textContent = `${d.name} — ${(d.size/1024).toFixed(1)} KB — ${d.modified?.slice(0,16)}`;
+    el.textContent = `${d.name} - ${(d.size/1024).toFixed(1)} KB - ${d.modified?.slice(0,16)}`;
   } else {
     el.textContent = 'no binary built yet';
   }
@@ -1717,8 +1775,22 @@ async function loadChatStatus() {
     <span class="text-xs text-dim" style="margin-left:6px">${kb.last_updated?.slice(0,10)||'never'}</span>`;
   const providers = await fetch('/api/chat/providers').then(r=>r.json()).catch(()=>({}));
   document.getElementById('providers-info').innerHTML = Object.entries(providers).map(([k,v]) =>
-    `<span class="badge ${v.ok?'badge-green':'badge-dim'}">${k}: ${v.ok?'✓':'✗'}</span>`
+    `<span class="badge ${v.available?'badge-green':'badge-dim'}">${k}: ${v.available?'✓':'✗'}</span>`
   ).join('');
+  if (providers.ollama?.model) {
+    document.getElementById('prov-ollama').textContent = providers.ollama.model;
+  }
+}
+
+function askSuggestion(el) {
+  document.getElementById('chat-input').value = el.textContent;
+  sendChat();
+}
+
+function setChatStatus(dotClass, text) {
+  const s = document.getElementById('chat-status');
+  s.style.opacity = text ? '1' : '0';
+  s.innerHTML = text ? `<span class="chat-status-dot ${dotClass}"></span>${text}` : '';
 }
 
 async function sendChat() {
@@ -1728,10 +1800,13 @@ async function sendChat() {
   input.value = '';
   chatHistory.push({role:'user', content:msg});
   appendChatMsg('user', msg);
+  const sugg = document.getElementById('chat-suggestions');
+  if (sugg) sugg.style.display = 'none';
   const btn = document.getElementById('chat-send-btn');
   btn.disabled = true;
 
-  const aiDiv = appendChatMsg('ai', '…');
+  const aiDiv = appendChatMsg('ai', '');
+  setChatStatus('', 'connecting…');
   try {
     const resp = await fetch('/api/chat', {
       method: 'POST',
@@ -1741,7 +1816,6 @@ async function sendChat() {
     const reader = resp.body.getReader();
     const dec    = new TextDecoder();
     let buf = '', full = '';
-    aiDiv.textContent = '';
     while (true) {
       const {done, value} = await reader.read();
       if (done) break;
@@ -1751,19 +1825,34 @@ async function sendChat() {
       for (const line of lines) {
         if (!line.startsWith('data:')) continue;
         const raw = line.slice(5).trim();
-        if (raw === '[DONE]') break;
+        if (raw === '[DONE]') { setChatStatus('', ''); break; }
         try {
           const ev = JSON.parse(raw);
-          if (ev.text) { full += ev.text; aiDiv.innerHTML = marked.parse(full); scrollChat(); }
+          if (ev.status === 'canned')     { setChatStatus('rag',      '⚡ instant answer'); }
+          else if (ev.status === 'rag')   { setChatStatus('rag',      ev.msg || 'searching knowledge base…'); }
+          else if (ev.status === 'connecting') { setChatStatus('',   ev.msg || 'connecting…'); }
+          else if (ev.status === 'generating') { setChatStatus('',   ev.msg || 'generating…'); }
+          else if (ev.thinking === true)  { setChatStatus('thinking', 'thinking…'); }
+          else if (ev.thinking === false) { setChatStatus('',         'responding…'); }
+          else if (ev.text) {
+            if (!full) setChatStatus('', '');
+            full += ev.text;
+            aiDiv.innerHTML = marked.parse(full);
+            scrollChat();
+          } else if (ev.error) {
+            aiDiv.textContent = '[=^..^=] ' + ev.error;
+            setChatStatus('', '');
+          }
         } catch(e) {}
       }
     }
     chatHistory.push({role:'assistant', content:full});
-    if (typeof hljs !== 'undefined') aiDiv.querySelectorAll('pre code').forEach(el => hljs.highlightElement(el));
+    if (typeof hljs !== 'undefined') aiDiv.querySelectorAll('pre code').forEach(el => { delete el.dataset.highlighted; hljs.highlightElement(el); });
   } catch(e) {
     aiDiv.textContent = 'Error: ' + e;
   } finally {
     btn.disabled = false;
+    setChatStatus('', '');
     scrollChat();
   }
 }
@@ -1849,6 +1938,7 @@ function escAttr(s) {
 // Init
 // -----------------------------------------------------------------
 document.addEventListener('DOMContentLoaded', () => {
+  initBuilderPills();
   loadBuildHistory();
   // preload library count
   fetch('/api/library/stats').then(r=>r.json()).then(s => {
