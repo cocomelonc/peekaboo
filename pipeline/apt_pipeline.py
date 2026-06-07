@@ -85,14 +85,14 @@ def agent_download(actor_data: dict, session_id: str):
         try:
             r = _req.get(url, timeout=15, headers={"User-Agent": "Mozilla/5.0"})
             if r.status_code == 200:
-                # keep raw HTML stripped to readable text; also store a short HTML
-                # snippet so the frontend can render a preview
+                # store raw HTML so the frontend can render it properly
                 raw_html = r.text[:120000]
-                plain    = re.sub(r'<[^>]+>', ' ', raw_html)
-                plain    = re.sub(r'\s+', ' ', plain).strip()[:60000]
-                _db.save_report(session_id, idx, url, plain)
+                _db.save_report(session_id, idx, url, raw_html)
+                # plain text for the live event preview only
+                plain = re.sub(r'<[^>]+>', ' ', raw_html)
+                plain = re.sub(r'\s+', ' ', plain).strip()
                 yield {"report_idx": idx, "url": url,
-                       "preview": plain[:500], "chars": len(plain)}
+                       "preview": plain[:300], "chars": len(raw_html)}
                 idx += 1
         except Exception:
             continue
@@ -301,7 +301,10 @@ def run_pipeline(actor_id: str) -> Generator[dict, None, None]:
     yield {"step": 2, "status": "running", "msg": "downloading threat reports…"}
     report_contents: list[str] = []
     for ev in agent_download(actor_data, session_id):
-        report_contents.append(_db.get_reports(session_id)[ev["report_idx"]]["content"])
+        raw = _db.get_reports(session_id)[ev["report_idx"]]["content"]
+        plain = re.sub(r'<[^>]+>', ' ', raw)
+        plain = re.sub(r'\s+', ' ', plain).strip()[:60000]
+        report_contents.append(plain)
         yield {"step": 2, "status": "running",
                "msg": f"downloaded report {ev['report_idx']+1}: {ev['url'][:60]}",
                "data": {"report": ev}}

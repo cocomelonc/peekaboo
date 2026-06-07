@@ -1151,28 +1151,24 @@ def api_pipeline_run():
                     d = event.get("data", {})
                     sid = d.get("session_id", "")
                     if sid:
-                        fnames = d.get("files", [])
+                        # scan actual files on disk (complete event carries no file list)
                         files, total = [], 0
-                        for fn in fnames:
-                            fp = SAMPLES_DIR / sid / fn
-                            sz = fp.stat().st_size if fp.exists() else 0
-                            files.append({"name": fn, "size": sz})
-                            total += sz
-                        # ttps count from step 3 event is already in meta.json;
-                        # read it back for accuracy
-                        meta: dict = {}
-                        meta_path = PIPELINE_DIR / sid / "meta.json"
-                        if meta_path.exists():
-                            try:
-                                meta = json.loads(meta_path.read_text())
-                            except Exception:
-                                pass
+                        sample_path = SAMPLES_DIR / sid
+                        if sample_path.exists():
+                            for fp in sample_path.iterdir():
+                                if fp.is_file() and not fp.name.startswith("."):
+                                    sz = fp.stat().st_size
+                                    files.append({"name": fp.name, "size": sz})
+                                    total += sz
+                        # ttps count from DB (already stored by the pipeline)
+                        sess = _db.get_pipeline_session(sid)
+                        ttps_count = len(sess.get("ttps", [])) if sess else 0
                         _db.save_sample({
                             "session_id": sid,
                             "files":      files,
                             "total_size": total,
                             "actor":      actor_id,
-                            "ttps":       meta.get("ttps", 0),
+                            "ttps":       ttps_count,
                             "status":     "success",
                         })
         except Exception as e:
@@ -1201,6 +1197,15 @@ def api_pipeline_session(session_id: str):
         return jsonify({"error": "not found"}), 404
     reports = _db.get_reports(session_id)
     sample  = next((s for s in _db.get_samples() if s["session_id"] == session_id), None)
+    # filesystem fallback for samples compiled before DB migration
+    if not sample:
+        sp = SAMPLES_DIR / session_id
+        if sp.exists():
+            flist = [{"name": f.name, "size": f.stat().st_size}
+                     for f in sp.iterdir() if f.is_file() and not f.name.startswith(".")]
+            if flist:
+                sample = {"session_id": session_id, "files": flist,
+                          "total_size": sum(f["size"] for f in flist), "status": "built"}
     return jsonify({
         "session": session,
         "reports": reports,

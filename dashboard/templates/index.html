@@ -203,17 +203,11 @@ code{font-family:var(--mono);font-size:12px;background:var(--bg4);padding:1px 5p
 .dtab{padding:8px 16px;font-size:12px;cursor:pointer;color:var(--text2);border-bottom:2px solid transparent;transition:all .15s}
 .dtab:hover{color:var(--text)}
 .dtab.active{color:var(--purple);border-bottom-color:var(--purple);font-weight:600}
-.report-card{background:var(--bg3);border:1px solid var(--sep);border-radius:var(--rs);margin-bottom:12px;overflow:hidden}
-.report-card-header{padding:10px 14px;display:flex;align-items:center;gap:8px;cursor:pointer;user-select:none}
-.report-card-header:hover{background:rgba(255,255,255,.03)}
-.report-content{padding:14px;font-size:11.5px;line-height:1.6;color:var(--text2);white-space:pre-wrap;word-break:break-word;max-height:320px;overflow-y:auto;border-top:1px solid var(--sep);display:none}
-.report-content.open{display:block}
+.report-link-row{display:flex;align-items:center;gap:10px;padding:9px 12px;border-bottom:1px solid rgba(61,56,96,.5);text-decoration:none;color:inherit;transition:background .12s}
+.report-link-row:last-child{border-bottom:none}
+.report-link-row:hover{background:rgba(181,123,255,.06)}
 .ttp-grid{display:flex;flex-direction:column;gap:6px}
 .ttp-item{display:flex;align-items:center;gap:10px;padding:8px 12px;background:var(--bg3);border:1px solid var(--sep);border-radius:var(--rs);font-size:12px}
-.live-download-feed{background:var(--bg3);border:1px solid var(--sep);border-radius:var(--rs);padding:12px;margin-top:10px;max-height:200px;overflow-y:auto;font-size:11.5px;display:none}
-.live-download-feed.active{display:block}
-.live-report-line{padding:4px 0;border-bottom:1px solid rgba(255,255,255,.04);color:var(--text2)}
-.live-report-line:last-child{border-bottom:none;color:var(--text)}
 
 /* -- coverage heatmap -- */
 .coverage-wrap{overflow-x:auto}
@@ -548,7 +542,7 @@ code{font-family:var(--mono);font-size:12px;background:var(--bg4);padding:1px 5p
         <div class="fw-600 mb-8" style="font-size:13px;color:var(--dim);text-transform:uppercase;letter-spacing:.5px">Pipeline Steps</div>
         <div class="pipe-steps" id="pipe-steps">
           <div class="pipe-step" id="ps-1"><div class="pipe-step-icon" id="psi-1">🗄️</div><div class="pipe-step-body"><div class="pipe-step-name">Malpedia Fetch</div><div class="pipe-step-msg" id="psm-1">Fetch actor / family data</div></div></div>
-          <div class="pipe-step" id="ps-2"><div class="pipe-step-icon" id="psi-2">⬇️</div><div class="pipe-step-body"><div class="pipe-step-name">Report Download</div><div class="pipe-step-msg" id="psm-2">Download threat reports</div><div class="live-download-feed" id="live-download-feed"></div></div></div>
+          <div class="pipe-step" id="ps-2"><div class="pipe-step-icon" id="psi-2">⬇️</div><div class="pipe-step-body"><div class="pipe-step-name">Report Download</div><div class="pipe-step-msg" id="psm-2">Download threat reports</div></div></div>
           <div class="pipe-step" id="ps-3"><div class="pipe-step-icon" id="psi-3">🔍</div><div class="pipe-step-body"><div class="pipe-step-name">TTP Extraction</div><div class="pipe-step-msg" id="psm-3">Extract ATT&amp;CK techniques</div></div></div>
           <div class="pipe-step" id="ps-4"><div class="pipe-step-icon" id="psi-4">🧩</div><div class="pipe-step-body"><div class="pipe-step-name">Module Selection</div><div class="pipe-step-msg" id="psm-4">Map TTPs to peekaboo modules</div></div></div>
           <div class="pipe-step" id="ps-5"><div class="pipe-step-icon" id="psi-5">⚡</div><div class="pipe-step-body"><div class="pipe-step-name">Binary Compile</div><div class="pipe-step-msg" id="psm-5">Compile custom binary</div></div></div>
@@ -1311,15 +1305,14 @@ function selectActorSuggest(val) {
 }
 
 function resetPipelineSteps() {
+  const defaults = ['Fetch actor / family data','Download threat reports','Extract ATT&CK techniques','Map TTPs to peekaboo modules','Compile custom binary'];
   for (let i = 1; i <= 5; i++) {
     const icon = document.getElementById('psi-'+i);
     const msg  = document.getElementById('psm-'+i);
     icon.className = 'pipe-step-icon';
-    msg.textContent = ['Fetch actor / family data','Download threat reports','Extract ATT&CK techniques','Map TTPs to peekaboo modules','Compile custom binary'][i-1];
+    icon.innerHTML = ['🗄️','⬇️','🔍','🧩','⚡'][i-1];
+    msg.textContent = defaults[i-1];
   }
-  const feed = document.getElementById('live-download-feed');
-  feed.innerHTML = '';
-  feed.classList.remove('active');
 }
 
 function setPipeStep(step, status, msg) {
@@ -1332,17 +1325,7 @@ function setPipeStep(step, status, msg) {
   if (status === 'error') icon.innerHTML = '✗';
 }
 
-function appendLiveReport(rep) {
-  const feed = document.getElementById('live-download-feed');
-  feed.classList.add('active');
-  const line = document.createElement('div');
-  line.className = 'live-report-line';
-  line.innerHTML = `<span class="badge badge-dim" style="font-size:9px;margin-right:6px">#${rep.report_idx}</span>`
-    + `<span class="mono text-xs" style="color:var(--blue)">${escHtml(rep.url.slice(0,70))}${rep.url.length>70?'…':''}</span>`
-    + ` <span class="text-dim" style="font-size:10px">${(rep.chars||0).toLocaleString()} chars</span>`;
-  feed.appendChild(line);
-  feed.scrollTop = feed.scrollHeight;
-}
+const TACTIC_COLORS = {'execution':'#30D158','defense-evasion':'#FFD60A','persistence':'#0A84FF','command-and-control':'#FF453A','privilege-escalation':'#FF9F0A','credential-access':'#BF5AF2','discovery':'#64D2FF','unknown':'#636366'};
 
 async function runPipeline() {
   const actorId = document.getElementById('apt-actor').value.trim();
@@ -1350,9 +1333,14 @@ async function runPipeline() {
   document.getElementById('apt-suggestions').style.display = 'none';
   resetPipelineSteps();
   document.getElementById('apt-run-btn').disabled = true;
-  document.getElementById('apt-results').innerHTML = '<div class="loading-full" style="padding:40px"><div class="spinner"></div> Running pipeline…</div>';
 
-  let lastData = {};
+  const resultsEl = document.getElementById('apt-results');
+  resultsEl.innerHTML = '';
+
+  let reportsSection = null;
+  let reportsList    = null;
+  let reportsHdr     = null;
+  let reportCount    = 0;
 
   const resp = await fetch('/api/pipeline/run', {
     method: 'POST',
@@ -1376,86 +1364,136 @@ async function runPipeline() {
       if (raw === '[DONE]') break;
       try {
         const ev = JSON.parse(raw);
+
+        // update left-panel step indicators (skip per-report sub-events)
         if (ev.step >= 1 && ev.step <= 5) {
-          // for step 2 running events with a single report, don't overwrite the
-          // step-level message — let the feed show the detail
           if (!(ev.step === 2 && ev.status === 'running' && ev.data?.report)) {
             setPipeStep(ev.step, ev.status, ev.msg);
           }
-          if (ev.data) lastData[ev.step] = ev.data;
         }
-        // live report download feed
+
+        // step 1 done → actor card
+        if (ev.step === 1 && ev.status === 'done') {
+          const actor = ev.data || {};
+          const fams = (actor.families||[]).slice(0,5).map(f => escHtml(typeof f==='object'?f.name:f)).join(', ');
+          const div = document.createElement('div');
+          div.className = 'card card-sm';
+          div.style.marginBottom = '12px';
+          div.innerHTML = `<div class="text-xs text-dim" style="letter-spacing:.5px;margin-bottom:6px">ACTOR</div>
+            <div class="fw-600" style="font-size:14px">${escHtml(actor.name || actorId)}</div>
+            ${actor.country ? `<div class="text-xs text-dim" style="margin-top:3px">Country: ${escHtml(actor.country)}</div>` : ''}
+            ${fams ? `<div class="text-xs text-dim" style="margin-top:3px">Families: ${fams}</div>` : ''}`;
+          resultsEl.appendChild(div);
+        }
+
+        // step 2 running with report → append link row
         if (ev.step === 2 && ev.status === 'running' && ev.data?.report) {
-          appendLiveReport(ev.data.report);
+          if (!reportsSection) {
+            reportsSection = document.createElement('div');
+            reportsSection.className = 'card card-sm';
+            reportsSection.style.marginBottom = '12px';
+            reportsHdr = document.createElement('div');
+            reportsHdr.className = 'text-xs text-dim';
+            reportsHdr.style.cssText = 'letter-spacing:.5px;margin-bottom:8px';
+            reportsHdr.textContent = 'REPORTS';
+            reportsList = document.createElement('div');
+            reportsSection.appendChild(reportsHdr);
+            reportsSection.appendChild(reportsList);
+            resultsEl.appendChild(reportsSection);
+          }
+          const rep = ev.data.report;
+          reportCount++;
+          reportsHdr.textContent = `REPORTS (${reportCount})`;
+          const row = document.createElement('a');
+          row.className = 'report-link-row';
+          row.href = rep.url;
+          row.target = '_blank';
+          row.rel = 'noopener noreferrer';
+          row.innerHTML = `<span class="badge badge-dim" style="font-size:9px;flex-shrink:0">#${rep.report_idx}</span>`
+            + `<span class="mono text-xs" style="flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;color:var(--blue)">${escHtml(rep.url)}</span>`
+            + `<span class="text-dim" style="font-size:10px;flex-shrink:0">${(rep.chars||0).toLocaleString()} chars</span>`;
+          reportsList.appendChild(row);
         }
+
+        // step 3 done → TTPs section
         if (ev.step === 3 && ev.status === 'done') {
-          renderTTPResults(ev.data || [], lastData);
+          const ttps = ev.data || [];
+          const div = document.createElement('div');
+          div.className = 'card card-sm';
+          div.style.marginBottom = '12px';
+          if (!ttps.length) {
+            div.innerHTML = `<div class="text-xs text-dim" style="letter-spacing:.5px;margin-bottom:6px">TTPS</div><div class="text-dim text-sm">No TTPs extracted from reports</div>`;
+          } else {
+            const rows = ttps.map(t => {
+              const col = TACTIC_COLORS[t.tactic] || TACTIC_COLORS.unknown;
+              return `<div class="ttp-row">
+                <span class="badge badge-red" style="font-family:var(--mono)">${escHtml(t.id)}</span>
+                <span style="font-size:13px;flex:1">${escHtml(t.name||t.id)}</span>
+                <span class="badge" style="background:${col}22;color:${col};font-size:10px">${escHtml(t.tactic)}</span>
+                ${t.evidence ? `<span class="text-xs text-dim" style="max-width:160px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap" title="${escAttr(t.evidence)}">"${escHtml(t.evidence.slice(0,40))}"</span>` : ''}
+              </div>`;
+            }).join('');
+            div.innerHTML = `<div class="text-xs text-dim" style="letter-spacing:.5px;margin-bottom:8px">TTPS (${ttps.length})</div>
+              <div style="border:1px solid var(--sep);border-radius:var(--rs);overflow:hidden">${rows}</div>`;
+          }
+          resultsEl.appendChild(div);
         }
+
+        // step 4 done → modules section
+        if (ev.step === 4 && ev.status === 'done') {
+          const mods = (ev.data || {}).selected_modules || [];
+          if (mods.length) {
+            const div = document.createElement('div');
+            div.className = 'card card-sm';
+            div.style.marginBottom = '12px';
+            const rows = mods.map(m =>
+              `<div style="display:flex;align-items:center;gap:8px;padding:6px 0;border-bottom:1px solid var(--sep)">
+                <span class="badge badge-red" style="font-size:10px">${escHtml(m.attack_id)}</span>
+                <span class="text-sm">${escHtml(m.title||m.module_id)}</span>
+                <span class="badge badge-dim text-xs" style="margin-left:auto">${escHtml(m.category)}</span>
+              </div>`).join('');
+            div.innerHTML = `<div class="text-xs text-dim" style="letter-spacing:.5px;margin-bottom:8px">SELECTED MODULES (${mods.length})</div>
+              <div style="border:1px solid var(--sep);border-radius:var(--rs);overflow:hidden">${rows}</div>`;
+            resultsEl.appendChild(div);
+          }
+        }
+
+        // step 5 done → binary section
         if (ev.step === 5 && ev.status === 'done') {
-          renderPipelineSuccess(ev.data, lastData);
+          const data = ev.data || {};
+          const sid  = data.session_id || '';
+          const files = data.files || [];
+          const div = document.createElement('div');
+          div.className = 'card card-sm';
+          div.style.marginBottom = '12px';
+          const dlBtns = files.map(f =>
+            `<a href="/api/samples/${sid}/download/${encodeURIComponent(f)}" class="btn btn-green btn-sm">⬇ ${escHtml(f)}</a>`).join(' ');
+          div.innerHTML = `<div class="text-xs text-dim" style="letter-spacing:.5px;margin-bottom:8px">COMPILED BINARY</div>
+            <div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap">
+              <span class="badge badge-green">✓ compiled</span>
+              <span class="mono text-xs text-dim">session: ${escHtml(sid)}</span>
+              <button class="btn btn-ghost btn-sm" style="margin-left:auto" onclick="openSessionDrawer('${escAttr(sid)}')">🔍 Inspect</button>
+            </div>
+            ${dlBtns ? `<div style="margin-top:10px;display:flex;gap:8px;flex-wrap:wrap">${dlBtns}</div>` : ''}`;
+          resultsEl.appendChild(div);
         }
+
+        // any error → error card
         if (ev.status === 'error') {
-          document.getElementById('apt-results').innerHTML =
-            `<div class="card"><div class="badge badge-red" style="margin-bottom:10px">Pipeline Error</div><div class="terminal">${escHtml(ev.msg||'unknown error')}</div></div>`;
+          const div = document.createElement('div');
+          div.className = 'card card-sm';
+          div.style.marginBottom = '12px';
+          div.innerHTML = `<div class="badge badge-red" style="margin-bottom:8px">Error (step ${ev.step})</div>
+            <div class="terminal" style="min-height:60px">${escHtml(ev.msg||'unknown error')}</div>`;
+          resultsEl.appendChild(div);
         }
+
       } catch(e) {}
     }
   }
 
   document.getElementById('apt-run-btn').disabled = false;
   loadPipelineSessions();
-}
-
-const TACTIC_COLORS = {'execution':'#30D158','defense-evasion':'#FFD60A','persistence':'#0A84FF','command-and-control':'#FF453A','privilege-escalation':'#FF9F0A','credential-access':'#BF5AF2','discovery':'#64D2FF','unknown':'#636366'};
-
-function renderTTPResults(ttps, allData) {
-  if (!ttps.length) {
-    document.getElementById('apt-results').innerHTML = `<div class="empty"><div class="empty-icon">🔍</div><div>No TTPs extracted from reports</div></div>`;
-    return;
-  }
-  const rows = ttps.map(t => {
-    const col = TACTIC_COLORS[t.tactic] || TACTIC_COLORS.unknown;
-    return `<div class="ttp-row">
-      <span class="badge badge-red" style="font-family:var(--mono)">${t.id}</span>
-      <span style="font-size:13px;flex:1">${escHtml(t.name||t.id)}</span>
-      <span class="badge" style="background:${col}22;color:${col};font-size:10px">${t.tactic}</span>
-      ${t.evidence ? `<span class="text-xs text-dim" style="max-width:180px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap" title="${escAttr(t.evidence)}">"${escHtml(t.evidence.slice(0,40))}"</span>` : ''}
-    </div>`;
-  }).join('');
-  document.getElementById('apt-results').innerHTML = `
-    <div style="margin-bottom:14px;display:flex;align-items:center;justify-content:space-between">
-      <div class="fw-600">${ttps.length} TTPs Extracted</div>
-    </div>
-    <div style="border:1px solid var(--sep);border-radius:var(--rs);overflow:hidden">${rows}</div>`;
-}
-
-function renderPipelineSuccess(data, allData) {
-  const params = (allData[4] || {});
-  const files  = (data?.files || []);
-  const sid    = data?.session_id || '';
-  const mods   = (params.selected_modules || []).map(m =>
-    `<div style="display:flex;align-items:center;gap:8px;padding:6px 0;border-bottom:1px solid var(--sep)">
-      <span class="badge badge-red" style="font-size:10px">${m.attack_id}</span>
-      <span class="text-sm">${escHtml(m.title||m.module_id)}</span>
-      <span class="badge badge-dim text-xs" style="margin-left:auto">${m.category}</span>
-    </div>`).join('');
-
-  const dlBtns = files.map(f =>
-    `<a href="/api/samples/${sid}/download/${f}" class="btn btn-green btn-sm">⬇ ${f}</a>`).join(' ');
-
-  document.getElementById('apt-results').innerHTML = `
-    <div style="margin-bottom:12px">
-      <span class="badge badge-green" style="font-size:13px;padding:6px 12px">✓ Pipeline Complete</span>
-      <button class="btn btn-ghost btn-sm" style="margin-left:10px" onclick="openSessionDrawer('${sid}')">🔍 Inspect Session</button>
-    </div>
-    <div class="card card-sm" style="margin-bottom:12px">
-      <div class="text-xs text-dim text-uppercase" style="letter-spacing:.5px;margin-bottom:8px">Selected Modules</div>
-      ${mods || '<div class="text-dim text-sm">no modules matched</div>'}
-    </div>
-    <div class="card card-sm">
-      <div class="text-xs text-dim" style="margin-bottom:8px">SESSION ${sid}</div>
-      <div style="display:flex;gap:8px">${dlBtns}</div>
-    </div>`;
 }
 
 async function loadPipelineSessions() {
@@ -1506,6 +1544,7 @@ function closeSessionDrawer(e) {
   document.getElementById('session-drawer-overlay').classList.remove('open');
 }
 
+
 async function openSessionDrawer(sessionId) {
   const overlay = document.getElementById('session-drawer-overlay');
   overlay.classList.add('open');
@@ -1522,32 +1561,38 @@ async function openSessionDrawer(sessionId) {
   try {
     d = await fetch(`/api/pipeline/session/${sessionId}`).then(r=>r.json());
   } catch(e) {
-    document.getElementById('drawer-tab-reports').innerHTML = '<div class="text-dim">failed to load</div>';
+    document.getElementById('drawer-tab-reports').innerHTML =
+      '<div class="text-dim" style="padding:20px">failed to load</div>';
     return;
   }
 
   const sess = d.session || {};
-  document.getElementById('drawer-subtitle').textContent = sess.actor_id || '';
-  const stCls = sess.status === 'success' ? 'badge-green' : (sess.status === 'running' ? 'badge-yellow' : 'badge-red');
+  document.getElementById('drawer-subtitle').textContent =
+    `${sess.actor_id || ''}  ·  started ${(sess.started||'').slice(0,16)}`;
+  const stCls = sess.status === 'success' ? 'badge-green'
+              : sess.status === 'running'  ? 'badge-yellow' : 'badge-red';
   document.getElementById('drawer-status-badge').className = `badge ${stCls}`;
   document.getElementById('drawer-status-badge').textContent = sess.status || '';
 
   // ---- Reports tab ----
   const reports = d.reports || [];
+
   if (!reports.length) {
     document.getElementById('drawer-tab-reports').innerHTML =
       '<div class="empty" style="padding:40px"><div class="empty-icon">📄</div><div>No reports in DB for this session</div></div>';
   } else {
-    document.getElementById('drawer-tab-reports').innerHTML = reports.map((r, i) => `
-      <div class="report-card">
-        <div class="report-card-header" onclick="toggleReport(this)">
-          <span class="badge badge-dim" style="font-size:10px">#${r.idx}</span>
-          <span class="mono text-xs" style="flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;color:var(--blue)">${escHtml(r.url)}</span>
-          <span class="text-xs text-dim">${(r.content||'').length.toLocaleString()} chars</span>
-          <span style="margin-left:8px;color:var(--dim);font-size:10px">▶</span>
-        </div>
-        <pre class="report-content" id="rc-${sessionId}-${i}">${escHtml((r.content||'').slice(0,8000))}${(r.content||'').length>8000?'\n\n[truncated…]':''}</pre>
-      </div>`).join('');
+    const rows = reports.map(r => {
+      const chars = (r.content || '').length;
+      return `<a class="report-link-row" href="${escAttr(r.url)}" target="_blank" rel="noopener noreferrer">
+        <span class="badge badge-dim" style="font-size:9px;flex-shrink:0">#${r.idx}</span>
+        <span class="mono text-xs" style="flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;color:var(--blue)"
+              title="${escAttr(r.url)}">${escHtml(r.url)}</span>
+        <span class="text-xs text-dim" style="flex-shrink:0">${chars.toLocaleString()} chars</span>
+      </a>`;
+    }).join('');
+    document.getElementById('drawer-tab-reports').innerHTML =
+      `<div style="margin-bottom:10px" class="text-xs text-dim">${reports.length} report(s) downloaded</div>
+       <div style="background:var(--bg3);border:1px solid var(--sep);border-radius:var(--rs);overflow:hidden">${rows}</div>`;
   }
 
   // ---- TTPs tab ----
@@ -1561,9 +1606,9 @@ async function openSessionDrawer(sessionId) {
       <div class="ttp-grid">${ttps.map(t => {
         const col = TACTIC_COLORS[t.tactic] || TACTIC_COLORS.unknown;
         return `<div class="ttp-item">
-          <span class="badge badge-red" style="font-family:var(--mono);min-width:70px;text-align:center">${t.id}</span>
+          <span class="badge badge-red" style="font-family:var(--mono);min-width:72px;text-align:center">${escHtml(t.id)}</span>
           <span style="flex:1">${escHtml(t.name||t.id)}</span>
-          <span class="badge" style="background:${col}22;color:${col};font-size:10px">${t.tactic}</span>
+          <span class="badge" style="background:${col}22;color:${col};font-size:10px;white-space:nowrap">${escHtml(t.tactic)}</span>
           ${t.source ? `<span class="text-xs text-dim">${escHtml(t.source)}</span>` : ''}
         </div>`;
       }).join('')}</div>`;
@@ -1572,42 +1617,45 @@ async function openSessionDrawer(sessionId) {
   // ---- Binary tab ----
   const sample = d.sample;
   const params = sess.params || {};
-  if (!sample) {
+  if (!sample || !(sample.files||[]).length) {
     document.getElementById('drawer-tab-binary').innerHTML =
       '<div class="empty" style="padding:40px"><div class="empty-icon">💾</div><div>No compiled binary for this session</div></div>';
   } else {
     const files = (sample.files||[]).map(f =>
       `<div style="display:flex;align-items:center;gap:10px;padding:10px 0;border-bottom:1px solid var(--sep)">
         <span style="font-size:20px">💾</span>
-        <div style="flex:1"><div class="mono text-sm">${escHtml(f.name)}</div><div class="text-xs text-dim">${formatBytes(f.size)}</div></div>
-        <a href="/api/samples/${sessionId}/download/${encodeURIComponent(f.name)}" class="btn btn-green btn-sm">⬇ Download</a>
+        <div style="flex:1">
+          <div class="mono text-sm">${escHtml(f.name)}</div>
+          <div class="text-xs text-dim">${formatBytes(f.size)}</div>
+        </div>
+        <a href="/api/samples/${sessionId}/download/${encodeURIComponent(f.name)}"
+           class="btn btn-green btn-sm">⬇ Download</a>
       </div>`).join('');
+    const paramBadges = ['encryption','malware','injection','stealer','persistence']
+      .filter(k => params[k] && params[k] !== 'none')
+      .map(k => `<span class="badge badge-dim">${k}: ${escHtml(params[k])}</span>`).join('');
     const mods = (params.selected_modules||[]).map(m =>
-      `<div style="display:flex;align-items:center;gap:8px;padding:5px 0">
-        <span class="badge badge-red" style="font-size:10px">${m.attack_id}</span>
-        <span class="text-sm">${escHtml(m.title||m.module_id)}</span>
-        <span class="badge badge-dim text-xs" style="margin-left:auto">${m.category}</span>
+      `<div style="display:flex;align-items:center;gap:8px;padding:6px 0;border-bottom:1px solid var(--sep)">
+        <span class="badge badge-red" style="font-size:10px;min-width:60px;text-align:center">${escHtml(m.attack_id)}</span>
+        <span class="text-sm" style="flex:1">${escHtml(m.title||m.module_id)}</span>
+        <span class="badge badge-dim text-xs">${escHtml(m.category)}</span>
       </div>`).join('');
     document.getElementById('drawer-tab-binary').innerHTML = `
+      ${paramBadges ? `<div class="card card-sm" style="margin-bottom:14px">
+        <div class="text-xs text-dim" style="margin-bottom:8px">Build configuration</div>
+        <div style="display:flex;flex-wrap:wrap;gap:6px">${paramBadges}</div>
+      </div>` : ''}
       <div class="card card-sm" style="margin-bottom:14px">
-        <div class="text-xs text-dim" style="margin-bottom:6px">Build params</div>
-        <div style="display:flex;flex-wrap:wrap;gap:6px">
-          ${['encryption','malware','injection','persistence'].map(k => params[k]?`<span class="badge badge-dim">${k}: ${escHtml(params[k])}</span>`:'').join('')}
+        <div class="text-xs text-dim" style="margin-bottom:8px">
+          Files &mdash; total ${formatBytes(sample.total_size||0)}
         </div>
-      </div>
-      <div class="card card-sm" style="margin-bottom:14px">
-        <div class="text-xs text-dim" style="margin-bottom:8px">Files — total ${formatBytes(sample.total_size||0)}</div>
         ${files}
       </div>
-      ${mods ? `<div class="card card-sm"><div class="text-xs text-dim" style="margin-bottom:8px">Selected modules</div>${mods}</div>` : ''}`;
+      ${mods ? `<div class="card card-sm">
+        <div class="text-xs text-dim" style="margin-bottom:8px">Selected modules (${(params.selected_modules||[]).length})</div>
+        ${mods}
+      </div>` : ''}`;
   }
-}
-
-function toggleReport(header) {
-  const content = header.nextElementSibling;
-  const arrow   = header.querySelector('span:last-child');
-  content.classList.toggle('open');
-  arrow.textContent = content.classList.contains('open') ? '▼' : '▶';
 }
 
 // -----------------------------------------------------------------
