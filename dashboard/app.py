@@ -1410,5 +1410,92 @@ def api_shellcode_upload():
     return jsonify(stats)
 
 
+# -- Artifact Map (Sigma -> ATT&CK technique artifacts) -------------------------
+
+try:
+    import artifact_parser as _artifact_parser
+    HAS_ARTIFACT = True
+except ImportError:
+    HAS_ARTIFACT = False
+
+_SIGMA_DIR = Path.home() / "hacking" / "sigma"
+
+
+@app.route("/api/artifacts")
+def api_artifacts():
+    tactic = request.args.get("tactic", "all").strip()
+    q      = request.args.get("q", "").strip()
+    if _db.count_artifact_entries() == 0:
+        return jsonify([])
+    return jsonify(_db.get_artifact_entries(tactic, q))
+
+
+@app.route("/api/artifacts/stats")
+def api_artifacts_stats():
+    if _db.count_artifact_entries() == 0:
+        return jsonify({
+            "total_techniques": 0, "total_rules": 0,
+            "unique_tactics": 0, "unique_event_ids": 0,
+            "tactics": [], "built": False,
+        })
+    stats = _db.get_artifact_stats()
+    stats["built"] = True
+    return jsonify(stats)
+
+
+@app.route("/api/artifacts/<tid>")
+def api_artifact_entry(tid: str):
+    entry = _db.get_artifact_entry(tid)
+    if not entry:
+        return jsonify({"error": "not found"}), 404
+    return jsonify(entry)
+
+
+@app.route("/api/artifacts/rebuild")
+def api_artifacts_rebuild():
+    """SSE stream: parse Sigma rules and populate artifact_map table."""
+    if not HAS_ARTIFACT:
+        return jsonify({"error": "artifact_parser module not available"}), 503
+
+    def generate():
+        def evt(status: str, msg: str, **kw):
+            obj = {"status": status, "msg": msg, **kw}
+            return f"data: {json.dumps(obj)}\n\n"
+
+        sigma_path = _SIGMA_DIR
+        if not sigma_path.exists():
+            yield evt("error", f"sigma dir not found: {sigma_path}")
+            yield "data: [DONE]\n\n"
+            return
+
+        yield evt("running", f"scanning {sigma_path} …")
+
+        last_progress = [0]
+
+        def progress(current: int, total: int, filename: str):
+            last_progress[0] = current
+            # don't yield from inside a callback in a generator - collect instead
+            pass
+
+        try:
+            entries = _artifact_parser.build_artifact_map(sigma_path, progress)
+            _db.save_artifact_entries(entries)
+            stats = _db.get_artifact_stats()
+            yield evt("done",
+                      f"built artifact map: {stats['total_techniques']} techniques "
+                      f"from {stats['total_rules']} Sigma rules",
+                      stats=stats)
+        except Exception as e:
+            yield evt("error", str(e))
+
+        yield "data: [DONE]\n\n"
+
+    return Response(
+        stream_with_context(generate()),
+        content_type="text/event-stream",
+        headers={"Cache-Control": "no-cache", "X-Accel-Buffering": "no"},
+    )
+
+
 if __name__ == "__main__":
     app.run(debug=True, host="0.0.0.0", port=5000)

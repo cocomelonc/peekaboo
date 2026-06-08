@@ -97,6 +97,23 @@ def init() -> None:
         db.execute("CREATE INDEX IF NOT EXISTS idx_mitre_cat ON mitre_library(category)")
         db.execute("CREATE INDEX IF NOT EXISTS idx_mitre_date ON mitre_library(date DESC)")
 
+        db.execute("""
+            CREATE TABLE IF NOT EXISTS artifact_map (
+                tid          TEXT PRIMARY KEY,
+                name         TEXT NOT NULL DEFAULT '',
+                tactic       TEXT NOT NULL DEFAULT '',
+                rule_count   INTEGER NOT NULL DEFAULT 0,
+                event_ids    TEXT NOT NULL DEFAULT '[]',
+                categories   TEXT NOT NULL DEFAULT '[]',
+                reg_keys     TEXT NOT NULL DEFAULT '[]',
+                processes    TEXT NOT NULL DEFAULT '[]',
+                cmdlines     TEXT NOT NULL DEFAULT '[]',
+                rules        TEXT NOT NULL DEFAULT '[]',
+                built_at     TEXT
+            )
+        """)
+        db.execute("CREATE INDEX IF NOT EXISTS idx_artifact_tactic ON artifact_map(tactic)")
+
 
 # --------------------------------------------------------------------------- #
 #  Helpers                                                                      #
@@ -478,3 +495,112 @@ def count_mitre_entries() -> int:
 def clear_mitre_entries() -> None:
     with _conn() as db:
         db.execute("DELETE FROM mitre_library")
+
+
+# --------------------------------------------------------------------------- #
+#  Artifact Map                                                                 #
+# --------------------------------------------------------------------------- #
+
+def save_artifact_entries(entries: list[dict]) -> None:
+    with _conn() as db:
+        db.execute("DELETE FROM artifact_map")
+        now = datetime.now().isoformat()
+        for e in entries:
+            db.execute(
+                """
+                INSERT OR REPLACE INTO artifact_map
+                  (tid, name, tactic, rule_count, event_ids, categories,
+                   reg_keys, processes, cmdlines, rules, built_at)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                """,
+                (
+                    e["tid"],
+                    e.get("name", ""),
+                    e.get("tactic", ""),
+                    e.get("rule_count", 0),
+                    json.dumps(e.get("event_ids", [])),
+                    json.dumps(e.get("categories", [])),
+                    json.dumps(e.get("reg_keys", [])),
+                    json.dumps(e.get("processes", [])),
+                    json.dumps(e.get("cmdlines", [])),
+                    json.dumps(e.get("rules", [])),
+                    now,
+                ),
+            )
+
+
+def _artifact_row(row: sqlite3.Row) -> dict:
+    d = dict(row)
+    for k in ("event_ids", "categories", "reg_keys", "processes", "cmdlines", "rules"):
+        try:
+            d[k] = json.loads(d[k] or "[]")
+        except Exception:
+            d[k] = []
+    return d
+
+
+def get_artifact_entries(tactic: str = "all", q: str = "") -> list[dict]:
+    with _conn() as db:
+        if tactic == "all":
+            rows = db.execute(
+                "SELECT * FROM artifact_map ORDER BY rule_count DESC"
+            ).fetchall()
+        else:
+            rows = db.execute(
+                "SELECT * FROM artifact_map WHERE tactic LIKE ? ORDER BY rule_count DESC",
+                (f"%{tactic}%",),
+            ).fetchall()
+    results = [_artifact_row(r) for r in rows]
+    if q:
+        q = q.lower()
+        results = [
+            r for r in results
+            if q in r["tid"].lower() or q in r["name"].lower() or q in r["tactic"].lower()
+        ]
+    return results
+
+
+def get_artifact_entry(tid: str) -> dict | None:
+    with _conn() as db:
+        row = db.execute(
+            "SELECT * FROM artifact_map WHERE tid = ?", (tid.upper(),)
+        ).fetchone()
+    return _artifact_row(row) if row else None
+
+
+def count_artifact_entries() -> int:
+    with _conn() as db:
+        return db.execute("SELECT COUNT(*) FROM artifact_map").fetchone()[0]
+
+
+def get_artifact_stats() -> dict:
+    with _conn() as db:
+        total_techniques = db.execute("SELECT COUNT(*) FROM artifact_map").fetchone()[0]
+        total_rules = db.execute(
+            "SELECT SUM(rule_count) FROM artifact_map"
+        ).fetchone()[0] or 0
+        rows = db.execute("SELECT tactic, event_ids FROM artifact_map").fetchall()
+    tactic_set: set[str] = set()
+    event_set: set[int] = set()
+    for row in rows:
+        for t in (row["tactic"] or "").split(","):
+            t = t.strip()
+            if t:
+                tactic_set.add(t)
+        try:
+            for eid in json.loads(row["event_ids"] or "[]"):
+                event_set.add(int(eid))
+        except Exception:
+            pass
+    return {
+        "total_techniques": total_techniques,
+        "total_rules":      total_rules,
+        "unique_tactics":   len(tactic_set),
+        "unique_event_ids": len(event_set),
+        "tactics":          sorted(tactic_set),
+    }
+
+
+def clear_artifact_entries() -> None:
+    with _conn() as db:
+        db.execute("DELETE FROM artifact_map")

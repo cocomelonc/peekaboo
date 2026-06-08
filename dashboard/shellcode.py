@@ -91,7 +91,7 @@ def parse_input(raw: str) -> tuple[bytes, str]:
         if result is not None and len(result) > 0:
             return result, label
     raise ValueError(
-        "could not detect format — try: 0x90,0x90 · \\x90\\x90 · 9090 · base64"
+        "could not detect format - try: 0x90,0x90 · \\x90\\x90 · 9090 · base64"
     )
 
 
@@ -320,7 +320,7 @@ def process(
     xor_key_str: str     = '',
     var_name: str        = 'buf',
 ) -> dict:
-    # 1 — parse
+    # 1 - parse
     try:
         data, detected_fmt = parse_input(raw_input)
     except ValueError as e:
@@ -329,7 +329,7 @@ def process(
     input_stats = analyse(data)
     xor_key_used: Optional[bytes] = None
 
-    # 2 — transform
+    # 2 - transform
     if transform == 'xor_random':
         xor_key_used = os.urandom(4)
         data = xor_encode(data, xor_key_used)
@@ -358,7 +358,7 @@ def process(
     elif transform not in ('none', ''):
         return {"ok": False, "error": f"unknown transform '{transform}'"}
 
-    # 3 — format
+    # 3 - format
     if output_format not in _FORMATS:
         return {"ok": False, "error": f"unknown output format '{output_format}'"}
 
@@ -387,7 +387,7 @@ def process(
 
 
 def analyse_only(raw_input: str) -> dict:
-    """Fast analysis path — no transform or formatting."""
+    """Fast analysis path - no transform or formatting."""
     try:
         data, detected_fmt = parse_input(raw_input)
     except ValueError as e:

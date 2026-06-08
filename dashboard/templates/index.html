@@ -262,6 +262,47 @@ code{font-family:var(--mono);font-size:12px;background:var(--bg4);padding:1px 5p
 .sc-key-box{background:rgba(229,192,123,.1);border:1px solid var(--yellow);border-radius:6px;padding:8px 14px;font-family:monospace;font-size:13px;color:var(--yellow)}
 .sc-badge{display:inline-flex;align-items:center;gap:5px;padding:5px 12px;border-radius:20px;font-size:12px;font-weight:600;border:1px solid}
 
+/* -- artifact map -- */
+.art-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(270px,1fr));gap:12px}
+.art-card{background:var(--bg2);border:1px solid var(--sep);border-radius:var(--r);padding:14px;cursor:pointer;transition:border-color .15s,box-shadow .15s,transform .1s;display:flex;flex-direction:column;gap:9px}
+.art-card:hover{border-color:var(--purple);box-shadow:0 2px 14px rgba(181,123,255,.18);transform:translateY(-1px)}
+.art-tid{font-family:var(--mono);font-size:11px;font-weight:700;padding:2px 8px;border-radius:4px;background:rgba(181,123,255,.15);color:var(--purple);border:1px solid rgba(181,123,255,.3);display:inline-block;letter-spacing:.5px}
+.art-name{font-size:13px;font-weight:600;line-height:1.35;color:var(--text)}
+.art-tactic-pill{font-size:10px;padding:2px 8px;border-radius:10px;border:1px solid var(--sep);color:var(--dim);background:var(--bg3);white-space:nowrap;display:inline-block}
+.art-tactic-pill.execution{border-color:rgba(255,119,119,.4);color:#ff7777;background:rgba(255,119,119,.08)}
+.art-tactic-pill.persistence{border-color:rgba(255,179,71,.4);color:var(--orange);background:rgba(255,179,71,.08)}
+.art-tactic-pill.privilege-escalation{border-color:rgba(229,192,123,.4);color:var(--yellow);background:rgba(229,192,123,.08)}
+.art-tactic-pill.defense-evasion{border-color:rgba(97,175,239,.4);color:var(--blue);background:rgba(97,175,239,.08)}
+.art-tactic-pill.credential-access{border-color:rgba(224,108,117,.4);color:var(--red);background:rgba(224,108,117,.08)}
+.art-tactic-pill.discovery{border-color:rgba(114,217,245,.4);color:var(--cyan);background:rgba(114,217,245,.08)}
+.art-tactic-pill.lateral-movement{border-color:rgba(255,143,173,.4);color:var(--pink);background:rgba(255,143,173,.08)}
+.art-tactic-pill.collection{border-color:rgba(152,195,121,.4);color:var(--green);background:rgba(152,195,121,.08)}
+.art-tactic-pill.command-and-control{border-color:rgba(181,123,255,.4);color:var(--purple);background:rgba(181,123,255,.08)}
+.art-tactic-pill.exfiltration{border-color:rgba(198,120,221,.4);color:#cc80e0;background:rgba(198,120,221,.08)}
+.art-tactic-pill.impact{border-color:rgba(255,120,117,.5);color:var(--red);background:rgba(255,120,117,.08)}
+.art-event-id{font-family:var(--mono);font-size:10px;padding:2px 6px;background:rgba(120,180,255,.12);border:1px solid rgba(120,180,255,.25);border-radius:3px;color:var(--blue);display:inline-block}
+.art-rule-count{display:inline-flex;align-items:center;gap:5px;font-size:11px;color:var(--dim)}
+.art-filter-pill{padding:5px 14px;border-radius:20px;font-size:12px;background:var(--bg3);border:1px solid var(--sep);color:var(--dim);cursor:pointer;transition:all .15s;white-space:nowrap}
+.art-filter-pill:hover{border-color:var(--purple);color:var(--text)}
+.art-filter-pill.active{border-color:var(--purple);color:var(--purple);background:rgba(181,123,255,.12);font-weight:600}
+.art-tab{padding:6px 14px;border-radius:4px;font-size:12px;cursor:pointer;border:1px solid var(--sep);background:var(--bg3);color:var(--dim);transition:all .15s}
+.art-tab:hover{border-color:var(--blue);color:var(--text)}
+.art-tab.active{border-color:var(--blue);color:var(--blue);background:rgba(97,175,239,.12);font-weight:600}
+.art-section{margin-bottom:18px}
+.art-section-title{font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.8px;color:var(--dim);margin-bottom:8px}
+.art-rule-row{padding:10px 12px;background:var(--bg3);border-radius:6px;margin-bottom:6px;font-size:12px;border:1px solid var(--sep);transition:background .12s;display:flex;flex-direction:column;gap:4px}
+.art-rule-row:hover{background:var(--bg4)}
+.art-rule-title{font-weight:600;color:var(--text);font-size:13px}
+.art-rule-meta{display:flex;gap:8px;flex-wrap:wrap;align-items:center}
+.art-level{padding:1px 7px;border-radius:3px;font-size:10px;font-weight:700;text-transform:uppercase}
+.art-level.critical{background:rgba(255,120,117,.2);color:var(--red);border:1px solid rgba(255,120,117,.35)}
+.art-level.high{background:rgba(229,192,123,.18);color:var(--yellow);border:1px solid rgba(229,192,123,.35)}
+.art-level.medium{background:rgba(255,179,71,.15);color:var(--orange);border:1px solid rgba(255,179,71,.3)}
+.art-level.low{background:rgba(152,195,121,.15);color:var(--green);border:1px solid rgba(152,195,121,.3)}
+.art-level.informational{background:rgba(114,217,245,.1);color:var(--cyan);border:1px solid rgba(114,217,245,.2)}
+.art-code-item{font-family:var(--mono);font-size:11px;padding:5px 10px;background:var(--bg3);border-radius:4px;margin-bottom:4px;border:1px solid var(--sep);word-break:break-all;color:var(--text2)}
+.art-code-item:hover{background:var(--bg4);color:var(--text)}
+
 /* -- APT campaign -- */
 .apt-layout{display:grid;grid-template-columns:340px 1fr;gap:18px;align-items:start}
 .apt-panel{background:var(--bg2);border:1px solid var(--sep);border-radius:var(--r);padding:18px}
@@ -393,6 +434,9 @@ code{font-family:var(--mono);font-size:12px;background:var(--bg4);padding:1px 5p
     </div>
     <div class="nav-item" onclick="showPanel('yara')" id="nav-yara">
       <span class="nav-icon">🔰</span> YARA
+    </div>
+    <div class="nav-item" onclick="showPanel('artifacts')" id="nav-artifacts">
+      <span class="nav-icon">🗺️</span> Artifact Map
     </div>
     <div class="nav-item" onclick="showPanel('mitre')" id="nav-mitre">
       <span class="nav-icon">🛡️</span> MITRE ATT&amp;CK
@@ -929,6 +973,68 @@ code{font-family:var(--mono);font-size:12px;background:var(--bg4);padding:1px 5p
 
 </div>
 
+<!-- ════════ ARTIFACT MAP ════════ -->
+<div id="panel-artifacts" class="panel">
+
+  <!-- stats row -->
+  <div class="grid-stats mb-16" id="art-stats-row"></div>
+
+  <!-- toolbar -->
+  <div style="display:flex;gap:10px;align-items:center;flex-wrap:wrap;margin-bottom:14px">
+    <div style="display:flex;gap:6px;flex-wrap:wrap;flex:1" id="art-tactic-pills"></div>
+    <input type="text" class="input" placeholder="🔍 search T-ID or name…" id="art-search"
+           style="width:220px;flex-shrink:0" oninput="artFilter()">
+    <button class="btn btn-ghost btn-sm" onclick="artRebuild()" id="art-rebuild-btn">⚙ Build Index</button>
+  </div>
+
+  <!-- rebuild progress bar -->
+  <div id="art-rebuild-row" style="display:none;margin-bottom:14px">
+    <div class="vt-progress-bar"><div class="vt-progress-fill" id="art-prog-fill" style="width:0%"></div></div>
+    <div id="art-prog-msg" style="font-size:12px;color:var(--dim);text-align:center;padding:4px 0">Parsing Sigma rules…</div>
+  </div>
+
+  <!-- technique card grid -->
+  <div class="art-grid" id="art-grid"></div>
+
+  <!-- empty: not yet built -->
+  <div id="art-empty-build" class="empty" style="display:none;margin-top:48px">
+    <div class="empty-icon">🗺️</div>
+    <div style="font-size:14px;font-weight:600;margin-bottom:6px">Artifact Map not built yet</div>
+    <div style="color:var(--dim);margin-bottom:16px">Parse <code style="background:var(--bg3);padding:2px 6px;border-radius:3px">~/hacking/sigma</code> to extract ATT&amp;CK artifacts from 4000+ Sigma rules</div>
+    <button class="btn btn-primary" onclick="artRebuild()">⚙ Build from Sigma Rules</button>
+  </div>
+
+  <!-- empty: no search results -->
+  <div id="art-empty-nores" class="empty" style="display:none;margin-top:40px">
+    <div class="empty-icon">🔍</div>
+    No techniques match your filter.
+  </div>
+
+</div>
+
+<!-- Artifact detail modal -->
+<div class="modal-bg" id="art-modal" onclick="if(event.target===this)artCloseModal()">
+  <div class="modal" style="max-width:860px">
+    <div class="modal-head">
+      <div style="font-family:var(--mono);font-size:13px;font-weight:700;color:var(--purple);padding:2px 8px;border-radius:4px;background:rgba(181,123,255,.15);border:1px solid rgba(181,123,255,.3);flex-shrink:0" id="art-modal-tid"></div>
+      <div style="flex:1;padding-left:10px">
+        <div class="modal-title" id="art-modal-name"></div>
+        <div style="font-size:11px;color:var(--dim);margin-top:2px" id="art-modal-sub"></div>
+      </div>
+      <button class="modal-close" onclick="artCloseModal()">✕</button>
+    </div>
+    <div style="display:flex;gap:8px;padding:12px 20px;border-bottom:1px solid var(--sep);flex-wrap:wrap">
+      <button class="art-tab active" id="art-tab-overview"   onclick="artShowTab('overview')">📋 Overview</button>
+      <button class="art-tab"        id="art-tab-events"     onclick="artShowTab('events')">📡 Event IDs</button>
+      <button class="art-tab"        id="art-tab-registry"   onclick="artShowTab('registry')">🗝️ Registry</button>
+      <button class="art-tab"        id="art-tab-processes"  onclick="artShowTab('processes')">⚙️ Processes</button>
+      <button class="art-tab"        id="art-tab-cmdlines"   onclick="artShowTab('cmdlines')">💻 CommandLine</button>
+      <button class="art-tab"        id="art-tab-sigma"      onclick="artShowTab('sigma')">📜 Sigma Rules</button>
+    </div>
+    <div class="modal-body" id="art-modal-body" style="min-height:300px"></div>
+  </div>
+</div>
+
 <!-- ════════ MITRE ATT&CK ════════ -->
 <div id="panel-mitre" class="panel">
   <div class="grid-stats mb-16" id="mitre-stats-row"></div>
@@ -1231,7 +1337,8 @@ const PANEL_META = {
   samples:  ['Samples',          'compiled binaries organized by session'],
   apt:      ['APT Campaign',     'Malpedia -> TTPs -> auto-compile pipeline'],
   coverage: ['VT Scanner',       'VirusTotal malware detection analysis'],
-  yara:     ['YARA Generator',   'auto-generate YARA rules from PE samples'],
+  yara:      ['YARA Generator',   'auto-generate YARA rules from PE samples'],
+  artifacts: ['Artifact Map',    'Sigma rules -> ATT&CK T-ID artifact index'],
   mitre:    ['MITRE ATT&CK',     'groups, techniques, peekaboo library'],
   malpedia: ['Malpedia',         'threat actors & malware families'],
   c2:       ['C2 Panel',         'binary delivery over covert channels'],
@@ -1258,6 +1365,7 @@ function showPanel(id) {
   if (id === 'apt')       loadPipelineSessions();
   if (id === 'coverage')  loadVtScanner();
   if (id === 'yara')      loadYaraScanner();
+  if (id === 'artifacts') loadArtifacts();
   if (id === 'beacons')   loadBeacons();
   if (id === 'malpedia')  { if (!malpReports.length) loadMalpReports(); }
   if (id === 'mitre')     loadMitreLib();
@@ -3337,6 +3445,408 @@ document.addEventListener('DOMContentLoaded', () => {
     if (dot) dot.style.background = s.ok ? 'var(--green)' : 'var(--dim)';
   }).catch(()=>{});
 });
+
+// =============================================================
+// Artifact Map
+// =============================================================
+
+let _artAll        = [];   // full list from API
+let _artFiltered   = [];   // after tactic + search filter
+let _artTactics    = [];   // unique tactic list
+let _artActiveTact = 'all';
+let _artDetail     = null; // currently open detail entry
+let _artDetailTab  = 'overview';
+
+async function loadArtifacts() {
+  const statsRow = document.getElementById('art-stats-row');
+  statsRow.innerHTML = '<div style="color:var(--dim);font-size:13px;padding:8px 0">Loading…</div>';
+
+  try {
+    const stats = await fetch('/api/artifacts/stats').then(r => r.json());
+    _artRenderStats(stats);
+
+    if (!stats.built || stats.total_techniques === 0) {
+      document.getElementById('art-empty-build').style.display = '';
+      document.getElementById('art-grid').style.display = 'none';
+      document.getElementById('art-tactic-pills').innerHTML = '';
+      return;
+    }
+
+    document.getElementById('art-empty-build').style.display = 'none';
+    document.getElementById('art-grid').style.display = '';
+
+    // build tactic pill bar
+    _artTactics = stats.tactics || [];
+    _artRenderTactics();
+
+    // load all entries
+    const entries = await fetch('/api/artifacts').then(r => r.json());
+    _artAll = entries;
+    artFilter();
+  } catch(e) {
+    statsRow.innerHTML = `<div style="color:var(--red)">Error: ${e.message}</div>`;
+  }
+}
+
+function _artRenderStats(s) {
+  const row = document.getElementById('art-stats-row');
+  if (!s.built) {
+    row.innerHTML = '';
+    return;
+  }
+  row.innerHTML = `
+    <div class="stat">
+      <div class="stat-val">${s.total_techniques}</div>
+      <div class="stat-label">Techniques</div>
+    </div>
+    <div class="stat">
+      <div class="stat-val">${s.total_rules}</div>
+      <div class="stat-label">Sigma Rules</div>
+    </div>
+    <div class="stat">
+      <div class="stat-val">${s.unique_tactics}</div>
+      <div class="stat-label">Tactics</div>
+    </div>
+    <div class="stat">
+      <div class="stat-val">${s.unique_event_ids}</div>
+      <div class="stat-label">Event IDs</div>
+    </div>`;
+}
+
+function _artRenderTactics() {
+  const c = document.getElementById('art-tactic-pills');
+  const pills = ['all', ..._artTactics];
+  c.innerHTML = pills.map(t => `
+    <button class="art-filter-pill${t === _artActiveTact ? ' active' : ''}"
+            onclick="artSetTactic('${t}')">${t === 'all' ? '🌐 All' : _artFmtTactic(t)}</button>
+  `).join('');
+}
+
+function _artFmtTactic(t) {
+  const map = {
+    'execution': '⚡ Execution',
+    'persistence': '🔩 Persistence',
+    'privilege-escalation': '⬆️ Priv Esc',
+    'defense-evasion': '🫥 Defense Evasion',
+    'credential-access': '🔑 Cred Access',
+    'discovery': '🔍 Discovery',
+    'lateral-movement': '↔️ Lateral Mvt',
+    'collection': '📦 Collection',
+    'command-and-control': '📡 C2',
+    'exfiltration': '📤 Exfiltration',
+    'impact': '💥 Impact',
+    'initial-access': '🚪 Initial Access',
+    'reconnaissance': '🕵️ Recon',
+    'resource-development': '🏗️ Resource Dev',
+  };
+  return map[t] || t;
+}
+
+function artSetTactic(t) {
+  _artActiveTact = t;
+  _artRenderTactics();
+  artFilter();
+}
+
+function artFilter() {
+  const q = (document.getElementById('art-search')?.value || '').toLowerCase().trim();
+  let list = _artAll;
+
+  if (_artActiveTact !== 'all') {
+    list = list.filter(e => (e.tactic || '').includes(_artActiveTact));
+  }
+  if (q) {
+    list = list.filter(e =>
+      e.tid.toLowerCase().includes(q) ||
+      (e.name || '').toLowerCase().includes(q) ||
+      (e.tactic || '').toLowerCase().includes(q)
+    );
+  }
+  _artFiltered = list;
+  _artRenderGrid();
+}
+
+function _artRenderGrid() {
+  const grid = document.getElementById('art-grid');
+  const nores = document.getElementById('art-empty-nores');
+
+  if (_artFiltered.length === 0 && _artAll.length > 0) {
+    grid.innerHTML = '';
+    nores.style.display = '';
+    return;
+  }
+  nores.style.display = 'none';
+
+  grid.innerHTML = _artFiltered.map(e => _artCardHTML(e)).join('');
+}
+
+function _artCardHTML(e) {
+  const tactics = (e.tactic || '').split(',').filter(Boolean);
+  const tacticPills = tactics.slice(0, 3).map(t =>
+    `<span class="art-tactic-pill ${t}">${_artFmtTacticShort(t)}</span>`
+  ).join(' ');
+
+  const eventBadges = (e.event_ids || []).slice(0, 6).map(id =>
+    `<span class="art-event-id">${id}</span>`
+  ).join(' ');
+
+  const indicators = [];
+  if ((e.reg_keys || []).length)   indicators.push(`🗝️ ${e.reg_keys.length}`);
+  if ((e.processes || []).length)  indicators.push(`⚙️ ${e.processes.length}`);
+  if ((e.cmdlines || []).length)   indicators.push(`💻 ${e.cmdlines.length}`);
+
+  return `
+    <div class="art-card" onclick="artOpenModal('${e.tid}')">
+      <div style="display:flex;align-items:flex-start;justify-content:space-between;gap:8px">
+        <span class="art-tid">${e.tid}</span>
+        <span class="art-rule-count"><svg width="12" height="12" viewBox="0 0 12 12" fill="none"><circle cx="6" cy="6" r="5" stroke="currentColor" stroke-width="1.5"/><path d="M6 3v4M6 8.5v.5" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/></svg>${e.rule_count} rules</span>
+      </div>
+      <div class="art-name">${e.name || '<span style="color:var(--dim);font-style:italic">Unknown Technique</span>'}</div>
+      <div style="display:flex;gap:4px;flex-wrap:wrap;min-height:20px">${tacticPills}</div>
+      ${eventBadges ? `<div style="display:flex;gap:4px;flex-wrap:wrap">${eventBadges}</div>` : ''}
+      ${indicators.length ? `<div style="font-size:11px;color:var(--dim);display:flex;gap:10px">${indicators.join('')}</div>` : ''}
+    </div>`;
+}
+
+function _artFmtTacticShort(t) {
+  const map = {
+    'execution': 'Execution', 'persistence': 'Persistence',
+    'privilege-escalation': 'PrivEsc', 'defense-evasion': 'DefEvasion',
+    'credential-access': 'CredAccess', 'discovery': 'Discovery',
+    'lateral-movement': 'LateralMvt', 'collection': 'Collection',
+    'command-and-control': 'C2', 'exfiltration': 'Exfiltration',
+    'impact': 'Impact', 'initial-access': 'InitialAccess',
+    'reconnaissance': 'Recon', 'resource-development': 'ResourceDev',
+  };
+  return map[t] || t;
+}
+
+// ── detail modal ──────────────────────────────────────────────
+
+async function artOpenModal(tid) {
+  _artDetailTab = 'overview';
+  document.getElementById('art-modal-tid').textContent = tid;
+  document.getElementById('art-modal-name').textContent = 'Loading…';
+  document.getElementById('art-modal-sub').textContent = '';
+  document.getElementById('art-modal-body').innerHTML = '<div class="loading-full"><div class="spinner"></div> Loading…</div>';
+  document.getElementById('art-modal').classList.add('open');
+
+  try {
+    const e = await fetch(`/api/artifacts/${tid}`).then(r => r.json());
+    if (e.error) { document.getElementById('art-modal-body').innerHTML = `<div style="color:var(--red);padding:20px">${e.error}</div>`; return; }
+    _artDetail = e;
+
+    document.getElementById('art-modal-name').textContent = e.name || 'Unknown Technique';
+    const tactics = (e.tactic || '').split(',').filter(Boolean);
+    document.getElementById('art-modal-sub').innerHTML =
+      tactics.map(t => `<span class="art-tactic-pill ${t}" style="margin-right:4px">${_artFmtTacticShort(t)}</span>`).join('');
+
+    artShowTab('overview');
+  } catch(err) {
+    document.getElementById('art-modal-body').innerHTML = `<div style="color:var(--red);padding:20px">${err.message}</div>`;
+  }
+}
+
+function artCloseModal() {
+  document.getElementById('art-modal').classList.remove('open');
+  _artDetail = null;
+}
+
+function artShowTab(tab) {
+  _artDetailTab = tab;
+  document.querySelectorAll('.art-tab').forEach(b => b.classList.remove('active'));
+  const btn = document.getElementById('art-tab-' + tab);
+  if (btn) btn.classList.add('active');
+
+  if (!_artDetail) return;
+  const e = _artDetail;
+  const body = document.getElementById('art-modal-body');
+
+  if (tab === 'overview') {
+    const eventIds = (e.event_ids || []).map(id =>
+      `<span class="art-event-id" style="font-size:12px;padding:3px 9px">${id}</span>`
+    ).join(' ');
+    const categories = (e.categories || []).map(c =>
+      `<span style="font-size:11px;padding:2px 8px;border-radius:3px;background:var(--bg3);border:1px solid var(--sep);color:var(--dim)">${c}</span>`
+    ).join(' ');
+    body.innerHTML = `
+      <div class="art-section">
+        <div class="art-section-title">Statistics</div>
+        <div style="display:flex;gap:12px;flex-wrap:wrap">
+          <div class="stat" style="min-width:100px;padding:12px 18px">
+            <div class="stat-val">${e.rule_count}</div><div class="stat-label">Sigma Rules</div>
+          </div>
+          <div class="stat" style="min-width:100px;padding:12px 18px">
+            <div class="stat-val">${(e.event_ids||[]).length}</div><div class="stat-label">Event IDs</div>
+          </div>
+          <div class="stat" style="min-width:100px;padding:12px 18px">
+            <div class="stat-val">${(e.reg_keys||[]).length}</div><div class="stat-label">Reg Keys</div>
+          </div>
+          <div class="stat" style="min-width:100px;padding:12px 18px">
+            <div class="stat-val">${(e.processes||[]).length}</div><div class="stat-label">Processes</div>
+          </div>
+        </div>
+      </div>
+      ${eventIds ? `<div class="art-section"><div class="art-section-title">Event IDs</div><div style="display:flex;gap:6px;flex-wrap:wrap">${eventIds}</div></div>` : ''}
+      ${categories ? `<div class="art-section"><div class="art-section-title">Logsource Categories</div><div style="display:flex;gap:6px;flex-wrap:wrap">${categories}</div></div>` : ''}
+      ${(e.reg_keys||[]).length ? `<div class="art-section"><div class="art-section-title">Registry Keys (preview)</div>${(e.reg_keys||[]).slice(0,5).map(k => `<div class="art-code-item">${_esc(k)}</div>`).join('')}</div>` : ''}
+      ${(e.processes||[]).length ? `<div class="art-section"><div class="art-section-title">Process Images (preview)</div><div style="display:flex;gap:6px;flex-wrap:wrap">${(e.processes||[]).slice(0,6).map(p => `<span class="art-code-item" style="display:inline-block">${_esc(p.split('\\').pop())}</span>`).join('')}</div></div>` : ''}`;
+    return;
+  }
+
+  if (tab === 'events') {
+    const eventIds = e.event_ids || [];
+    const cats = e.categories || [];
+    const sysmonMap = {1:'Process Creation',3:'Network Connection',6:'Driver Load',7:'Image Load',
+      8:'Create Remote Thread',9:'Raw Access Read',10:'Process Access',11:'File Create',
+      12:'Registry Object Add/Delete',13:'Registry Value Set',14:'Registry Rename',
+      17:'Pipe Created',18:'Pipe Connected',19:'WMI Filter',20:'WMI Consumer',
+      21:'WMI Consumer Filter',22:'DNS Query',23:'File Delete',25:'Process Tampering',
+      26:'File Delete Logged',4104:'PS Script Block',4103:'PS Module',4688:'Process Creation (Security)',
+      4648:'Explicit Logon',4624:'Logon Success',4625:'Logon Failure',4697:'Service Installed',
+      7045:'Service Install',400:'PS Engine Lifecycle',800:'PS Pipeline',
+    };
+    body.innerHTML = `
+      <div class="art-section">
+        <div class="art-section-title">Windows Event IDs</div>
+        ${eventIds.length ? eventIds.map(id => `
+          <div style="display:flex;align-items:center;gap:12px;padding:8px 12px;background:var(--bg3);border-radius:6px;margin-bottom:5px;border:1px solid var(--sep)">
+            <span class="art-event-id" style="font-size:13px;padding:4px 12px;font-weight:700">${id}</span>
+            <span style="font-size:12px;color:var(--text2)">${sysmonMap[id] || 'Windows Event'}</span>
+          </div>`).join('') : '<div class="text-dim" style="font-size:13px">No explicit event IDs extracted - check logsource categories below.</div>'}
+      </div>
+      <div class="art-section">
+        <div class="art-section-title">Logsource Categories</div>
+        ${cats.length ? cats.map(c => `
+          <div style="padding:7px 12px;background:var(--bg3);border-radius:6px;margin-bottom:5px;border:1px solid var(--sep);font-size:12px;font-family:var(--mono);color:var(--cyan)">${_esc(c)}</div>
+        `).join('') : '<div class="text-dim" style="font-size:13px">None detected.</div>'}
+      </div>`;
+    return;
+  }
+
+  if (tab === 'registry') {
+    const keys = e.reg_keys || [];
+    body.innerHTML = `
+      <div class="art-section">
+        <div class="art-section-title">Registry Key Patterns (${keys.length})</div>
+        ${keys.length ? keys.map(k => `<div class="art-code-item">${_esc(k)}</div>`).join('') :
+          '<div class="text-dim" style="font-size:13px">No registry key patterns found in Sigma rules for this technique.</div>'}
+      </div>`;
+    return;
+  }
+
+  if (tab === 'processes') {
+    const procs = e.processes || [];
+    body.innerHTML = `
+      <div class="art-section">
+        <div class="art-section-title">Process Images (${procs.length})</div>
+        ${procs.length ? procs.map(p => `
+          <div style="display:flex;align-items:center;gap:10px;padding:7px 12px;background:var(--bg3);border-radius:6px;margin-bottom:5px;border:1px solid var(--sep)">
+            <span style="font-size:14px">⚙️</span>
+            <span class="mono" style="font-size:12px;color:var(--text2)">${_esc(p)}</span>
+          </div>`).join('') :
+          '<div class="text-dim" style="font-size:13px">No process images detected in Sigma rules for this technique.</div>'}
+      </div>`;
+    return;
+  }
+
+  if (tab === 'cmdlines') {
+    const cmds = e.cmdlines || [];
+    body.innerHTML = `
+      <div class="art-section">
+        <div class="art-section-title">CommandLine Patterns (${cmds.length})</div>
+        ${cmds.length ? cmds.map(c => `<div class="art-code-item">${_esc(c)}</div>`).join('') :
+          '<div class="text-dim" style="font-size:13px">No command-line patterns detected for this technique.</div>'}
+      </div>`;
+    return;
+  }
+
+  if (tab === 'sigma') {
+    const rules = e.rules || [];
+    const levelOrder = {critical:0, high:1, medium:2, low:3, informational:4};
+    const sorted = [...rules].sort((a,b) => (levelOrder[a.level]??5) - (levelOrder[b.level]??5));
+    body.innerHTML = `
+      <div class="art-section">
+        <div class="art-section-title">Sigma Rules (${rules.length}${rules.length===30?' - showing first 30':''})</div>
+        ${sorted.length ? sorted.map(r => `
+          <div class="art-rule-row">
+            <div style="display:flex;align-items:flex-start;gap:8px">
+              ${r.level ? `<span class="art-level ${r.level}">${r.level}</span>` : ''}
+              <span class="art-rule-title">${_esc(r.title || 'Untitled')}</span>
+            </div>
+            <div class="art-rule-meta">
+              ${r.category ? `<span style="font-size:11px;font-family:var(--mono);color:var(--cyan)">${_esc(r.category)}</span>` : ''}
+              ${r.product  ? `<span style="font-size:11px;color:var(--dim)">${_esc(r.product)}</span>` : ''}
+              ${r.author   ? `<span style="font-size:11px;color:var(--dim)">by ${_esc(r.author)}</span>` : ''}
+              ${r.status   ? `<span style="font-size:10px;color:var(--dim);font-style:italic">${_esc(r.status)}</span>` : ''}
+            </div>
+            ${r.desc ? `<div style="font-size:11px;color:var(--dim);margin-top:2px;line-height:1.4">${_esc(r.desc)}</div>` : ''}
+            ${r.file ? `<div style="font-size:10px;color:var(--sep);margin-top:3px;font-family:var(--mono)">${_esc(r.file)}</div>` : ''}
+          </div>`).join('') :
+          '<div class="text-dim" style="font-size:13px">No Sigma rules associated with this technique.</div>'}
+      </div>`;
+    return;
+  }
+}
+
+function _esc(s) {
+  return String(s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+}
+
+// ── rebuild SSE ───────────────────────────────────────────────
+
+function artRebuild() {
+  const btn  = document.getElementById('art-rebuild-btn');
+  const row  = document.getElementById('art-rebuild-row');
+  const fill = document.getElementById('art-prog-fill');
+  const msg  = document.getElementById('art-prog-msg');
+
+  btn.disabled = true;
+  btn.textContent = '⏳ Building…';
+  row.style.display = '';
+  fill.style.width = '5%';
+  msg.textContent = 'Connecting to Sigma parser…';
+
+  let pct = 5;
+  const es = new EventSource('/api/artifacts/rebuild');
+  const tick = setInterval(() => {
+    if (pct < 90) { pct += 0.8; fill.style.width = pct + '%'; }
+  }, 400);
+
+  es.onmessage = ev => {
+    if (ev.data === '[DONE]') {
+      clearInterval(tick);
+      es.close();
+      fill.style.width = '100%';
+      btn.disabled = false;
+      btn.textContent = '⚙ Rebuild Index';
+      setTimeout(() => { row.style.display = 'none'; loadArtifacts(); }, 800);
+      return;
+    }
+    try {
+      const d = JSON.parse(ev.data);
+      if (d.status === 'running') { msg.textContent = d.msg; }
+      else if (d.status === 'done') {
+        msg.textContent = '✓ ' + d.msg;
+        fill.style.width = '100%';
+        toast(d.msg, 'ok');
+      } else if (d.status === 'error') {
+        msg.textContent = '✗ ' + d.msg;
+        msg.style.color = 'var(--red)';
+        toast('Artifact Map error: ' + d.msg, 'err');
+      }
+    } catch(_) {}
+  };
+
+  es.onerror = () => {
+    clearInterval(tick);
+    es.close();
+    btn.disabled = false;
+    btn.textContent = '⚙ Rebuild Index';
+    msg.textContent = 'Connection error';
+    msg.style.color = 'var(--red)';
+  };
+}
 </script>
 </body>
 </html>
