@@ -69,12 +69,12 @@ import db as _db
 _db.init()
 _migrated = _db.migrate_json(_LEGACY_JSON)
 if _migrated:
-    print(f"[db] migrated {_migrated} builds from builds.json → peekaboo.db")
+    print(f"[db] migrated {_migrated} builds from builds.json -> peekaboo.db")
 _migrated_s = _db.migrate_samples(SAMPLES_DIR, PIPELINE_DIR)
 if _migrated_s:
-    print(f"[db] migrated {_migrated_s} samples from filesystem → peekaboo.db")
+    print(f"[db] migrated {_migrated_s} samples from filesystem -> peekaboo.db")
 
-# migrate MITRE library JSON cache → SQLite (runs once, idempotent)
+# migrate MITRE library JSON cache -> SQLite (runs once, idempotent)
 if HAS_MITRE and _db.count_mitre_entries() == 0:
     try:
         from mitre import _LIBRARY_CACHE
@@ -82,7 +82,7 @@ if HAS_MITRE and _db.count_mitre_entries() == 0:
             _cached = json.loads(_LIBRARY_CACHE.read_text())
             if _cached:
                 _db.save_mitre_entries(_cached)
-                print(f"[db] migrated {len(_cached)} MITRE library entries → peekaboo.db")
+                print(f"[db] migrated {len(_cached)} MITRE library entries -> peekaboo.db")
     except Exception as _e:
         print(f"[db] MITRE library migration skipped: {_e}")
 
@@ -841,7 +841,7 @@ def api_mitre_library_rebuild():
 
 @app.route("/api/reindex")
 def api_reindex():
-    """SSE stream: full reindex - library cache → embeddings → KB scrape."""
+    """SSE stream: full reindex - library cache -> embeddings -> KB scrape."""
     def generate():
         import time
 
@@ -1261,6 +1261,48 @@ def api_coverage():
     if not HAS_DISCOVERY:
         return jsonify({}), 503
     return jsonify(_discovery.coverage_map())
+
+
+# -- VirusTotal scanner --------------------------------------------------------
+
+try:
+    import vtscan as _vtscan
+    HAS_VTSCAN = True
+except ImportError:
+    HAS_VTSCAN = False
+
+
+@app.route("/api/vtscan/upload", methods=["POST"])
+def api_vtscan_upload():
+    if not HAS_VTSCAN:
+        return jsonify({"ok": False, "error": "vtscan module not available"}), 503
+    data = request.get_json(force=True) or {}
+    session_id = data.get("session_id", "").strip()
+    filename   = data.get("filename", "").strip()
+    if not session_id or not filename:
+        return jsonify({"ok": False, "error": "session_id and filename required"}), 400
+    # restrict to safe path inside samples dir
+    filepath = (SAMPLES_DIR / session_id / filename).resolve()
+    if not str(filepath).startswith(str(SAMPLES_DIR.resolve())):
+        return jsonify({"ok": False, "error": "invalid path"}), 400
+    result = _vtscan.upload_file(filepath)
+    return jsonify(result)
+
+
+@app.route("/api/vtscan/analysis/<analysis_id>")
+def api_vtscan_analysis(analysis_id: str):
+    if not HAS_VTSCAN:
+        return jsonify({"ok": False, "error": "vtscan module not available"}), 503
+    result = _vtscan.poll_analysis(analysis_id)
+    return jsonify(result)
+
+
+@app.route("/api/vtscan/file/<sha256>")
+def api_vtscan_file(sha256: str):
+    if not HAS_VTSCAN:
+        return jsonify({"ok": False, "error": "vtscan module not available"}), 503
+    result = _vtscan.get_by_hash(sha256)
+    return jsonify(result)
 
 
 if __name__ == "__main__":

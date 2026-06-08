@@ -81,7 +81,7 @@ def scrape() -> dict:
         "posts":      posts,
     }
     OUTPUT.write_text(json.dumps(kb, indent=2, ensure_ascii=False))
-    print(f"\n[=^..^=] indexed {len(posts)} posts → {OUTPUT}")
+    print(f"\n[=^..^=] indexed {len(posts)} posts -> {OUTPUT}")
     return kb
 
 

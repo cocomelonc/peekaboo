@@ -324,7 +324,7 @@ def get_pipeline_session(session_id: str) -> dict | None:
 
 
 # --------------------------------------------------------------------------- #
-#  Migration: import legacy builds.json → DB (runs once, idempotent)           #
+#  Migration: import legacy builds.json -> DB (runs once, idempotent)           #
 # --------------------------------------------------------------------------- #
 
 def migrate_json(json_path: Path) -> int:
@@ -361,7 +361,7 @@ def migrate_json(json_path: Path) -> int:
 
 
 # --------------------------------------------------------------------------- #
-#  Migration: scan samples directory → DB (runs once on startup, idempotent)   #
+#  Migration: scan samples directory -> DB (runs once on startup, idempotent)   #
 # --------------------------------------------------------------------------- #
 
 def migrate_samples(samples_dir: Path, pipeline_dir: Path | None = None) -> int:

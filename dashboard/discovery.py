@@ -252,7 +252,7 @@ def build_registry() -> list[dict]:
 
     entries.sort(key=lambda x: x["date"], reverse=True)
 
-    # deduplicate: same slug → keep the one with a post; if tied, keep newer date
+    # deduplicate: same slug -> keep the one with a post; if tied, keep newer date
     seen_slugs: dict[str, int] = {}
     deduped: list[dict] = []
     for e in entries:

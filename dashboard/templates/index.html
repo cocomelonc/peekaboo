@@ -211,18 +211,30 @@ code{font-family:var(--mono);font-size:12px;background:var(--bg4);padding:1px 5p
 .ttp-grid{display:flex;flex-direction:column;gap:6px}
 .ttp-item{display:flex;align-items:center;gap:10px;padding:8px 12px;background:var(--bg3);border:1px solid var(--sep);border-radius:var(--rs);font-size:12px}
 
-/* -- coverage heatmap -- */
-.coverage-wrap{overflow-x:auto}
-.coverage-matrix{border-collapse:collapse;font-size:11px;min-width:100%}
-.coverage-matrix th{padding:6px 10px;font-size:10px;font-weight:600;color:var(--dim);text-transform:uppercase;letter-spacing:.6px;border-bottom:2px solid var(--sep);white-space:nowrap;text-align:center}
-.cov-cell{width:28px;height:28px;border-radius:3px;cursor:pointer;transition:transform .1s,filter .1s;display:inline-block;margin:1px;vertical-align:top}
-.cov-cell:hover{transform:scale(1.3);filter:brightness(1.3);z-index:10;position:relative}
-.cov-empty{background:var(--bg3);opacity:.7}
-.cov-library{background:rgba(255,209,102,.45)}
-.cov-peekaboo{background:var(--green)}
-.cov-both{background:var(--purple)}
-.cov-td{padding:4px 6px;vertical-align:top}
-.cov-tactic{writing-mode:horizontal-tb;padding:8px 6px;font-size:10px;font-weight:600;color:var(--dim);white-space:nowrap}
+/* -- VirusTotal scanner -- */
+.vt-engine-card{background:var(--bg2);border:1px solid var(--sep);border-left:3px solid var(--sep);border-radius:6px;padding:12px;transition:box-shadow .15s}
+.vt-engine-card:hover{box-shadow:0 2px 8px rgba(0,0,0,.3)}
+.vt-engine-card.vt-mal{border-left-color:var(--red);background:rgba(224,108,117,.08)}
+.vt-engine-card.vt-sus{border-left-color:var(--yellow);background:rgba(229,192,123,.08)}
+.vt-engine-card.vt-ok{border-left-color:var(--green);background:rgba(152,195,121,.06)}
+.vt-filter-btn{padding:4px 12px;border-radius:4px;font-size:12px;background:none;border:1px solid var(--sep);color:var(--dim);cursor:pointer;transition:all .15s}
+.vt-filter-btn.active{border-color:var(--green);color:var(--green);background:rgba(152,195,121,.12)}
+.vt-progress-bar{height:6px;background:var(--bg3);border-radius:3px;overflow:hidden;margin:10px 0 6px}
+.vt-progress-fill{height:100%;background:linear-gradient(90deg,var(--green),var(--blue));border-radius:3px;transition:width .4s ease}
+/* custom dropdowns */
+.vt-select{position:relative;user-select:none;flex:1}
+.vt-select-val{display:flex;align-items:center;justify-content:space-between;gap:8px;padding:8px 12px;background:var(--bg3);border:1px solid var(--sep);border-radius:var(--rs);cursor:pointer;font-size:13px;transition:border-color .15s,background .15s;min-height:36px}
+.vt-select-val:hover,.vt-select.vt-open .vt-select-val{border-color:var(--purple);background:var(--bg2)}
+.vt-select.vt-open .vt-select-val{border-bottom-left-radius:0;border-bottom-right-radius:0}
+.vt-select-arrow{color:var(--dim);font-size:10px;flex-shrink:0;transition:transform .18s}
+.vt-select.vt-open .vt-select-arrow{transform:rotate(180deg)}
+.vt-select-menu{display:none;position:absolute;top:100%;left:0;right:0;background:var(--bg2);border:1px solid var(--purple);border-top:none;border-radius:0 0 var(--rs) var(--rs);z-index:200;max-height:240px;overflow-y:auto;box-shadow:0 8px 24px rgba(0,0,0,.45)}
+.vt-select.vt-open .vt-select-menu{display:block}
+.vt-select-opt{padding:9px 14px;font-size:13px;cursor:pointer;transition:background .1s;border-bottom:1px solid var(--sep)}
+.vt-select-opt:last-child{border-bottom:none}
+.vt-select-opt:hover{background:var(--bg3)}
+.vt-select-opt.vt-selected{color:var(--purple);font-weight:600}
+.vt-ph{color:var(--dim);font-style:italic}
 
 /* -- APT campaign -- */
 .apt-layout{display:grid;grid-template-columns:340px 1fr;gap:18px;align-items:start}
@@ -348,7 +360,7 @@ code{font-family:var(--mono);font-size:12px;background:var(--bg4);padding:1px 5p
       <span class="nav-icon">🎯</span> APT Campaign
     </div>
     <div class="nav-item" onclick="showPanel('coverage')" id="nav-coverage">
-      <span class="nav-icon">🗺️</span> Coverage Map
+      <span class="nav-icon">🦠</span> VT Scanner
     </div>
     <div class="nav-item" onclick="showPanel('mitre')" id="nav-mitre">
       <span class="nav-icon">🛡️</span> MITRE ATT&amp;CK
@@ -580,21 +592,74 @@ code{font-family:var(--mono);font-size:12px;background:var(--bg4);padding:1px 5p
 
 <!-- ════════ COVERAGE MAP ════════ -->
 <div id="panel-coverage" class="panel">
-  <div class="grid-stats mb-16" id="cov-stats"></div>
-  <div class="card">
+
+  <!-- Controls card -->
+  <div class="card mb-16">
     <div class="card-header">
-      <span style="font-size:18px">🗺️</span>
-      <div class="card-title">ATT&amp;CK Coverage Map</div>
-      <div style="display:flex;gap:10px;margin-left:auto;align-items:center;font-size:12px">
-        <span style="display:inline-flex;align-items:center;gap:5px"><span style="width:12px;height:12px;background:var(--green);border-radius:2px;display:inline-block"></span>peekaboo template</span>
-        <span style="display:inline-flex;align-items:center;gap:5px"><span style="width:12px;height:12px;background:var(--purple);border-radius:2px;display:inline-block"></span>both</span>
-        <span style="display:inline-flex;align-items:center;gap:5px"><span style="width:12px;height:12px;background:rgba(255,214,10,.5);border-radius:2px;display:inline-block"></span>library only</span>
-        <span style="display:inline-flex;align-items:center;gap:5px"><span style="width:12px;height:12px;background:var(--bg3);border-radius:2px;display:inline-block"></span>uncovered</span>
+      <span style="font-size:20px">🦠</span>
+      <div>
+        <div class="card-title">VirusTotal Scanner</div>
+        <div class="card-sub">upload compiled samples for AV/EDR detection analysis</div>
       </div>
+      <button class="btn btn-ghost btn-sm" style="margin-left:auto" onclick="loadVtScanner()">↻ Refresh</button>
     </div>
-    <div id="cov-loading" class="loading-full"><div class="spinner"></div> loading coverage data…</div>
-    <div id="cov-content"></div>
+    <div style="display:flex;gap:12px;align-items:center;flex-wrap:wrap;margin-top:8px">
+      <!-- session picker -->
+      <div class="vt-select" id="vt-session-drop" style="flex:1.5;min-width:220px">
+        <div class="vt-select-val" onclick="vtToggleDrop('vt-session-drop')">
+          <span id="vt-session-label" class="vt-ph">— select session —</span>
+          <span class="vt-select-arrow">▼</span>
+        </div>
+        <div class="vt-select-menu" id="vt-session-menu"></div>
+      </div>
+      <!-- file picker -->
+      <div class="vt-select" id="vt-file-drop" style="flex:1;min-width:180px">
+        <div class="vt-select-val" onclick="vtToggleDrop('vt-file-drop')">
+          <span id="vt-file-label" class="vt-ph">— select file —</span>
+          <span class="vt-select-arrow">▼</span>
+        </div>
+        <div class="vt-select-menu" id="vt-file-menu"></div>
+      </div>
+      <button class="btn btn-primary" onclick="vtStartScan()" id="vt-scan-btn" style="white-space:nowrap;flex-shrink:0">
+        🔬 Scan
+      </button>
+    </div>
   </div>
+
+  <!-- Progress bar -->
+  <div id="vt-progress" class="card mb-16" style="display:none">
+    <div class="card-header" style="padding-bottom:6px">
+      <span id="vt-progress-icon" style="font-size:16px">⏳</span>
+      <div class="card-title" id="vt-progress-title">Uploading…</div>
+    </div>
+    <div class="vt-progress-bar"><div class="vt-progress-fill" id="vt-progress-fill" style="width:10%"></div></div>
+    <div id="vt-progress-msg" style="font-size:12px;color:var(--dim)"></div>
+  </div>
+
+  <!-- Results -->
+  <div id="vt-results" style="display:none">
+    <div class="grid-stats mb-16" id="vt-result-stats"></div>
+
+    <div class="card">
+      <div class="card-header">
+        <span style="font-size:16px">🔍</span>
+        <div class="card-title">Engine Results</div>
+        <div style="display:flex;gap:6px;margin-left:auto">
+          <button class="vt-filter-btn active" id="vt-f-all"       onclick="vtFilterResults('all')">All</button>
+          <button class="vt-filter-btn"         id="vt-f-malicious" onclick="vtFilterResults('malicious')">Malicious</button>
+          <button class="vt-filter-btn"         id="vt-f-suspicious" onclick="vtFilterResults('suspicious')">Suspicious</button>
+          <button class="vt-filter-btn"         id="vt-f-clean"     onclick="vtFilterResults('clean')">Clean</button>
+        </div>
+      </div>
+      <div id="vt-engines-grid" class="grid-3" style="margin-top:10px"></div>
+    </div>
+  </div>
+
+  <!-- Empty state -->
+  <div id="vt-empty" class="empty" style="margin-top:40px">
+    Select a compiled sample from the dropdown above and click <strong>Scan</strong> to analyse it with VirusTotal.
+  </div>
+
 </div>
 
 <!-- ════════ MITRE ATT&CK ════════ -->
@@ -839,7 +904,7 @@ code{font-family:var(--mono);font-size:12px;background:var(--bg4);padding:1px 5p
 
 <script>
 // -----------------------------------------------------------------
-// ANSI escape → HTML (for build output)
+// ANSI escape -> HTML (for build output)
 // -----------------------------------------------------------------
 function ansiToHtml(raw) {
   const FG = {
@@ -896,8 +961,8 @@ const PANEL_META = {
   builder:  ['Builder',          'compile malware for EDR benchmarking'],
   library:  ['Module Library',   'browse 190+ techniques from meow & blog'],
   samples:  ['Samples',          'compiled binaries organized by session'],
-  apt:      ['APT Campaign',     'Malpedia → TTPs → auto-compile pipeline'],
-  coverage: ['Coverage Map',     'ATT&CK technique coverage heatmap'],
+  apt:      ['APT Campaign',     'Malpedia -> TTPs -> auto-compile pipeline'],
+  coverage: ['VT Scanner',       'VirusTotal malware detection analysis'],
   mitre:    ['MITRE ATT&CK',     'groups, techniques, peekaboo library'],
   malpedia: ['Malpedia',         'threat actors & malware families'],
   c2:       ['C2 Panel',         'binary delivery over covert channels'],
@@ -922,7 +987,7 @@ function showPanel(id) {
   if (id === 'library' && libModules.length === 0) loadLibrary();
   if (id === 'samples')   loadSamples();
   if (id === 'apt')       loadPipelineSessions();
-  if (id === 'coverage')  loadCoverage();
+  if (id === 'coverage')  loadVtScanner();
   if (id === 'beacons')   loadBeacons();
   if (id === 'malpedia')  { if (!malpReports.length) loadMalpReports(); }
   if (id === 'mitre')     loadMitreLib();
@@ -1421,7 +1486,7 @@ async function runPipeline() {
           }
         }
 
-        // step 1 done → actor card
+        // step 1 done -> actor card
         if (ev.step === 1 && ev.status === 'done') {
           const actor = ev.data || {};
           const fams = (actor.families||[]).slice(0,5).map(f => escHtml(typeof f==='object'?f.name:f)).join(', ');
@@ -1435,7 +1500,7 @@ async function runPipeline() {
           resultsEl.appendChild(div);
         }
 
-        // step 2 running with report → append link row
+        // step 2 running with report -> append link row
         if (ev.step === 2 && ev.status === 'running' && ev.data?.report) {
           if (!reportsSection) {
             reportsSection = document.createElement('div');
@@ -1464,7 +1529,7 @@ async function runPipeline() {
           reportsList.appendChild(row);
         }
 
-        // step 3 done → TTPs section
+        // step 3 done -> TTPs section
         if (ev.step === 3 && ev.status === 'done') {
           const ttps = ev.data || [];
           const div = document.createElement('div');
@@ -1488,7 +1553,7 @@ async function runPipeline() {
           resultsEl.appendChild(div);
         }
 
-        // step 4 done → modules section
+        // step 4 done -> modules section
         if (ev.step === 4 && ev.status === 'done') {
           const mods = (ev.data || {}).selected_modules || [];
           if (mods.length) {
@@ -1507,7 +1572,7 @@ async function runPipeline() {
           }
         }
 
-        // step 5 done → binary section
+        // step 5 done -> binary section
         if (ev.step === 5 && ev.status === 'done') {
           const data = ev.data || {};
           const sid  = data.session_id || '';
@@ -1527,7 +1592,7 @@ async function runPipeline() {
           resultsEl.appendChild(div);
         }
 
-        // any error → error card
+        // any error -> error card
         if (ev.status === 'error') {
           const div = document.createElement('div');
           div.className = 'card card-sm';
@@ -1740,65 +1805,260 @@ const TECHNIQUE_TACTIC = {
   'T1574':'defense-evasion',
 };
 
-async function loadCoverage() {
-  document.getElementById('cov-loading').style.display = 'flex';
-  document.getElementById('cov-content').innerHTML = '';
-  const cov = await fetch('/api/coverage').then(r=>r.json()).catch(()=>({}));
-  document.getElementById('cov-loading').style.display = 'none';
+// -----------------------------------------------------------------
+// VirusTotal Scanner
+// -----------------------------------------------------------------
+let _vtSamples         = [];
+let _vtCurrentScan     = null;
+let _vtPollTimer       = null;
+let _vtAllResults      = {};
+let _vtSelectedSession = '';
+let _vtSelectedFile    = '';
 
-  // group by tactic
-  const byTactic = {};
-  TACTICS_ORDER.forEach(t => { byTactic[t.id] = []; });
-  byTactic['unknown'] = [];
+// ----- custom dropdown helpers -----
+function vtToggleDrop(id) {
+  const el = document.getElementById(id);
+  const wasOpen = el.classList.contains('vt-open');
+  document.querySelectorAll('.vt-select.vt-open').forEach(d => d.classList.remove('vt-open'));
+  if (!wasOpen) el.classList.add('vt-open');
+}
+function vtCloseDrop(id) {
+  document.getElementById(id)?.classList.remove('vt-open');
+}
+document.addEventListener('click', e => {
+  if (!e.target.closest('.vt-select')) {
+    document.querySelectorAll('.vt-select.vt-open').forEach(d => d.classList.remove('vt-open'));
+  }
+});
 
-  Object.entries(cov).forEach(([aid, info]) => {
-    const base   = aid.split('.')[0];
-    const tactic = TECHNIQUE_TACTIC[aid] || TECHNIQUE_TACTIC[base] || 'unknown';
-    if (!byTactic[tactic]) byTactic[tactic] = [];
-    byTactic[tactic].push({aid, ...info});
-  });
+function vtSelectSession(sid, label) {
+  _vtSelectedSession = sid;
+  const lbl = document.getElementById('vt-session-label');
+  lbl.textContent = label;
+  lbl.className = '';
+  document.querySelectorAll('#vt-session-menu .vt-select-opt').forEach(o =>
+    o.classList.toggle('vt-selected', o.dataset.sid === sid));
+  vtCloseDrop('vt-session-drop');
+  vtUpdateFileList();
+}
 
-  const total     = Object.keys(cov).length;
-  const covered   = Object.values(cov).filter(v => v.peekaboo || v.count > 0).length;
-  const peekaboo  = Object.values(cov).filter(v => v.peekaboo).length;
-  const libOnly   = Object.values(cov).filter(v => !v.peekaboo && v.count > 0).length;
+function vtSelectFile(fname, label) {
+  _vtSelectedFile = fname;
+  const lbl = document.getElementById('vt-file-label');
+  lbl.textContent = label;
+  lbl.className = '';
+  document.querySelectorAll('#vt-file-menu .vt-select-opt').forEach(o =>
+    o.classList.toggle('vt-selected', o.dataset.fname === fname));
+  vtCloseDrop('vt-file-drop');
+}
+// -----------------------------------
 
-  document.getElementById('cov-stats').innerHTML = `
-    <div class="stat"><div class="stat-val text-purple">${total}</div><div class="stat-label">ATT&CK IDs tracked</div></div>
-    <div class="stat"><div class="stat-val text-green">${peekaboo}</div><div class="stat-label">peekaboo templates</div></div>
-    <div class="stat"><div class="stat-val" style="color:var(--yellow)">${libOnly}</div><div class="stat-label">library only</div></div>
-    <div class="stat"><div class="stat-val text-blue">${covered}</div><div class="stat-label">total covered</div></div>
+async function loadVtScanner() {
+  const samples = await fetch('/api/samples').then(r => r.json()).catch(() => []);
+  _vtSamples = samples;
+  _vtSelectedSession = '';
+  _vtSelectedFile    = '';
+
+  const menu = document.getElementById('vt-session-menu');
+  menu.innerHTML = '';
+
+  if (samples.length) {
+    for (const s of samples) {
+      const nf    = (s.files || []).length;
+      const label = `${s.session_id}${s.actor ? '  ·  ' + s.actor : ''}  (${nf} file${nf !== 1 ? 's' : ''})`;
+      const div   = document.createElement('div');
+      div.className     = 'vt-select-opt';
+      div.textContent   = label;
+      div.dataset.sid   = s.session_id;
+      div.onclick       = () => vtSelectSession(s.session_id, label);
+      menu.appendChild(div);
+    }
+  } else {
+    menu.innerHTML = '<div class="vt-select-opt vt-ph">no samples found</div>';
+  }
+
+  // reset file menu & labels
+  document.getElementById('vt-file-menu').innerHTML = '';
+  const sl = document.getElementById('vt-session-label');
+  sl.textContent = '— select session —'; sl.className = 'vt-ph';
+  const fl = document.getElementById('vt-file-label');
+  fl.textContent = '— select file —';   fl.className = 'vt-ph';
+}
+
+function vtUpdateFileList() {
+  _vtSelectedFile = '';
+  const fl = document.getElementById('vt-file-label');
+  fl.textContent = '— select file —'; fl.className = 'vt-ph';
+
+  const menu   = document.getElementById('vt-file-menu');
+  menu.innerHTML = '';
+
+  const sample = _vtSamples.find(s => s.session_id === _vtSelectedSession);
+  if (!sample || !(sample.files || []).length) {
+    menu.innerHTML = '<div class="vt-select-opt vt-ph">no files found</div>';
+    return;
+  }
+
+  for (const f of sample.files) {
+    const kb    = f.size > 1024 ? (f.size / 1024).toFixed(1) + ' KB' : f.size + ' B';
+    const label = `${f.name}  (${kb})`;
+    const div   = document.createElement('div');
+    div.className     = 'vt-select-opt';
+    div.textContent   = label;
+    div.dataset.fname = f.name;
+    div.onclick       = () => vtSelectFile(f.name, label);
+    menu.appendChild(div);
+  }
+}
+
+async function vtStartScan() {
+  const sid   = _vtSelectedSession;
+  const fname = _vtSelectedFile;
+  if (!sid || !fname) { toast('Select a session and file first', 'warn'); return; }
+
+  // reset
+  if (_vtPollTimer) { clearInterval(_vtPollTimer); _vtPollTimer = null; }
+  document.getElementById('vt-results').style.display  = 'none';
+  document.getElementById('vt-empty').style.display    = 'none';
+  document.getElementById('vt-progress').style.display = '';
+  _vtSetProgress('⏳', 'Uploading…', 10, `uploading ${fname}…`);
+  document.getElementById('vt-scan-btn').disabled = true;
+
+  const r = await fetch('/api/vtscan/upload', {
+    method: 'POST',
+    headers: {'Content-Type': 'application/json'},
+    body: JSON.stringify({session_id: sid, filename: fname}),
+  }).then(r => r.json()).catch(e => ({ok: false, error: String(e)}));
+
+  if (!r.ok) {
+    document.getElementById('vt-progress').style.display = 'none';
+    document.getElementById('vt-empty').style.display = '';
+    document.getElementById('vt-scan-btn').disabled = false;
+    toast('Scan error: ' + r.error, 'error');
+    return;
+  }
+
+  if (r.cached) {
+    _vtShowResults(r);
+    document.getElementById('vt-progress').style.display = 'none';
+    document.getElementById('vt-scan-btn').disabled = false;
+    toast('Loaded cached VT results', 'ok');
+    return;
+  }
+
+  // start polling
+  _vtCurrentScan = {analysis_id: r.analysis_id, sha256: r.sha256};
+  _vtSetProgress('🔬', 'Analyzing…', 40, 'analysis queued - polling (may take 1–3 min)…');
+  _vtPollTimer = setInterval(_vtPollAnalysis, 9000);
+  _vtPollAnalysis();
+}
+
+async function _vtPollAnalysis() {
+  if (!_vtCurrentScan) return;
+  const r = await fetch(`/api/vtscan/analysis/${_vtCurrentScan.analysis_id}`)
+    .then(r => r.json()).catch(e => ({ok: false, error: String(e)}));
+
+  if (!r.ok) {
+    clearInterval(_vtPollTimer); _vtPollTimer = null;
+    // fallback: try by hash
+    const r2 = await fetch(`/api/vtscan/file/${_vtCurrentScan.sha256}`)
+      .then(r => r.json()).catch(() => ({ok: false}));
+    document.getElementById('vt-scan-btn').disabled = false;
+    if (r2.ok && r2.stats) {
+      _vtShowResults(r2);
+      document.getElementById('vt-progress').style.display = 'none';
+    } else {
+      document.getElementById('vt-progress-msg').textContent = 'poll error: ' + (r.error || 'unknown');
+    }
+    return;
+  }
+
+  if (r.status === 'completed') {
+    clearInterval(_vtPollTimer); _vtPollTimer = null;
+    document.getElementById('vt-scan-btn').disabled = false;
+    document.getElementById('vt-progress').style.display = 'none';
+    _vtShowResults(r);
+    return;
+  }
+
+  const cur = parseInt(document.getElementById('vt-progress-fill').style.width) || 40;
+  _vtSetProgress('🔬', 'Analyzing…', Math.min(cur + 6, 90), `status: ${r.status}…`);
+}
+
+function _vtSetProgress(icon, title, pct, msg) {
+  document.getElementById('vt-progress-icon').textContent  = icon;
+  document.getElementById('vt-progress-title').textContent = title;
+  document.getElementById('vt-progress-fill').style.width  = pct + '%';
+  document.getElementById('vt-progress-msg').textContent   = msg;
+}
+
+function _vtShowResults(data) {
+  const stats   = data.stats   || {};
+  const results = data.results || {};
+  _vtAllResults = results;
+
+  const malicious  = stats.malicious   || 0;
+  const suspicious = stats.suspicious  || 0;
+  const harmless   = (stats.harmless   || 0) + (stats.clean || 0);
+  const undetected = stats.undetected  || 0;
+  const total      = malicious + suspicious + harmless + undetected +
+                     (stats.failure || 0) + (stats.type_unsupported || 0);
+  const rate       = total > 0 ? Math.round(malicious / total * 100) : 0;
+  const rateColor  = rate > 50 ? 'var(--red)' : rate > 15 ? 'var(--yellow)' : 'var(--green)';
+
+  document.getElementById('vt-result-stats').innerHTML = `
+    <div class="stat-card"><div class="stat-num" style="color:var(--red)">${malicious}</div><div class="stat-label">Malicious</div></div>
+    <div class="stat-card"><div class="stat-num" style="color:var(--yellow)">${suspicious}</div><div class="stat-label">Suspicious</div></div>
+    <div class="stat-card"><div class="stat-num" style="color:var(--green)">${harmless}</div><div class="stat-label">Clean / Harmless</div></div>
+    <div class="stat-card"><div class="stat-num" style="color:var(--dim)">${undetected}</div><div class="stat-label">Undetected</div></div>
+    <div class="stat-card"><div class="stat-num" style="color:${rateColor}">${rate}%</div><div class="stat-label">Detection Rate</div></div>
+    <div class="stat-card"><div class="stat-num">${total}</div><div class="stat-label">Total Engines</div></div>
   `;
 
-  const cols = TACTICS_ORDER.filter(t => byTactic[t.id]?.length > 0);
-  if (!cols.length) { document.getElementById('cov-content').innerHTML = '<div class="empty">No coverage data available - rebuild the module index first</div>'; return; }
+  document.getElementById('vt-results').style.display = '';
+  vtFilterResults('all');
+  toast(`Scan complete - ${malicious} / ${total} engines detected`, malicious > 0 ? 'warn' : 'ok');
+}
 
-  const maxRows = Math.max(...cols.map(t => byTactic[t.id].length));
-  const colWidth = Math.max(80, Math.floor(1020 / cols.length));
-
-  let html = '<div class="coverage-wrap"><table class="coverage-matrix"><thead><tr>';
-  cols.forEach(t => {
-    html += `<th style="min-width:${colWidth}px">${t.name}</th>`;
+function vtFilterResults(filter) {
+  ['all','malicious','suspicious','clean'].forEach(f => {
+    const btn = document.getElementById('vt-f-' + f);
+    if (btn) btn.classList.toggle('active', f === filter);
   });
-  html += '</tr></thead><tbody>';
 
-  for (let row = 0; row < maxRows; row++) {
-    html += '<tr>';
-    cols.forEach(t => {
-      const items = byTactic[t.id];
-      const item  = items[row];
-      if (!item) { html += '<td class="cov-td"></td>'; return; }
-      let cls = 'cov-empty';
-      let title = item.aid;
-      if (item.peekaboo && item.count > 0) { cls = 'cov-both'; title += ' - template + library (' + item.count + ' modules)'; }
-      else if (item.peekaboo) { cls = 'cov-peekaboo'; title += ' - peekaboo template'; }
-      else if (item.count > 0) { cls = 'cov-library'; title += ' - library (' + item.count + ' module' + (item.count>1?'s':'') + ')'; }
-      html += `<td class="cov-td"><span class="cov-cell ${cls}" title="${escAttr(title)}" onclick="toast('${escAttr(item.aid)}: ${item.peekaboo?'template ':''}${item.count>0?item.count+' lib modules':'not covered'}','info')" style="display:flex;align-items:center;justify-content:center;font-size:8px;color:rgba(0,0,0,.5)">${item.aid.replace('T1','')}</span></td>`;
-    });
-    html += '</tr>';
+  const grid = document.getElementById('vt-engines-grid');
+  let cards = '';
+  const entries = Object.entries(_vtAllResults);
+
+  for (const [engine, info] of entries) {
+    const cat = info.category || 'undetected';
+    if (filter === 'malicious'  && cat !== 'malicious')  continue;
+    if (filter === 'suspicious' && cat !== 'suspicious') continue;
+    if (filter === 'clean'      && !['harmless','clean','undetected'].includes(cat)) continue;
+
+    const isMal = cat === 'malicious';
+    const isSus = cat === 'suspicious';
+    const cardCls = isMal ? 'vt-mal' : isSus ? 'vt-sus' : 'vt-ok';
+    const catColor = isMal ? 'var(--red)' : isSus ? 'var(--yellow)' : 'var(--green)';
+    const detection = info.result
+      ? `<div style="font-size:10px;color:var(--red);font-family:monospace;margin-top:5px;word-break:break-all">${escHtml(info.result)}</div>`
+      : '';
+    const ver = [info.engine_version, info.engine_update].filter(Boolean).join(' · ');
+
+    cards += `<div class="vt-engine-card ${cardCls}">
+      <div style="display:flex;justify-content:space-between;align-items:flex-start;gap:6px">
+        <div style="font-size:13px;font-weight:600;color:var(--fg)">${escHtml(engine)}</div>
+        <span style="background:${catColor}20;color:${catColor};font-size:10px;padding:2px 7px;border-radius:10px;white-space:nowrap;font-weight:600">${cat}</span>
+      </div>
+      ${ver ? `<div style="font-size:11px;color:var(--dim);margin-top:2px">${escHtml(ver)}</div>` : ''}
+      ${detection}
+    </div>`;
   }
-  html += '</tbody></table></div>';
-  document.getElementById('cov-content').innerHTML = html;
+
+  if (!cards) {
+    cards = '<div class="empty" style="grid-column:1/-1">No results match the filter</div>';
+  }
+  grid.innerHTML = cards;
 }
 
 // -----------------------------------------------------------------

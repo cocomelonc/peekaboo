@@ -97,7 +97,7 @@ PEEKABOO_MODULES: dict[str, dict] = {
     },
 }
 
-# slug keyword → (category, fallback_attack_id)
+# slug keyword -> (category, fallback_attack_id)
 _SLUG_RULES: list[tuple[str, str, str | None]] = [
     (r"injection|inject",           "injection",       "T1055"),
     (r"dll.hijack|dllhijack",       "injection",       "T1574.001"),
@@ -123,7 +123,7 @@ _SLUG_RULES: list[tuple[str, str, str | None]] = [
     (r"rev.c|simple.rev",           "c2",              "T1059"),
 ]
 
-# explicit ATT&CK ID → canonical category (overrides slug-inferred category)
+# explicit ATT&CK ID -> canonical category (overrides slug-inferred category)
 _AID_CATEGORY: dict[str, str] = {
     "T1003": "credential-access",
     "T1012": "discovery",

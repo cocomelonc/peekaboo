@@ -22,7 +22,7 @@ Peekaboo is a modular framework designed to safely emulate malware behavior. It 
 - **MITRE ATT&CK R&D** - browse 200+ blog post techniques mapped to ATT&CK IDs with inline source code (C, C++, Nim, assembly).
 - **Malpedia integration** - threat actor and malware family lookup with semantic blog post matching via local LLM embeddings.
 - **AI assistant** - local RAG chatbot (Ollama/qwen3) trained on blog posts and codebase; also supports Claude and Gemini.
-- **APT campaign pipeline** - end-to-end automated pipeline: Malpedia actor → threat reports → TTP extraction (Claude API + regex) → module selection → binary compile. Full session history stored in SQLite with per-session report links, TTPs, and download access.
+- **APT campaign pipeline** - end-to-end automated pipeline: Malpedia actor -> threat reports -> TTP extraction (Claude API + regex) -> module selection -> binary compile. Full session history stored in SQLite with per-session report links, TTPs, and download access.
 - **safe by design:** Focuses on telemetry generation (process creation, network connections) rather than actual system damage.      
 
 ## architecture
@@ -68,7 +68,7 @@ cd dashboard && python3 app.py
 | **C2** | Deliver compiled binaries over Telegram, GitHub, VirusTotal, Bitbucket |
 | **Config** | Inline editor for all API keys and service configs (Telegram, GitHub, Azure, Angelcam, Ollama, Gemini, etc.) |
 | **AI Assistant** | RAG chatbot with support for Claude, Gemini, and local Ollama (qwen3); answers questions about the codebase and blog posts |
-| **APT Campaign** | Fully automated pipeline: actor → reports → TTP extraction → module selection → binary compile |
+| **APT Campaign** | Fully automated pipeline: actor -> reports -> TTP extraction -> module selection -> binary compile |
 | **MITRE ATT&CK** | Browse 200+ blog posts mapped to ATT&CK techniques with inline source code viewer |
 | **Malpedia** | Threat actor and malware family lookup with semantic blog post matching |
 
@@ -80,7 +80,7 @@ The MITRE ATT&CK tab indexes all blog posts from the [meow](https://github.com/c
 
 - filter by category (injection, persistence, evasion, cryptography, linux, macos, etc.)
 - click any technique to expand the inline source code snippet
-- **Full Reindex** button re-runs library scan → semantic embeddings → knowledge base in one shot with live progress per step
+- **Full Reindex** button re-runs library scan -> semantic embeddings -> knowledge base in one shot with live progress per step
 
 ### Malpedia integration
 

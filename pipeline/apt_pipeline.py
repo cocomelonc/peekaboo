@@ -1,6 +1,6 @@
 """
 peekaboo APT simulation pipeline
-Malpedia → Reports → TTPs → Modules → Build
+Malpedia -> Reports -> TTPs -> Modules -> Build
 """
 from __future__ import annotations
 import json
@@ -214,7 +214,7 @@ def agent_select_modules(ttps: list[dict]) -> dict:
                 "platform":  best["platform"],
             })
 
-    # map category → build param overrides
+    # map category -> build param overrides
     cats = {m["category"] for m in params["selected_modules"]}
     if "cryptography" in cats:
         # find a suitable crypto module from peekaboo templates
