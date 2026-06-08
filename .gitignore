@@ -10,6 +10,7 @@ data/enterprise-attack.json
 *__pycache__*
 __pycache__/*
 __pycache__/
+__pycache__/peekaboo_cli.cpython-313.pyc
 *.py[codz]
 *$py.class
 

@@ -96,6 +96,7 @@ DEFCON Demo Labs Singapore 2026 | by @cocomelonc
 | `library`   | MITRE ATT&CK module library -- browse, search, view code |
 | `artifacts` | Artifact map: 410 techniques mapped to 4799 Sigma rules  |
 | `builder`   | Compile malware research modules; browse build history   |
+| `shellcode` | Parse, analyse, transform and reformat shellcode         |
 
 ## Global commands
 
@@ -125,6 +126,13 @@ DEFCON Demo Labs Singapore 2026 | by @cocomelonc
     peekaboo [builder] > list windows
     peekaboo [builder] > build malware-injection-17
     peekaboo [builder] > history
+
+    peekaboo > shellcode
+    peekaboo [shellcode] > load /tmp/payload.bin
+    peekaboo [shellcode] > analyse
+    peekaboo [shellcode] > transform xor_random
+    peekaboo [shellcode] > format python
+    peekaboo [shellcode] > generate
 """,
     },
 
@@ -593,6 +601,320 @@ Show global artifact map statistics.
 """,
     },
 
+    # ── shellcode ─────────────────────────────────────────────────────────────
+    "shellcode": {
+        "_overview": """\
+# Shellcode Lab
+
+Parse, analyse, transform and reformat shellcode in any supported format.
+All operations are local -- nothing leaves the machine.
+
+## Workflow
+
+    load <path>            -- load raw binary shellcode from a file
+    paste                  -- paste shellcode in any text format
+    analyse                -- detailed analysis: entropy, arch, patterns, bytes
+    format <id>            -- set output format (default: c)
+    transform <id> [key]   -- set transform (default: none)
+    varname <name>         -- set variable name in generated code (default: buf)
+    generate               -- run and display the formatted output
+    save <path>            -- save transformed raw bytes to a binary file
+    export <path>          -- export formatted code output to a text file
+    formats                -- list all output format IDs
+    transforms             -- list all transform IDs
+
+## Input formats (auto-detected)
+
+- Python bytes literal:  `b"\\x90\\x90"`
+- C / 0x array:          `0x90, 0x90, 0x90`
+- Escaped hex:           `\\x90\\x90\\x90`
+- Space/comma hex:       `90 90 90`
+- Raw hex string:        `909090`
+- Base64:                `kJCQ`
+
+## Output formats
+
+`c`  `c_str`  `python`  `powershell`  `csharp`  `vba`  `rust`
+`base64`  `hex_0x`  `hex_raw`  `escaped`
+
+## Transforms
+
+`none`  `xor_random`  `xor_key`  `base64_encode`  `base64_decode`
+`zlib_compress`  `zlib_decompress`
+""",
+        "load": """\
+## load
+
+Load raw binary shellcode from a file.
+
+**Usage:**
+
+    load <path>
+
+**Parameters:**
+
+- `path` -- absolute or relative path; `~` expansion supported
+
+**Examples:**
+
+    load /tmp/shellcode.bin
+    load ~/payloads/beacon_x64.bin
+    load samples/malware-injection-17/payload.exe
+
+**Notes:**
+
+- The file is read as raw bytes (no format parsing)
+- Non-PE files (raw shellcode) are recommended; PE files are accepted but
+  the output may be very large
+- After loading, run `analyse` to inspect the shellcode
+""",
+        "paste": """\
+## paste
+
+Enter multi-line paste mode to load shellcode from text (any format).
+
+**Usage:**
+
+    paste
+
+Then paste your shellcode in any supported format and press **Enter** on an
+empty line to finish.
+
+**Accepted formats:**
+
+    \\x90\\x90\\x90\\xcc
+    0x90, 0x90, 0x90
+    90 90 90 cc
+    909090cc
+    kJCQ (base64)
+    b"\\x90\\x90" (Python bytes literal)
+
+**Notes:**
+
+- Multi-line input is supported (e.g. a C array split across lines)
+- The format is auto-detected
+- If detection fails, use `load` to read raw bytes from a file
+""",
+        "analyse": """\
+## analyse
+
+Show detailed analysis of the currently loaded shellcode.
+
+**Usage:**
+
+    analyse
+
+**Output sections:**
+
+1. **Summary panel** -- size, entropy, arch, MD5, SHA256
+2. **Detection panel** -- known pattern match (Metasploit, Cobalt Strike, etc.)
+3. **Byte distribution** -- top 6 most frequent bytes with percentage bars
+4. **Null byte info** -- count and percentage of zero bytes
+
+**Entropy guide:**
+
+| entropy | interpretation                           |
+|---------|------------------------------------------|
+| 0 - 3.5 | low -- mostly null/repeated bytes        |
+| 3.5 - 6 | moderate -- typical shellcode            |
+| 6 - 7.2 | high -- possibly encoded/encrypted       |
+| 7.2 +   | very high -- likely packed/encrypted     |
+""",
+        "format": """\
+## format
+
+Set the output format used by `generate` and `export`.
+
+**Usage:**
+
+    format <id>
+
+**Available format IDs:**
+
+| id          | output                              |
+|-------------|-------------------------------------|
+| `c`         | C `unsigned char buf[] = {...};`    |
+| `c_str`     | C `\\x` string literal              |
+| `python`    | Python `b"\\x90..."`               |
+| `powershell`| PowerShell `[Byte[]] $buf = @(...)`  |
+| `csharp`    | C# `byte[] buf = new byte[]{...};`  |
+| `vba`       | VBA function with hex-decode loop   |
+| `rust`      | Rust `let buf: &[u8] = &[...];`     |
+| `base64`    | Base64 encoded string               |
+| `hex_0x`    | Space-separated `0xNN` values       |
+| `hex_raw`   | Continuous hex string               |
+| `escaped`   | `\\xNN` escaped hex string         |
+
+**Examples:**
+
+    format python
+    format powershell
+    format base64
+""",
+        "transform": """\
+## transform
+
+Set the transform applied to the shellcode before formatting.
+
+**Usage:**
+
+    transform <id> [key]
+
+**Parameters:**
+
+- `id`  -- transform ID (see table below)
+- `key` -- XOR key; required for `xor_key` only
+
+**Available transforms:**
+
+| id               | description                                |
+|------------------|--------------------------------------------|
+| `none`           | no transform (default)                     |
+| `xor_random`     | XOR with a random 4-byte key               |
+| `xor_key`        | XOR with a specified key                   |
+| `base64_encode`  | encode to Base64                           |
+| `base64_decode`  | decode from Base64                         |
+| `zlib_compress`  | zlib compress at level 9                   |
+| `zlib_decompress`| zlib decompress                            |
+
+**Key formats for `xor_key`:**
+
+    transform xor_key 0x41              single byte 0x41
+    transform xor_key 0xde,0xad,0xbe,0xef   multi-byte
+    transform xor_key deadbeef          4-byte raw hex
+    transform xor_key mysecret          passphrase
+
+**Notes:**
+
+- `xor_random` generates a new key each time `generate` is called
+- The XOR key used is shown in the output summary panel
+- Transforms are cumulative with the selected format: the transform is
+  applied first, then the formatter encodes the result
+""",
+        "varname": """\
+## varname
+
+Set the variable name used in generated code output.
+
+**Usage:**
+
+    varname <name>
+
+**Parameters:**
+
+- `name` -- identifier name; non-alphanumeric characters are replaced with `_`
+
+**Examples:**
+
+    varname shellcode
+    varname payload
+    varname inject_buf
+
+**Notes:**
+
+- Only affects code-generating formats (`c`, `c_str`, `python`, `powershell`,
+  `csharp`, `vba`, `rust`)
+- Has no effect on `base64`, `hex_0x`, `hex_raw`, `escaped`
+""",
+        "generate": """\
+## generate
+
+Run the full pipeline and display the formatted shellcode output.
+
+**Usage:**
+
+    generate [format]
+
+**Parameters:**
+
+- `format` -- optional; override the current format for this run only
+
+**Examples:**
+
+    generate
+    generate python
+    generate powershell
+
+**Output:**
+
+1. Current settings summary (format, transform, variable name)
+2. XOR key details (if xor_random or xor_key transform is active)
+3. Syntax-highlighted code output
+
+**Notes:**
+
+- Output longer than 40 lines opens in a pager; press `q` to exit
+- The transform is applied every time `generate` is called;
+  use `xor_random` carefully -- each call produces a different key
+""",
+        "save": """\
+## save
+
+Save the transformed raw bytes to a binary file.
+
+**Usage:**
+
+    save <path>
+
+**Parameters:**
+
+- `path` -- output file path; `~` expansion supported
+
+**Examples:**
+
+    save /tmp/payload_xored.bin
+    save ~/staging/encoded.bin
+
+**Notes:**
+
+- The current transform is applied before saving
+- The file contains raw binary bytes (not formatted text)
+- Use `export` to save the formatted code output as text
+""",
+        "export": """\
+## export
+
+Export the formatted code output to a text file.
+
+**Usage:**
+
+    export <path>
+
+**Parameters:**
+
+- `path` -- output file path; `~` expansion supported
+
+**Examples:**
+
+    export /tmp/shellcode.py
+    export ~/staging/payload.c
+
+**Notes:**
+
+- Uses the current format and transform settings
+- The file contains the text output from `generate` (not raw bytes)
+- Use `save` to write raw transformed bytes to a binary file
+""",
+        "formats": """\
+## formats
+
+List all available output format IDs with descriptions.
+
+**Usage:**
+
+    formats
+""",
+        "transforms": """\
+## transforms
+
+List all available transform IDs with descriptions.
+
+**Usage:**
+
+    transforms
+""",
+    },
+
     # ── builder ───────────────────────────────────────────────────────────────
     "builder": {
         "_overview": """\
@@ -829,7 +1151,7 @@ def print_banner() -> None:
 
 # -- top-level commands --------------------------------------------------------
 TOP_COMMANDS = [
-    "evasion", "library", "artifacts", "builder", "help", "exit", "quit",
+    "evasion", "library", "artifacts", "builder", "shellcode", "help", "exit", "quit",
 ]
 
 TOP_HELP = [
@@ -837,6 +1159,7 @@ TOP_HELP = [
     ("library",   "MITRE ATT&CK module library -- browse, search, view source"),
     ("artifacts", "Artifact map -- 410 techniques, 4799 Sigma rules, EventID coverage"),
     ("builder",   "Compile malware research modules; browse build history"),
+    ("shellcode", "Parse, analyse, transform and reformat shellcode"),
     ("help",      "show this help"),
     ("exit",      "quit peekaboo-cli"),
 ]
@@ -2048,6 +2371,446 @@ def run_evasion(ev_mod) -> None:
             )
 
 
+# -- shellcode lab -------------------------------------------------------------
+
+SHELLCODE_COMMANDS = [
+    "load", "paste", "analyse", "format", "transform", "varname",
+    "generate", "formats", "transforms", "save", "export", "help", "back",
+]
+
+_SC_FORMAT_INFO = [
+    ("c",          "C unsigned char array"),
+    ("c_str",      "C \\x string literal"),
+    ("python",     "Python bytes"),
+    ("powershell", "PowerShell [Byte[]]"),
+    ("csharp",     "C# byte[]"),
+    ("vba",        "VBA function"),
+    ("rust",       "Rust &[u8]"),
+    ("base64",     "Base64 string"),
+    ("hex_0x",     "0x-prefixed hex"),
+    ("hex_raw",    "raw hex string"),
+    ("escaped",    "\\x escaped hex"),
+]
+
+_SC_TRANSFORM_INFO = [
+    ("none",             "no transform (pass-through)"),
+    ("xor_random",       "XOR with random 4-byte key (new key each generate)"),
+    ("xor_key",          "XOR with specified key -- usage: transform xor_key 0x41"),
+    ("base64_encode",    "encode to Base64"),
+    ("base64_decode",    "decode from Base64"),
+    ("zlib_compress",    "zlib compress at level 9"),
+    ("zlib_decompress",  "zlib decompress"),
+]
+
+_SC_FORMAT_LANG = {
+    "c": "c", "c_str": "c", "python": "python", "powershell": "powershell",
+    "csharp": "csharp", "vba": "vbnet", "rust": "rust",
+    "base64": "text", "hex_0x": "text", "hex_raw": "text", "escaped": "text",
+}
+
+
+def _render_sc_analysis(stats: dict, label: str = "Shellcode Analysis") -> None:
+    entropy = stats["entropy"]
+    ent_w   = int(min(entropy, 8.0) / 8.0 * 28)
+    ent_bar = "[" + "#" * ent_w + "." * (28 - ent_w) + "]"
+    ent_style = ("err" if entropy > 7.2 else
+                 "warn" if entropy > 6.5 else
+                 "medium" if entropy > 3.5 else "ok")
+
+    size_kb = stats["size"] / 1024
+    detected = stats.get("detected") or stats.get("detected_fmt") or "unknown"
+
+    meta = (
+        f"  Size     : {stats['size']:,} bytes  ({size_kb:.1f} KB)\n"
+        f"  Entropy  : [{ent_style}]{entropy}  {ent_bar}[/{ent_style}]\n"
+        f"  Arch     : {stats.get('arch','?')}\n"
+        f"  Detected : {detected}\n"
+        f"  Null     : {stats['null_bytes']} bytes  ({stats['null_pct']}%)\n"
+        f"  MD5      : [dim]{stats['md5']}[/dim]\n"
+        f"  SHA256   : [dim]{stats['sha256']}[/dim]"
+    )
+    console.print()
+    console.print(Panel(meta, title=f"[heading] {label} [/heading]",
+                        border_style="cyan", box=box.ASCII))
+
+    top = stats.get("top_bytes", [])
+    if top:
+        t = Table(box=box.ASCII, show_header=True, header_style="heading",
+                  border_style="dim", padding=(0, 1),
+                  title="Byte Distribution (top 6)")
+        t.add_column("byte",  style="warn", min_width=6,  no_wrap=True)
+        t.add_column("count", style="info", min_width=6,  justify="right", no_wrap=True)
+        t.add_column("pct",   style="dim",  min_width=6,  justify="right", no_wrap=True)
+        t.add_column("bar",                 min_width=28)
+        max_pct = max(e["pct"] for e in top) or 1.0
+        for e in top:
+            w   = int(e["pct"] / max_pct * 26)
+            bar = Text("[" + "#" * w + "." * (26 - w) + "]", style="cyan")
+            t.add_row(e["byte"], str(e["count"]), f"{e['pct']}%", bar)
+        console.print(t)
+    console.print()
+
+
+def _sc_settings_line(fmt: str, xform: str, xkey: str, vname: str) -> str:
+    key_hint = f"  key={xkey}" if xkey and xform.startswith("xor_key") else ""
+    return (
+        f"  format=[cmd]{fmt}[/cmd]  "
+        f"transform=[warn]{xform}[/warn]{key_hint}  "
+        f"varname=[info]{vname}[/info]"
+    )
+
+
+def run_shellcode() -> None:
+    """Interactive shellcode lab sub-REPL."""
+    try:
+        import shellcode as _sc
+    except ImportError as exc:
+        console.print(f"[err][!] shellcode module unavailable: {exc}[/err]")
+        return
+
+    sc_raw:   bytes | None = None   # raw loaded bytes
+    sc_fmt    = "c"
+    sc_xform  = "none"
+    sc_xkey   = ""
+    sc_vname  = "buf"
+    sc_label  = None                # filename or "(pasted)"
+
+    all_fmt_ids   = [f[0] for f in _SC_FORMAT_INFO]
+    all_xform_ids = [f[0] for f in _SC_TRANSFORM_INFO]
+
+    completer = WordCompleter(
+        SHELLCODE_COMMANDS + all_fmt_ids + all_xform_ids,
+        ignore_case=True,
+    )
+    session: PromptSession = PromptSession(
+        history=InMemoryHistory(),
+        completer=completer,
+        style=PT_STYLE,
+    )
+
+    console.print()
+    console.print(Panel(
+        "  Parse, analyse, transform and reformat shellcode\n"
+        "  type  help  for commands,  formats / transforms  for ID lists,  back  to return",
+        title="[heading] Shellcode Lab [/heading]",
+        border_style="cyan",
+        box=box.ASCII,
+    ))
+    console.print()
+
+    while True:
+        hint = f" ({sc_label})" if sc_label else ""
+        try:
+            raw = session.prompt(
+                f"peekaboo [shellcode{hint}] > ",
+                style=PT_STYLE,
+            ).strip()
+        except (KeyboardInterrupt, EOFError):
+            console.print("\n[dim]use  back  to return[/dim]")
+            continue
+
+        if not raw:
+            continue
+
+        parts = raw.split()
+        cmd   = parts[0].lower()
+        args  = parts[1:]
+
+        # -- back -------------------------------------------------------------
+        if cmd in ("back", "exit", "quit"):
+            break
+
+        # -- help -------------------------------------------------------------
+        elif cmd == "help":
+            show_help("shellcode", args[0] if args else None)
+
+        # -- load <path> ------------------------------------------------------
+        elif cmd == "load":
+            if not args:
+                console.print("[warn][!] usage: load <path>[/warn]")
+                continue
+            p = Path(" ".join(args)).expanduser().resolve()
+            if not p.exists():
+                console.print(f"[err][!] file not found: {p}[/err]")
+                continue
+            try:
+                sc_raw   = p.read_bytes()
+                sc_label = p.name
+                console.print(
+                    f"  [ok][+] loaded:[/ok] [cmd]{p.name}[/cmd]  "
+                    f"[dim]{len(sc_raw):,} bytes[/dim]"
+                )
+                console.print(
+                    f"  [dim]run  analyse  to inspect, or  generate  to format[/dim]\n"
+                )
+            except Exception as exc:
+                console.print(f"[err][!] read error: {exc}[/err]")
+
+        # -- paste ------------------------------------------------------------
+        elif cmd == "paste":
+            console.print(
+                "  [info]Paste shellcode in any format.[/info]\n"
+                "  [dim]Accepted: \\x90\\x90  0x90,0x90  90 90  9090  base64  b\"\\x90\"[/dim]\n"
+                "  [dim]Press Enter on an empty line to finish.[/dim]\n"
+            )
+            lines: list[str] = []
+            while True:
+                try:
+                    line = session.prompt("  paste> ", style=PT_STYLE)
+                except (KeyboardInterrupt, EOFError):
+                    break
+                if not line.strip():
+                    break
+                lines.append(line)
+            raw_text = "\n".join(lines).strip()
+            if not raw_text:
+                console.print("  [warn][!] no input received[/warn]\n")
+                continue
+            try:
+                sc_raw, detected = _sc.parse_input(raw_text)
+                sc_label = "pasted"
+                console.print(
+                    f"  [ok][+] {len(sc_raw):,} bytes loaded[/ok]  "
+                    f"[dim]detected as: {detected}[/dim]\n"
+                )
+            except ValueError as exc:
+                console.print(f"  [err][!] parse error: {exc}[/err]\n")
+
+        # -- analyse ----------------------------------------------------------
+        elif cmd == "analyse":
+            if sc_raw is None:
+                console.print("[warn][!] no shellcode loaded -- use  load  or  paste[/warn]")
+                continue
+            stats = _sc.analyse(sc_raw)
+            _render_sc_analysis(stats, sc_label or "Analysis")
+
+        # -- formats ----------------------------------------------------------
+        elif cmd == "formats":
+            t = Table(box=box.ASCII, show_header=True, header_style="heading",
+                      border_style="dim", padding=(0, 1), title="Output Formats")
+            t.add_column("id",          style="cmd",  min_width=12, no_wrap=True)
+            t.add_column("description", style="info")
+            for fid, desc in _SC_FORMAT_INFO:
+                marker = Text("*", style="ok") if fid == sc_fmt else Text(" ", style="dim")
+                t.add_column("", min_width=1, no_wrap=True) if False else None
+                t.add_row(fid, desc)
+            console.print()
+            console.print(t)
+            console.print(
+                f"  [dim]current: [cmd]{sc_fmt}[/cmd]  "
+                f"-- use  format <id>  to change[/dim]\n"
+            )
+
+        # -- transforms -------------------------------------------------------
+        elif cmd == "transforms":
+            t = Table(box=box.ASCII, show_header=True, header_style="heading",
+                      border_style="dim", padding=(0, 1), title="Transforms")
+            t.add_column("id",          style="warn", min_width=18, no_wrap=True)
+            t.add_column("description", style="info")
+            for xid, desc in _SC_TRANSFORM_INFO:
+                t.add_row(xid, desc)
+            console.print()
+            console.print(t)
+            console.print(
+                f"  [dim]current: [warn]{sc_xform}[/warn]"
+                + (f"  key={sc_xkey}" if sc_xkey else "")
+                + "  -- use  transform <id> [key]  to change[/dim]\n"
+            )
+
+        # -- format <id> ------------------------------------------------------
+        elif cmd == "format":
+            if not args:
+                console.print(
+                    f"  [info]current format: [cmd]{sc_fmt}[/cmd][/info]\n"
+                    f"  [dim]usage: format <id>  -- type  formats  for IDs[/dim]\n"
+                )
+                continue
+            fid = args[0].lower()
+            if fid not in all_fmt_ids:
+                console.print(
+                    f"  [err][!] unknown format '{fid}'[/err]\n"
+                    f"  [dim]valid: {' '.join(all_fmt_ids)}[/dim]\n"
+                )
+                continue
+            sc_fmt = fid
+            console.print(f"  [ok][+] format set to: [cmd]{sc_fmt}[/cmd][/ok]\n")
+
+        # -- transform <id> [key] ---------------------------------------------
+        elif cmd == "transform":
+            if not args:
+                console.print(
+                    f"  [info]current transform: [warn]{sc_xform}[/warn][/info]\n"
+                    f"  [dim]usage: transform <id> [key]  -- type  transforms  for IDs[/dim]\n"
+                )
+                continue
+            xid = args[0].lower()
+            if xid not in all_xform_ids:
+                console.print(
+                    f"  [err][!] unknown transform '{xid}'[/err]\n"
+                    f"  [dim]valid: {' '.join(all_xform_ids)}[/dim]\n"
+                )
+                continue
+            sc_xform = xid
+            sc_xkey  = " ".join(args[1:]) if len(args) > 1 else ""
+            if sc_xform == "xor_key" and not sc_xkey:
+                console.print(
+                    "  [warn][!] xor_key requires a key argument\n"
+                    "  example: transform xor_key 0x41\n"
+                    "           transform xor_key 0xde,0xad,0xbe,0xef\n"
+                    "           transform xor_key deadbeef[/warn]\n"
+                )
+                sc_xform = "none"
+                continue
+            msg = f"  [ok][+] transform set to: [warn]{sc_xform}[/warn]"
+            if sc_xkey:
+                msg += f"  [dim]key={sc_xkey}[/dim]"
+            console.print(msg + "[/ok]\n")
+
+        # -- varname <name> ---------------------------------------------------
+        elif cmd == "varname":
+            if not args:
+                console.print(
+                    f"  [info]current varname: [info]{sc_vname}[/info][/info]\n"
+                    f"  [dim]usage: varname <name>[/dim]\n"
+                )
+                continue
+            sc_vname = args[0]
+            console.print(f"  [ok][+] variable name set to: [info]{sc_vname}[/info][/ok]\n")
+
+        # -- generate [format] ------------------------------------------------
+        elif cmd == "generate":
+            if sc_raw is None:
+                console.print("[warn][!] no shellcode loaded -- use  load  or  paste[/warn]")
+                continue
+            run_fmt = args[0].lower() if args else sc_fmt
+            if run_fmt not in all_fmt_ids:
+                console.print(
+                    f"  [err][!] unknown format '{run_fmt}'[/err]\n"
+                    f"  [dim]valid: {' '.join(all_fmt_ids)}[/dim]\n"
+                )
+                continue
+
+            import ast as _ast
+            raw_text = " ".join(f"0x{b:02x}" for b in sc_raw)
+
+            with console.status("[info]processing...[/info]", spinner="dots"):
+                result = _sc.process(
+                    raw_text,
+                    output_format=run_fmt,
+                    transform=sc_xform,
+                    xor_key_str=sc_xkey,
+                    var_name=sc_vname,
+                )
+
+            if not result.get("ok"):
+                console.print(f"  [err][!] {result.get('error','unknown error')}[/err]\n")
+                continue
+
+            # settings summary
+            console.print()
+            console.print(_sc_settings_line(run_fmt, sc_xform, sc_xkey, sc_vname))
+            in_s  = result["input_stats"]
+            out_s = result["output_stats"]
+            console.print(
+                f"  [dim]input: {in_s['size']:,} bytes  entropy={in_s['entropy']}  "
+                f"-> output: {out_s['size']:,} bytes  entropy={out_s['entropy']}[/dim]"
+            )
+            if result.get("xor_key_hex"):
+                console.print(
+                    f"  [warn]XOR key (\\x) : {result['xor_key_hex']}[/warn]\n"
+                    f"  [warn]XOR key (0x) : {result['xor_key_0x']}[/warn]"
+                )
+
+            # syntax-highlighted output
+            lang   = _SC_FORMAT_LANG.get(run_fmt, "text")
+            output = result["output"]
+            n_lines = output.count("\n") + 1
+
+            syn = Syntax(output, lang, theme="monokai",
+                         line_numbers=(n_lines > 4 and lang not in ("text",)),
+                         word_wrap=False)
+
+            if n_lines > 40:
+                with console.pager(styles=True):
+                    console.print(Panel(
+                        syn,
+                        title=f"[heading] {run_fmt}  ({out_s['size']:,} bytes) [/heading]",
+                        border_style="dim", box=box.ASCII,
+                    ))
+            else:
+                console.print(Panel(
+                    syn,
+                    title=f"[heading] {run_fmt}  ({out_s['size']:,} bytes) [/heading]",
+                    border_style="dim", box=box.ASCII,
+                ))
+            console.print()
+
+        # -- save <path> ------------------------------------------------------
+        elif cmd == "save":
+            if sc_raw is None:
+                console.print("[warn][!] no shellcode loaded[/warn]")
+                continue
+            if not args:
+                console.print("[warn][!] usage: save <path>[/warn]")
+                continue
+            out_p = Path(" ".join(args)).expanduser().resolve()
+
+            raw_hex = " ".join(f"0x{b:02x}" for b in sc_raw)
+            if sc_xform != "none":
+                with console.status("[info]applying transform...[/info]", spinner="dots"):
+                    res = _sc.process(raw_hex, output_format="hex_raw",
+                                      transform=sc_xform, xor_key_str=sc_xkey)
+                if not res.get("ok"):
+                    console.print(f"  [err][!] transform error: {res.get('error')}[/err]\n")
+                    continue
+                save_bytes = bytes.fromhex(res["output"])
+            else:
+                save_bytes = sc_raw
+
+            try:
+                out_p.write_bytes(save_bytes)
+                console.print(
+                    f"  [ok][+] saved:[/ok] [cmd]{out_p}[/cmd]  "
+                    f"[dim]{len(save_bytes):,} bytes[/dim]\n"
+                )
+            except Exception as exc:
+                console.print(f"  [err][!] write error: {exc}[/err]\n")
+
+        # -- export <path> ----------------------------------------------------
+        elif cmd == "export":
+            if sc_raw is None:
+                console.print("[warn][!] no shellcode loaded[/warn]")
+                continue
+            if not args:
+                console.print("[warn][!] usage: export <path>[/warn]")
+                continue
+            out_p = Path(" ".join(args)).expanduser().resolve()
+
+            raw_hex = " ".join(f"0x{b:02x}" for b in sc_raw)
+            with console.status("[info]generating...[/info]", spinner="dots"):
+                res = _sc.process(raw_hex, output_format=sc_fmt,
+                                  transform=sc_xform, xor_key_str=sc_xkey,
+                                  var_name=sc_vname)
+            if not res.get("ok"):
+                console.print(f"  [err][!] {res.get('error')}[/err]\n")
+                continue
+
+            try:
+                out_p.write_text(res["output"], encoding="utf-8")
+                console.print(
+                    f"  [ok][+] exported:[/ok] [cmd]{out_p}[/cmd]  "
+                    f"[dim]{len(res['output'])} chars[/dim]\n"
+                )
+            except Exception as exc:
+                console.print(f"  [err][!] write error: {exc}[/err]\n")
+
+        else:
+            console.print(
+                f"[warn][!] unknown command: {cmd}  "
+                f"(type  help  for commands)[/warn]"
+            )
+
+
 # -- builder -------------------------------------------------------------------
 
 import uuid as _uuid
@@ -2559,6 +3322,9 @@ def main() -> None:
 
         elif cmd == "builder":
             run_builder()
+
+        elif cmd == "shellcode":
+            run_shellcode()
 
         else:
             console.print(
