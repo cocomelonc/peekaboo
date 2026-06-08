@@ -16,7 +16,7 @@ except ImportError:
     HAS_PEFILE = False
 
 
-# ── helpers ──────────────────────────────────────────────────────────────────
+# -- helpers ------------------------------------------------------------------
 
 def _entropy(data: bytes) -> float:
     if not data:
@@ -66,7 +66,7 @@ def _yara_escape(s: str) -> str:
     return s.replace('\\', '\\\\').replace('"', '\\"').replace('\n', '\\n').replace('\r', '\\r')
 
 
-# ── main generator ────────────────────────────────────────────────────────────
+# -- main generator ------------------------------------------------------------
 
 def generate_rule(filepath: Path) -> dict:
     filepath = Path(filepath)
@@ -94,7 +94,7 @@ def generate_rule(filepath: Path) -> dict:
     needs_pe_import = False
     str_idx = 0
 
-    # ── PE analysis ──────────────────────────────────────────────────────────
+    # -- PE analysis ----------------------------------------------------------
     if HAS_PEFILE:
         try:
             pe = pefile.PE(data=data, fast_load=False)
@@ -158,7 +158,7 @@ def generate_rule(filepath: Path) -> dict:
         except Exception as pe_err:
             meta.append(f'note        = "PE parse error: {str(pe_err)[:80]}"')
 
-    # ── string extraction ─────────────────────────────────────────────────────
+    # -- string extraction -----------------------------------------------------
     ascii_strs, wide_raws = _extract_strings(data)
 
     # pick interesting ascii strings
@@ -222,7 +222,7 @@ def generate_rule(filepath: Path) -> dict:
     if not conditions:
         conditions = ['true']
 
-    # ── assemble rule ─────────────────────────────────────────────────────────
+    # -- assemble rule ---------------------------------------------------------
     rule_name = re.sub(r'[^a-zA-Z0-9_]', '_', filepath.stem)
     if rule_name[0].isdigit():
         rule_name = 'rule_' + rule_name

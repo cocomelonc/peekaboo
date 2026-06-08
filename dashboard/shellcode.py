@@ -13,7 +13,7 @@ import zlib
 from typing import Optional
 
 
-# ── input parsers (tried in order of specificity) ─────────────────────────────
+# -- input parsers (tried in order of specificity) -----------------------------
 
 def _try_python_literal(s: str) -> Optional[bytes]:
     if not re.match(r"^b['\"]", s):
@@ -95,7 +95,7 @@ def parse_input(raw: str) -> tuple[bytes, str]:
     )
 
 
-# ── XOR key parser ─────────────────────────────────────────────────────────────
+# -- XOR key parser -------------------------------------------------------------
 
 def parse_xor_key(s: str) -> bytes:
     """Parse XOR key: '0x41', '65', '0x41,0x42', '\\x41\\x42', or 'string'."""
@@ -122,7 +122,7 @@ def parse_xor_key(s: str) -> bytes:
     raise ValueError("empty XOR key")
 
 
-# ── output formatters ─────────────────────────────────────────────────────────
+# -- output formatters ---------------------------------------------------------
 
 def to_c_array(data: bytes, var_name: str = "buf") -> str:
     vals = [f'0x{b:02x}' for b in data]
@@ -235,14 +235,14 @@ _FORMATS: dict[str, tuple] = {
 VALID_FORMATS = list(_FORMATS.keys())
 
 
-# ── transforms ─────────────────────────────────────────────────────────────────
+# -- transforms -----------------------------------------------------------------
 
 def xor_encode(data: bytes, key: bytes) -> bytes:
     kl = len(key)
     return bytes(b ^ key[i % kl] for i, b in enumerate(data))
 
 
-# ── analysis ──────────────────────────────────────────────────────────────────
+# -- analysis ------------------------------------------------------------------
 
 def _entropy(data: bytes) -> float:
     if not data:
@@ -311,7 +311,7 @@ def analyse(data: bytes) -> dict:
     }
 
 
-# ── main pipeline ─────────────────────────────────────────────────────────────
+# -- main pipeline -------------------------------------------------------------
 
 def process(
     raw_input: str,

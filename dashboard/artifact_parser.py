@@ -14,7 +14,7 @@ try:
 except ImportError:
     HAS_YAML = False
 
-# ── static T-ID -> name map (most common techniques) ─────────────────────────
+# -- static T-ID -> name map (most common techniques) -------------------------
 
 _TNAME: dict[str, str] = {
     "T1001": "Data Obfuscation",
@@ -283,7 +283,7 @@ _TID_RE   = re.compile(r'^attack\.(t\d{4}(?:\.\d{3})?)', re.IGNORECASE)
 _TACT_RE  = re.compile(r'^attack\.([a-z\-]+)$', re.IGNORECASE)
 
 
-# ── helpers ───────────────────────────────────────────────────────────────────
+# -- helpers -------------------------------------------------------------------
 
 def _flat_strings(obj, out: list[str]) -> None:
     """Recursively collect all string values from a nested structure."""
@@ -376,7 +376,7 @@ def _extract_cmdlines(strings: list[str]) -> list[str]:
     return list(dict.fromkeys(out))[:10]
 
 
-# ── main parser ───────────────────────────────────────────────────────────────
+# -- main parser ---------------------------------------------------------------
 
 def build_artifact_map(
     sigma_dir: str | Path,

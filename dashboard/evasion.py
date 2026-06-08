@@ -20,7 +20,7 @@ try:
 except ImportError:
     HAS_PEFILE = False
 
-# ── entropy ──────────────────────────────────────────────────────────────────
+# -- entropy ------------------------------------------------------------------
 
 def _entropy(data: bytes) -> float:
     if not data:
@@ -32,7 +32,7 @@ def _entropy(data: bytes) -> float:
     return round(-sum((f / n) * math.log2(f / n) for f in freq if f), 3)
 
 
-# ── suspicious import patterns ───────────────────────────────────────────────
+# -- suspicious import patterns -----------------------------------------------
 
 _RED_IMPORTS = {
     "VirtualAlloc":           "allocates RWX memory - classic shellcode loader",
@@ -96,7 +96,7 @@ _YELLOW_IMPORTS = {
     "CoCreateInstance", "OleInitialize",
 }
 
-# ── suspicious string patterns ────────────────────────────────────────────────
+# -- suspicious string patterns ------------------------------------------------
 
 _STRING_PATTERNS = [
     (re.compile(r'https?://\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3}'),
@@ -125,7 +125,7 @@ _STRING_PATTERNS = [
      "persistence keyword",        "medium"),
 ]
 
-# ── PE structure checks ───────────────────────────────────────────────────────
+# -- PE structure checks -------------------------------------------------------
 
 _SUSPICIOUS_SECTION_NAMES = {'.text', '.data', '.rdata', '.bss', '.idata', '.edata', '.reloc', '.rsrc'}
 _COMMON_SECTION_NAMES = {'.text', '.data', '.rdata', '.bss', '.idata', '.edata', '.reloc', '.rsrc',
@@ -149,7 +149,7 @@ def _find_rich_header(data: bytes) -> Optional[tuple[int, int]]:
     return (dans_pos, rich_pos + 8)  # include 4-byte checksum after "Rich"
 
 
-# ── main analyser ─────────────────────────────────────────────────────────────
+# -- main analyser -------------------------------------------------------------
 
 def analyse(data: bytes, filename: str = "") -> dict:
     md5    = hashlib.md5(data).hexdigest()
@@ -167,7 +167,7 @@ def analyse(data: bytes, filename: str = "") -> dict:
     score_strings  = 25
     score_structure= 25
 
-    # ── 1. Entropy ──────────────────────────────────────────────────────────
+    # -- 1. Entropy ----------------------------------------------------------
     file_entropy = _entropy(data)
 
     if file_entropy > 7.5:
@@ -186,7 +186,7 @@ def analyse(data: bytes, filename: str = "") -> dict:
         score_entropy = 18
         findings.append({"severity": "low", "category": "entropy",
             "title": f"Elevated file entropy ({file_entropy})",
-            "detail": "Slightly above typical for compiled C code (5.5–6.5).",
+            "detail": "Slightly above typical for compiled C code (5.5-6.5).",
             "suggestion": "Minor concern - consider adding a padding resource if targeting strict AV."})
     else:
         findings.append({"severity": "ok", "category": "entropy",
@@ -194,7 +194,7 @@ def analyse(data: bytes, filename: str = "") -> dict:
             "detail": "Within the expected range for compiled executables.",
             "suggestion": None})
 
-    # ── 2. Imports (PE only) ─────────────────────────────────────────────────
+    # -- 2. Imports (PE only) -------------------------------------------------
     if is_pe and HAS_PEFILE:
         try:
             pe = pefile.PE(data=data, fast_load=False)
@@ -278,7 +278,7 @@ def analyse(data: bytes, filename: str = "") -> dict:
             "detail": "Raw shellcode or non-PE binary. AV will rely on byte patterns and entropy.",
             "suggestion": "If this is shellcode, consider embedding in a legitimate PE loader."})
 
-    # ── 3. Strings ───────────────────────────────────────────────────────────
+    # -- 3. Strings -----------------------------------------------------------
     strings = _extract_strings(data)
     string_findings_count = 0
     seen_patterns: set[str] = set()
@@ -304,7 +304,7 @@ def analyse(data: bytes, filename: str = "") -> dict:
             "detail": "No hardcoded IPs, URLs, credentials, or tool names found.",
             "suggestion": None})
 
-    # ── 4. PE Structure ──────────────────────────────────────────────────────
+    # -- 4. PE Structure ------------------------------------------------------
     struct_deductions = 0
     if is_pe:
         # timestamp
@@ -408,7 +408,7 @@ def analyse(data: bytes, filename: str = "") -> dict:
             "detail": "No significant timestamp, Rich header, or debug path issues.",
             "suggestion": None})
 
-    # ── final score ──────────────────────────────────────────────────────────
+    # -- final score ----------------------------------------------------------
     total = score_entropy + score_imports + score_strings + score_structure
     grade = "A" if total >= 80 else "B" if total >= 65 else "C" if total >= 50 else "D" if total >= 35 else "F"
 
@@ -437,7 +437,7 @@ def analyse(data: bytes, filename: str = "") -> dict:
             patches.append({"id": "dos_stub", "label": "Replace DOS stub message",
                 "desc": "Overwrites the default MSVC DOS stub string with spaces"})
         patches.append({"id": "stomp_dos_header", "label": "Stomp DOS header reserved fields",
-            "desc": "Zeros unused MZ header bytes (offsets 0x02–0x3B), keeping MZ magic and e_lfanew"})
+            "desc": "Zeros unused MZ header bytes (offsets 0x02-0x3B), keeping MZ magic and e_lfanew"})
         if file_entropy > 6.5:
             patches.append({"id": "entropy_padding", "label": "Entropy-lowering padding",
                 "desc": "Appends 64 KB of null bytes to dilute overall file entropy"})
@@ -566,7 +566,7 @@ def _find_pdb_path(data: bytes) -> Optional[str]:
         return None
 
 
-# ── patch transforms ──────────────────────────────────────────────────────────
+# -- patch transforms ----------------------------------------------------------
 
 _SECTION_RENAME_MAP = {
     '.text':  '.code',
@@ -724,7 +724,7 @@ def apply_patches(data: bytes, patch_ids: list[str]) -> tuple[bytes, list[str]]:
             # zero bytes 0x02..0x3B, preserving MZ magic (0-1) and e_lfanew (0x3C-0x3F)
             for i in range(2, 0x3C):
                 buf[i] = 0
-            applied.append("DOS header reserved fields zeroed (0x02–0x3B)")
+            applied.append("DOS header reserved fields zeroed (0x02-0x3B)")
 
         elif pid == "entropy_padding":
             buf.extend(b'\x00' * 65536)

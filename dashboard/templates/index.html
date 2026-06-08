@@ -627,7 +627,7 @@ code{font-family:var(--mono);font-size:12px;background:var(--bg4);padding:1px 5p
 
   <div class="sc-layout">
 
-    <!-- ── LEFT: input + transform ── -->
+    <!-- -- LEFT: input + transform -- -->
     <div style="display:flex;flex-direction:column;gap:14px">
 
       <div class="card">
@@ -678,7 +678,7 @@ code{font-family:var(--mono);font-size:12px;background:var(--bg4);padding:1px 5p
 
     </div>
 
-    <!-- ── RIGHT: output ── -->
+    <!-- -- RIGHT: output -- -->
     <div class="card" style="display:flex;flex-direction:column;gap:10px">
       <div class="card-header">
         <span style="font-size:18px">📤</span>
@@ -721,7 +721,7 @@ code{font-family:var(--mono);font-size:12px;background:var(--bg4);padding:1px 5p
 
   </div>
 
-  <!-- ── analysis strip ── -->
+  <!-- -- analysis strip -- -->
   <div id="sc-analysis" class="card" style="display:none;margin-top:16px">
     <div class="card-header">
       <span style="font-size:16px">🔬</span>
@@ -1087,7 +1087,7 @@ code{font-family:var(--mono);font-size:12px;background:var(--bg4);padding:1px 5p
     <span style="margin-left:auto;font-size:12px;color:var(--dim)">generates YARA rules from PE metadata · strings · entry-point bytes · import hash</span>
   </div>
 
-  <!-- ── from sample ── -->
+  <!-- -- from sample -- -->
   <div id="yara-src-sample">
     <div class="card mb-16">
       <div class="card-header">
@@ -1117,7 +1117,7 @@ code{font-family:var(--mono);font-size:12px;background:var(--bg4);padding:1px 5p
     </div>
   </div>
 
-  <!-- ── upload file ── -->
+  <!-- -- upload file -- -->
   <div id="yara-src-upload" style="display:none">
     <div class="card mb-16">
       <div class="card-header">
@@ -3843,7 +3843,7 @@ function _artFmtTacticShort(t) {
   return map[t] || t;
 }
 
-// ── detail modal ──────────────────────────────────────────────
+// -- detail modal ----------------------------------------------
 
 async function artOpenModal(tid) {
   _artDetailTab = 'overview';
@@ -4015,7 +4015,7 @@ function _esc(s) {
   return String(s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
 }
 
-// ── rebuild SSE ───────────────────────────────────────────────
+// -- rebuild SSE -----------------------------------------------
 
 // =============================================================
 // Evasion Lab
@@ -4145,7 +4145,7 @@ function _evRenderResults(d) {
   document.getElementById('ev-empty').style.display   = 'none';
   document.getElementById('ev-results').style.display = '';
 
-  // ── score gauge ──────────────────────────────────────────
+  // -- score gauge ------------------------------------------
   const score = d.score;
   const arcEl = document.getElementById('ev-gauge-arc');
   const arcLen = 220;
@@ -4160,7 +4160,7 @@ function _evRenderResults(d) {
   document.getElementById('ev-grade-badge').innerHTML =
     `<span class="ev-grade ${d.grade}">${d.grade} - ${_evGradeLabel(d.grade)}</span>`;
 
-  // ── category bars ─────────────────────────────────────────
+  // -- category bars -----------------------------------------
   const cats = [
     ['entropy', d.score_entropy], ['imports', d.score_imports],
     ['strings', d.score_strings], ['structure', d.score_structure],
@@ -4170,7 +4170,7 @@ function _evRenderResults(d) {
     document.getElementById(`ev-val-${cat}`).textContent = val + '/25';
   });
 
-  // ── file stats ────────────────────────────────────────────
+  // -- file stats --------------------------------------------
   document.getElementById('ev-file-stats').innerHTML = `
     <span>📄 <strong>${d.filename || 'binary'}</strong></span>
     <span>${(d.size/1024).toFixed(1)} KB</span>
@@ -4178,7 +4178,7 @@ function _evRenderResults(d) {
     <span>${d.is_pe ? '✓ PE' : '⚠ non-PE'}</span>
     <span style="font-family:var(--mono);font-size:10px;color:var(--dim)">${d.md5.slice(0,16)}…</span>`;
 
-  // ── findings ──────────────────────────────────────────────
+  // -- findings ----------------------------------------------
   const counts = {critical:0, high:0, medium:0, low:0, ok:0};
   (d.findings || []).forEach(f => { counts[f.severity] = (counts[f.severity]||0) + 1; });
   const countHtml = Object.entries(counts)
@@ -4198,7 +4198,7 @@ function _evRenderResults(d) {
       ${f.suggestion ? `<div class="ev-finding-sug"><span>-></span><span>${_esc(f.suggestion)}</span></div>` : ''}
     </div>`).join('');
 
-  // ── PE sections ───────────────────────────────────────────
+  // -- PE sections -------------------------------------------
   const secs = d.sections || [];
   if (secs.length) {
     document.getElementById('ev-sections-card').style.display = '';
@@ -4217,7 +4217,7 @@ function _evRenderResults(d) {
     document.getElementById('ev-sections-card').style.display = 'none';
   }
 
-  // ── suspicious imports ────────────────────────────────────
+  // -- suspicious imports ------------------------------------
   const imps = d.suspicious_imports || [];
   if (imps.length) {
     document.getElementById('ev-imports-card').style.display = '';
@@ -4228,7 +4228,7 @@ function _evRenderResults(d) {
     document.getElementById('ev-imports-card').style.display = 'none';
   }
 
-  // ── patch transforms ──────────────────────────────────────
+  // -- patch transforms --------------------------------------
   const patches = d.patches_available || [];
   if (patches.length) {
     document.getElementById('ev-patches-card').style.display = '';
