@@ -263,7 +263,7 @@ def analyse(data: bytes, filename: str = "") -> dict:
                     findings.append({"severity": "critical", "category": "structure",
                         "title": f"Section '{sname}' is simultaneously executable and writable (RWX)",
                         "detail": "RWX sections are flagged by most modern AV/EDR as shellcode containers.",
-                        "suggestion": "Use VirtualProtect to switch W→X at runtime; never create the section with both flags."})
+                        "suggestion": "Use VirtualProtect to switch W->X at runtime; never create the section with both flags."})
 
             pe.close()
         except Exception as pe_err:
@@ -462,7 +462,7 @@ def analyse(data: bytes, filename: str = "") -> dict:
                     patches.append({"id": "clear_high_entropy_va", "label": "Clear HIGH_ENTROPY_VA flag",
                         "desc": "Removes the 64-bit ASLR indicator (bit 0x0020) from DllCharacteristics"})
                 if subsystem == _SUBSYSTEM_CONSOLE:
-                    patches.append({"id": "flip_subsystem", "label": "Flip subsystem CONSOLE→GUI",
+                    patches.append({"id": "flip_subsystem", "label": "Flip subsystem CONSOLE->GUI",
                         "desc": "Changes subsystem from 3 (CUI) to 2 (GUI) - no console window spawned"})
                 if any(s.Characteristics & 0x20000000 and s.Characteristics & 0x80000000
                        for s in pe3.sections):
@@ -644,7 +644,7 @@ def apply_patches(data: bytes, patch_ids: list[str]) -> tuple[bytes, list[str]]:
             off = _find_pe_timestamp_offset(data)
             if off is not None:
                 struct.pack_into('<I', buf, off, 0)
-                applied.append("PE compile timestamp → 0x00000000")
+                applied.append("PE compile timestamp -> 0x00000000")
 
         elif pid == "rich_header":
             rich = _find_rich_header(data)
@@ -688,7 +688,7 @@ def apply_patches(data: bytes, patch_ids: list[str]) -> tuple[bytes, list[str]]:
                         # section name is 8 bytes at start of section header
                         new_bytes = new_name.encode('ascii').ljust(8, b'\x00')
                         buf[off:off + 8] = new_bytes
-                        renamed.append(f"{sname}→{new_name}")
+                        renamed.append(f"{sname}->{new_name}")
                 pe.close()
                 if renamed:
                     applied.append(f"Sections renamed: {', '.join(renamed)}")
@@ -701,7 +701,7 @@ def apply_patches(data: bytes, patch_ids: list[str]) -> tuple[bytes, list[str]]:
                 ck_off = pe.OPTIONAL_HEADER.get_field_absolute_offset('CheckSum')
                 struct.pack_into('<I', buf, ck_off, 0)
                 pe.close()
-                applied.append("PE checksum → 0x00000000")
+                applied.append("PE checksum -> 0x00000000")
             except Exception as e:
                 applied.append(f"Checksum patch failed: {e}")
 
@@ -718,7 +718,7 @@ def apply_patches(data: bytes, patch_ids: list[str]) -> tuple[bytes, list[str]]:
             if off is not None:
                 ts, desc = random.choice(_LEGIT_TIMESTAMPS)
                 struct.pack_into('<I', buf, off, ts)
-                applied.append(f"PE timestamp spoofed → 0x{ts:08x} ({desc})")
+                applied.append(f"PE timestamp spoofed -> 0x{ts:08x} ({desc})")
 
         elif pid == "stomp_dos_header":
             # zero bytes 0x02..0x3B, preserving MZ magic (0-1) and e_lfanew (0x3C-0x3F)
@@ -738,7 +738,7 @@ def apply_patches(data: bytes, patch_ids: list[str]) -> tuple[bytes, list[str]]:
                 new_dc = old | _DYNAMIC_BASE | _NX_COMPAT
                 struct.pack_into('<H', buf, off_dc, new_dc)
                 pe.close()
-                applied.append(f"DllCharacteristics ASLR+DEP set (0x{old:04x}→0x{new_dc:04x})")
+                applied.append(f"DllCharacteristics ASLR+DEP set (0x{old:04x}->0x{new_dc:04x})")
             except Exception as e:
                 applied.append(f"set_aslr_dep failed: {e}")
 
@@ -750,7 +750,7 @@ def apply_patches(data: bytes, patch_ids: list[str]) -> tuple[bytes, list[str]]:
                 new_dc = old & ~_HIGH_ENTROPY_VA & 0xFFFF
                 struct.pack_into('<H', buf, off_dc, new_dc)
                 pe.close()
-                applied.append(f"HIGH_ENTROPY_VA cleared (0x{old:04x}→0x{new_dc:04x})")
+                applied.append(f"HIGH_ENTROPY_VA cleared (0x{old:04x}->0x{new_dc:04x})")
             except Exception as e:
                 applied.append(f"clear_high_entropy_va failed: {e}")
 
@@ -761,7 +761,7 @@ def apply_patches(data: bytes, patch_ids: list[str]) -> tuple[bytes, list[str]]:
                 old = struct.unpack_from('<H', buf, off_ss)[0]
                 struct.pack_into('<H', buf, off_ss, _SUBSYSTEM_GUI)
                 pe.close()
-                applied.append(f"Subsystem {old}→{_SUBSYSTEM_GUI} (CONSOLE→GUI)")
+                applied.append(f"Subsystem {old}->{_SUBSYSTEM_GUI} (CONSOLE->GUI)")
             except Exception as e:
                 applied.append(f"flip_subsystem failed: {e}")
 
@@ -778,7 +778,7 @@ def apply_patches(data: bytes, patch_ids: list[str]) -> tuple[bytes, list[str]]:
                         stomped.append(sec.Name.rstrip(b'\x00').decode('utf-8', 'ignore'))
                 pe.close()
                 if stomped:
-                    applied.append(f"RWX→RX cleared for: {', '.join(stomped)}")
+                    applied.append(f"RWX->RX cleared for: {', '.join(stomped)}")
             except Exception as e:
                 applied.append(f"stomp_rwx_flags failed: {e}")
 
@@ -795,7 +795,7 @@ def apply_patches(data: bytes, patch_ids: list[str]) -> tuple[bytes, list[str]]:
                 else:                # PE32
                     new_ib = 0x10000000
                     struct.pack_into('<I', buf, off_ib, new_ib)
-                applied.append(f"ImageBase 0x{old_ib:x}→0x{new_ib:x}")
+                applied.append(f"ImageBase 0x{old_ib:x}->0x{new_ib:x}")
             except Exception as e:
                 applied.append(f"spoof_imagebase failed: {e}")
 

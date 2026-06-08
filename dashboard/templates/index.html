@@ -346,6 +346,14 @@ code{font-family:var(--mono);font-size:12px;background:var(--bg4);padding:1px 5p
 .ev-import-tag{display:inline-flex;align-items:center;gap:5px;padding:3px 9px;border-radius:4px;font-size:11px;background:rgba(255,120,117,.1);border:1px solid rgba(255,120,117,.25);color:var(--red);font-family:var(--mono);margin:2px}
 .ev-upload-zone{border:2px dashed var(--sep);border-radius:8px;padding:28px;text-align:center;cursor:pointer;transition:border-color .2s,background .2s}
 .ev-upload-zone:hover,.ev-upload-zone.drag-over{border-color:var(--purple);background:rgba(198,120,221,.06)}
+.ev-hist-row{display:grid;grid-template-columns:1fr auto auto;gap:8px;align-items:start;padding:8px 10px;border-radius:6px;margin-bottom:4px;background:var(--bg3);border:1px solid var(--sep);font-size:12px}
+.ev-hist-row:hover{background:var(--bg4)}
+.ev-hist-fname{font-weight:600;color:var(--text);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:140px}
+.ev-hist-meta{color:var(--dim);font-size:11px;margin-top:2px}
+.ev-hist-score{font-weight:700;font-size:13px;text-align:right}
+.ev-hist-delta{font-size:11px;color:var(--dim);text-align:right}
+.ev-hist-applied{grid-column:1/-1;display:flex;flex-wrap:wrap;gap:3px;margin-top:4px}
+.ev-hist-tag{font-size:10px;padding:1px 6px;border-radius:3px;background:rgba(97,175,239,.12);color:var(--blue);border:1px solid rgba(97,175,239,.25)}
 
 /* -- APT campaign -- */
 .apt-layout{display:grid;grid-template-columns:340px 1fr;gap:18px;align-items:start}
@@ -863,7 +871,7 @@ code{font-family:var(--mono);font-size:12px;background:var(--bg4);padding:1px 5p
         </div>
 
         <!-- patch transforms card -->
-        <div class="card" id="ev-patches-card" style="display:none">
+        <div class="card mb-16" id="ev-patches-card" style="display:none">
           <div class="card-header">
             <span style="font-size:16px">🔧</span>
             <div><div class="card-title">Patch Transforms</div><div class="card-sub">apply surgical PE modifications</div></div>
@@ -874,6 +882,18 @@ code{font-family:var(--mono);font-size:12px;background:var(--bg4);padding:1px 5p
             <button class="btn btn-ghost btn-sm" onclick="evSelectAllPatches()">Select All</button>
           </div>
           <div id="ev-patch-status" style="font-size:12px;color:var(--dim);margin-top:8px;min-height:18px"></div>
+        </div>
+
+        <!-- patch history card -->
+        <div class="card" id="ev-history-card">
+          <div class="card-header">
+            <span style="font-size:16px">📜</span>
+            <div><div class="card-title">Patch History</div><div class="card-sub">last 10 patch runs</div></div>
+            <button class="btn btn-ghost btn-sm" style="margin-left:auto" onclick="loadPatchHistory()">↻</button>
+          </div>
+          <div id="ev-history-list" style="margin-top:8px">
+            <div style="font-size:12px;color:var(--dim);text-align:center;padding:16px 0">no history yet</div>
+          </div>
         </div>
       </div>
     </div>
@@ -4018,6 +4038,7 @@ function evSetTab(tab) {
 }
 
 async function loadEvasionScanner() {
+  loadPatchHistory();
   if (_evTab !== 'sample') return;
   try {
     const samples = await fetch('/api/samples').then(r => r.json());
@@ -4174,7 +4195,7 @@ function _evRenderResults(d) {
         <div class="ev-finding-title">${_esc(f.title)}</div>
       </div>
       ${f.detail ? `<div class="ev-finding-detail">${_esc(f.detail)}</div>` : ''}
-      ${f.suggestion ? `<div class="ev-finding-sug"><span>→</span><span>${_esc(f.suggestion)}</span></div>` : ''}
+      ${f.suggestion ? `<div class="ev-finding-sug"><span>-></span><span>${_esc(f.suggestion)}</span></div>` : ''}
     </div>`).join('');
 
   // ── PE sections ───────────────────────────────────────────
@@ -4275,6 +4296,7 @@ async function evApplyPatches() {
 
     document.getElementById('ev-patch-status').textContent = '✓ Downloaded: ' + fname;
     if (applied) toast('Patches applied: ' + applied.split(';').length, 'ok');
+    loadPatchHistory();
   } catch(e) {
     toast('Patch error: ' + e.message, 'err');
     document.getElementById('ev-patch-status').textContent = '✗ ' + e.message;
@@ -4282,6 +4304,44 @@ async function evApplyPatches() {
     btn.disabled = false;
     btn.textContent = '🔧 Apply & Download';
   }
+}
+
+async function loadPatchHistory() {
+  try {
+    const r = await fetch('/api/evasion/history?limit=10');
+    const rows = await r.json();
+    const el = document.getElementById('ev-history-list');
+    if (!rows.length) {
+      el.innerHTML = '<div style="font-size:12px;color:var(--dim);text-align:center;padding:16px 0">no history yet</div>';
+      return;
+    }
+    const scoreColor = s => s >= 80 ? 'var(--green)' : s >= 65 ? 'var(--cyan)' :
+                            s >= 50 ? 'var(--yellow)' : s >= 35 ? 'var(--orange)' : 'var(--red)';
+    el.innerHTML = rows.map(h => {
+      const delta = h.patch_size - h.orig_size;
+      const deltaStr = delta === 0 ? '±0 B' : (delta > 0 ? '+' : '') + _fmtBytes(Math.abs(delta)) + (delta > 0 ? '' : ' saved');
+      const tags = h.applied.map(a => `<span class="ev-hist-tag">${_esc(a.split(':')[0].split('->')[0].trim().slice(0,40))}</span>`).join('');
+      const ts = h.created ? h.created.replace('T',' ').slice(0,16) : '';
+      return `<div class="ev-hist-row">
+        <div>
+          <div class="ev-hist-fname" title="${_esc(h.filename)}">${_esc(h.filename)}</div>
+          <div class="ev-hist-meta">${ts} · ${_fmtBytes(h.orig_size)} · ${h.patches.length} patches</div>
+        </div>
+        <div>
+          <div class="ev-hist-score" style="color:${scoreColor(h.score)}">${h.score}</div>
+          <div class="ev-hist-delta">${deltaStr}</div>
+        </div>
+        <div style="align-self:center;font-size:11px;color:var(--dim)">${h.applied.length}/${h.patches.length} ok</div>
+        ${tags ? `<div class="ev-hist-applied">${tags}</div>` : ''}
+      </div>`;
+    }).join('');
+  } catch(e) { /* silent */ }
+}
+
+function _fmtBytes(b) {
+  if (b < 1024) return b + ' B';
+  if (b < 1048576) return (b/1024).toFixed(1) + ' KB';
+  return (b/1048576).toFixed(1) + ' MB';
 }
 
 function artRebuild() {

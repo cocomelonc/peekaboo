@@ -1500,16 +1500,40 @@ def api_evasion_patch():
     }
     patch_ids = [p for p in patch_ids if p in allowed_patches]
 
+    score_before = 0
+    try:
+        score_before = _evasion.analyse(raw, out_name).get("score", 0)
+    except Exception:
+        pass
+
     patched, applied = _evasion.apply_patches(raw, patch_ids)
+
+    try:
+        _db.save_patch_run(
+            filename=out_name,
+            orig_size=len(raw),
+            patch_size=len(patched),
+            patches=patch_ids,
+            applied=applied,
+            score=score_before,
+        )
+    except Exception:
+        pass
 
     return Response(
         patched,
         mimetype="application/octet-stream",
         headers={
             "Content-Disposition": f'attachment; filename="{out_name}"',
-            "X-Patches-Applied":   "; ".join(applied),
+            "X-Patches-Applied":   "; ".join(applied).encode("ascii", "replace").decode("ascii"),
         }
     )
+
+
+@app.route("/api/evasion/history", methods=["GET"])
+def api_evasion_history():
+    limit = min(int(request.args.get("limit", 10)), 50)
+    return jsonify(_db.get_patch_history(limit))
 
 
 # -- Artifact Map (Sigma -> ATT&CK technique artifacts) -------------------------

@@ -114,6 +114,20 @@ def init() -> None:
         """)
         db.execute("CREATE INDEX IF NOT EXISTS idx_artifact_tactic ON artifact_map(tactic)")
 
+        db.execute("""
+            CREATE TABLE IF NOT EXISTS patch_history (
+                id          INTEGER PRIMARY KEY AUTOINCREMENT,
+                filename    TEXT NOT NULL DEFAULT '',
+                orig_size   INTEGER NOT NULL DEFAULT 0,
+                patch_size  INTEGER NOT NULL DEFAULT 0,
+                patches     TEXT NOT NULL DEFAULT '[]',
+                applied     TEXT NOT NULL DEFAULT '[]',
+                score       INTEGER NOT NULL DEFAULT 0,
+                created     TEXT
+            )
+        """)
+        db.execute("CREATE INDEX IF NOT EXISTS idx_patch_history_created ON patch_history(created DESC)")
+
 
 # --------------------------------------------------------------------------- #
 #  Helpers                                                                      #
@@ -604,3 +618,38 @@ def get_artifact_stats() -> dict:
 def clear_artifact_entries() -> None:
     with _conn() as db:
         db.execute("DELETE FROM artifact_map")
+
+
+# --------------------------------------------------------------------------- #
+#  Patch History                                                                #
+# --------------------------------------------------------------------------- #
+
+def save_patch_run(filename: str, orig_size: int, patch_size: int,
+                   patches: list, applied: list, score: int) -> None:
+    with _conn() as db:
+        db.execute(
+            """
+            INSERT INTO patch_history (filename, orig_size, patch_size, patches, applied, score, created)
+            VALUES (?, ?, ?, ?, ?, ?, ?)
+            """,
+            (filename, orig_size, patch_size,
+             json.dumps(patches), json.dumps(applied), score,
+             datetime.now().isoformat()),
+        )
+
+
+def get_patch_history(limit: int = 10) -> list[dict]:
+    with _conn() as db:
+        rows = db.execute(
+            "SELECT * FROM patch_history ORDER BY created DESC LIMIT ?", (limit,)
+        ).fetchall()
+    result = []
+    for row in rows:
+        d = dict(row)
+        for k in ("patches", "applied"):
+            try:
+                d[k] = json.loads(d[k] or "[]")
+            except Exception:
+                d[k] = []
+        result.append(d)
+    return result
