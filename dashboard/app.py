@@ -1354,5 +1354,61 @@ def api_yara_upload():
     return jsonify(result)
 
 
+# -- Shellcode swiss-army knife ------------------------------------------------
+
+try:
+    import shellcode as _shellcode
+    HAS_SHELLCODE = True
+except ImportError:
+    HAS_SHELLCODE = False
+
+
+@app.route("/api/shellcode/process", methods=["POST"])
+def api_shellcode_process():
+    if not HAS_SHELLCODE:
+        return jsonify({"ok": False, "error": "shellcode module not available"}), 503
+    data = request.get_json(force=True) or {}
+    raw        = data.get("input", "")
+    fmt        = data.get("output_format", "c")
+    transform  = data.get("transform", "none")
+    xor_key    = data.get("xor_key", "")
+    var_name   = data.get("var_name", "buf")
+    if not raw:
+        return jsonify({"ok": False, "error": "input is required"}), 400
+    if fmt not in _shellcode.VALID_FORMATS:
+        return jsonify({"ok": False, "error": f"unknown format '{fmt}'"}), 400
+    result = _shellcode.process(raw, fmt, transform, xor_key, var_name)
+    return jsonify(result)
+
+
+@app.route("/api/shellcode/analyse", methods=["POST"])
+def api_shellcode_analyse():
+    if not HAS_SHELLCODE:
+        return jsonify({"ok": False, "error": "shellcode module not available"}), 503
+    data = request.get_json(force=True) or {}
+    raw = data.get("input", "")
+    if not raw:
+        return jsonify({"ok": False, "error": "input is required"}), 400
+    result = _shellcode.analyse_only(raw)
+    return jsonify(result)
+
+
+@app.route("/api/shellcode/upload", methods=["POST"])
+def api_shellcode_upload():
+    """Receive a binary file, return hex representation + analysis."""
+    if not HAS_SHELLCODE:
+        return jsonify({"ok": False, "error": "shellcode module not available"}), 503
+    f = request.files.get("file")
+    if not f:
+        return jsonify({"ok": False, "error": "no file provided"}), 400
+    data = f.read(1024 * 1024 * 8)  # cap at 8 MB
+    if not data:
+        return jsonify({"ok": False, "error": "empty file"}), 400
+    stats = _shellcode.analyse(data)
+    stats["ok"] = True
+    stats["hex"] = data.hex()
+    return jsonify(stats)
+
+
 if __name__ == "__main__":
     app.run(debug=True, host="0.0.0.0", port=5000)

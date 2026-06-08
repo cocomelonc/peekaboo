@@ -245,6 +245,23 @@ code{font-family:var(--mono);font-size:12px;background:var(--bg4);padding:1px 5p
 .yara-upload-zone{border:2px dashed var(--sep);border-radius:8px;padding:32px;text-align:center;cursor:pointer;transition:border-color .2s,background .2s}
 .yara-upload-zone:hover,.yara-upload-zone.drag-over{border-color:var(--purple);background:rgba(198,120,221,.06)}
 
+/* -- shellcode tool -- */
+.sc-layout{display:grid;grid-template-columns:1fr 1fr;gap:18px;align-items:start}
+@media(max-width:960px){.sc-layout{grid-template-columns:1fr}}
+.sc-pill{padding:5px 14px;border-radius:20px;font-size:12px;background:var(--bg3);border:1px solid var(--sep);color:var(--dim);cursor:pointer;transition:all .15s;white-space:nowrap}
+.sc-pill:hover{border-color:var(--purple);color:var(--fg)}
+.sc-pill.active{border-color:var(--purple);color:var(--purple);background:rgba(198,120,221,.12);font-weight:600}
+.sc-fmt-pill{padding:4px 10px;border-radius:4px;font-size:12px;background:var(--bg3);border:1px solid var(--sep);color:var(--dim);cursor:pointer;transition:all .15s;font-family:monospace}
+.sc-fmt-pill:hover{border-color:var(--blue);color:var(--fg)}
+.sc-fmt-pill.active{border-color:var(--blue);color:var(--blue);background:rgba(97,175,239,.12);font-weight:700}
+.sc-code{background:#0d1117;border:1px solid var(--sep);border-radius:6px;font-family:'Fira Code','Cascadia Code','Consolas',monospace;font-size:12px;line-height:1.6;white-space:pre;overflow:auto;min-height:260px;max-height:480px;margin:0;padding:0}
+.sc-code code{display:block;padding:14px 16px}
+.sc-byte-bar{display:inline-flex;align-items:center;gap:6px;padding:4px 10px;background:var(--bg3);border-radius:4px;font-size:11px;font-family:monospace}
+.sc-byte-track{width:60px;height:5px;background:var(--sep);border-radius:3px;overflow:hidden}
+.sc-byte-fill{height:100%;background:var(--blue);border-radius:3px}
+.sc-key-box{background:rgba(229,192,123,.1);border:1px solid var(--yellow);border-radius:6px;padding:8px 14px;font-family:monospace;font-size:13px;color:var(--yellow)}
+.sc-badge{display:inline-flex;align-items:center;gap:5px;padding:5px 12px;border-radius:20px;font-size:12px;font-weight:600;border:1px solid}
+
 /* -- APT campaign -- */
 .apt-layout{display:grid;grid-template-columns:340px 1fr;gap:18px;align-items:start}
 .apt-panel{background:var(--bg2);border:1px solid var(--sep);border-radius:var(--r);padding:18px}
@@ -353,6 +370,9 @@ code{font-family:var(--mono);font-size:12px;background:var(--bg4);padding:1px 5p
     <div class="sb-label">Build</div>
     <div class="nav-item active" onclick="showPanel('builder')" id="nav-builder">
       <span class="nav-icon">🔨</span> Builder
+    </div>
+    <div class="nav-item" onclick="showPanel('shellcode')" id="nav-shellcode">
+      <span class="nav-icon">🧰</span> Shellcode
     </div>
     <div class="nav-item" onclick="showPanel('library')" id="nav-library">
       <span class="nav-icon">📦</span> Module Library
@@ -501,6 +521,125 @@ code{font-family:var(--mono);font-size:12px;background:var(--bg4);padding:1px 5p
       <tbody id="build-history-tbody"></tbody>
     </table>
   </div>
+</div>
+
+<!-- ════════ SHELLCODE SWISS-ARMY KNIFE ════════ -->
+<div id="panel-shellcode" class="panel">
+
+  <div class="sc-layout">
+
+    <!-- ── LEFT: input + transform ── -->
+    <div style="display:flex;flex-direction:column;gap:14px">
+
+      <div class="card">
+        <div class="card-header">
+          <span style="font-size:18px">📥</span>
+          <div><div class="card-title">Input</div><div class="card-sub">paste or upload shellcode in any format</div></div>
+          <span id="sc-detected-badge" style="display:none;margin-left:auto;font-size:11px;padding:3px 9px;border-radius:10px;font-weight:600;background:rgba(152,195,121,.15);color:var(--green);border:1px solid var(--green)"></span>
+        </div>
+        <textarea id="sc-input" spellcheck="false" placeholder="paste shellcode in any format:
+
+  0x90, 0x90, 0xcc ...     (C / 0x array)
+  \x90\x90\xcc ...         (\x escaped)
+  9090cc ...               (raw hex)
+  b&quot;\x90\x90&quot; ...  (Python bytes)
+  AAEC...                  (base64)" style="height:220px;font-family:monospace;font-size:12px;resize:vertical" oninput="scOnInput()"></textarea>
+        <div style="display:flex;gap:8px;margin-top:8px;align-items:center">
+          <button class="btn btn-ghost btn-sm" onclick="document.getElementById('sc-upload-input').click()">📂 Upload binary</button>
+          <input type="file" id="sc-upload-input" style="display:none" onchange="scHandleFileUpload(this.files[0])">
+          <button class="btn btn-ghost btn-sm" onclick="scClear()">✕ Clear</button>
+          <span id="sc-input-info" style="font-size:11px;color:var(--dim);margin-left:auto"></span>
+        </div>
+      </div>
+
+      <div class="card">
+        <div class="card-header">
+          <span style="font-size:16px">⚙️</span>
+          <div class="card-title">Transform</div>
+        </div>
+        <div style="display:flex;flex-wrap:wrap;gap:6px;margin-bottom:12px">
+          <button class="sc-pill active" data-t="none"            onclick="scSetTransform(this)">None</button>
+          <button class="sc-pill"        data-t="xor_random"      onclick="scSetTransform(this)">XOR random key</button>
+          <button class="sc-pill"        data-t="xor_key"         onclick="scSetTransform(this)">XOR custom key</button>
+          <button class="sc-pill"        data-t="base64_encode"   onclick="scSetTransform(this)">Base64 encode</button>
+          <button class="sc-pill"        data-t="base64_decode"   onclick="scSetTransform(this)">Base64 decode</button>
+          <button class="sc-pill"        data-t="zlib_compress"   onclick="scSetTransform(this)">zlib compress</button>
+          <button class="sc-pill"        data-t="zlib_decompress" onclick="scSetTransform(this)">zlib decompress</button>
+        </div>
+        <div id="sc-key-row" style="display:none;align-items:center;gap:8px;margin-bottom:12px">
+          <span style="font-size:12px;color:var(--dim);flex-shrink:0">XOR key:</span>
+          <input type="text" id="sc-xor-key" placeholder="0x41  ·  0x41,0x42,0x43  ·  mykey  ·  65" style="flex:1;font-family:monospace">
+        </div>
+        <div style="display:flex;gap:10px;align-items:center;flex-wrap:wrap">
+          <span style="font-size:12px;color:var(--dim)">Var name:</span>
+          <input type="text" id="sc-var-name" value="buf" style="width:90px;font-family:monospace">
+          <button class="btn btn-primary" id="sc-process-btn" onclick="scProcess()" style="margin-left:auto">⚙️ Process</button>
+        </div>
+      </div>
+
+    </div>
+
+    <!-- ── RIGHT: output ── -->
+    <div class="card" style="display:flex;flex-direction:column;gap:10px">
+      <div class="card-header">
+        <span style="font-size:18px">📤</span>
+        <div class="card-title">Output</div>
+        <div style="display:flex;gap:6px;margin-left:auto">
+          <button class="btn btn-ghost btn-sm" id="sc-copy-btn" onclick="scCopy()" disabled>📋 Copy</button>
+          <button class="btn btn-ghost btn-sm" id="sc-dl-btn"   onclick="scDownload()" disabled>⬇️ .bin</button>
+        </div>
+      </div>
+      <!-- format pills -->
+      <div style="display:flex;flex-wrap:wrap;gap:5px">
+        <button class="sc-fmt-pill active" data-fmt="c"          onclick="scSetFmt(this)">C array</button>
+        <button class="sc-fmt-pill"        data-fmt="c_str"      onclick="scSetFmt(this)">C string</button>
+        <button class="sc-fmt-pill"        data-fmt="python"     onclick="scSetFmt(this)">Python</button>
+        <button class="sc-fmt-pill"        data-fmt="powershell" onclick="scSetFmt(this)">PowerShell</button>
+        <button class="sc-fmt-pill"        data-fmt="csharp"     onclick="scSetFmt(this)">C#</button>
+        <button class="sc-fmt-pill"        data-fmt="vba"        onclick="scSetFmt(this)">VBA</button>
+        <button class="sc-fmt-pill"        data-fmt="rust"       onclick="scSetFmt(this)">Rust</button>
+        <button class="sc-fmt-pill"        data-fmt="base64"     onclick="scSetFmt(this)">Base64</button>
+        <button class="sc-fmt-pill"        data-fmt="hex_0x"     onclick="scSetFmt(this)">0x hex</button>
+        <button class="sc-fmt-pill"        data-fmt="hex_raw"    onclick="scSetFmt(this)">raw hex</button>
+        <button class="sc-fmt-pill"        data-fmt="escaped"    onclick="scSetFmt(this)">\x escape</button>
+      </div>
+      <!-- XOR key display -->
+      <div id="sc-key-display" style="display:none">
+        <div class="sc-key-box">
+          <span style="color:var(--dim);font-size:11px;margin-right:8px">XOR KEY</span>
+          <span id="sc-key-hex"></span>
+          <span style="color:var(--dim);margin:0 6px">·</span>
+          <span id="sc-key-0x" style="color:var(--dim)"></span>
+          <button class="btn btn-ghost btn-sm" style="padding:2px 8px;font-size:11px;margin-left:10px" onclick="scCopyKey()">copy</button>
+        </div>
+      </div>
+      <!-- code block -->
+      <pre class="sc-code" id="sc-output-pre"><code id="sc-output-code" class="language-c"></code></pre>
+      <div style="display:flex;justify-content:space-between;align-items:center">
+        <span id="sc-output-info" style="font-size:11px;color:var(--dim)">output will appear after processing</span>
+      </div>
+    </div>
+
+  </div>
+
+  <!-- ── analysis strip ── -->
+  <div id="sc-analysis" class="card" style="display:none;margin-top:16px">
+    <div class="card-header">
+      <span style="font-size:16px">🔬</span>
+      <div class="card-title">Analysis</div>
+      <span id="sc-pattern-label" style="margin-left:10px;font-size:12px;color:var(--yellow);font-weight:600"></span>
+    </div>
+    <div style="display:flex;flex-wrap:wrap;gap:8px;margin-bottom:14px" id="sc-stat-badges"></div>
+    <div>
+      <div style="font-size:10px;font-weight:600;color:var(--dim);text-transform:uppercase;letter-spacing:.7px;margin-bottom:8px">Top bytes (input)</div>
+      <div id="sc-top-bytes" style="display:flex;flex-wrap:wrap;gap:6px"></div>
+    </div>
+    <div style="display:flex;gap:16px;flex-wrap:wrap;margin-top:12px;font-size:11px">
+      <div><span style="color:var(--dim)">MD5 </span><code id="sc-md5" style="color:var(--yellow)"></code></div>
+      <div><span style="color:var(--dim)">SHA256 </span><code id="sc-sha256" style="color:var(--green);word-break:break-all"></code></div>
+    </div>
+  </div>
+
 </div>
 
 <!-- ════════ MODULE LIBRARY ════════ -->
@@ -1086,8 +1225,9 @@ let malpType       = 'all';
 let mitreGroups    = [];
 
 const PANEL_META = {
-  builder:  ['Builder',          'compile malware for EDR benchmarking'],
-  library:  ['Module Library',   'browse 190+ techniques from meow & blog'],
+  builder:   ['Builder',           'compile malware for EDR benchmarking'],
+  shellcode: ['Shellcode',         'parse · encode · convert · analyse shellcode'],
+  library:   ['Module Library',   'browse 190+ techniques from meow & blog'],
   samples:  ['Samples',          'compiled binaries organized by session'],
   apt:      ['APT Campaign',     'Malpedia -> TTPs -> auto-compile pipeline'],
   coverage: ['VT Scanner',       'VirusTotal malware detection analysis'],
@@ -1138,6 +1278,201 @@ function toast(msg, type='info') {
   d.textContent = msg;
   t.appendChild(d);
   setTimeout(() => d.remove(), 3500);
+}
+
+// -----------------------------------------------------------------
+// Shellcode swiss-army knife
+// -----------------------------------------------------------------
+let _scTransform    = 'none';
+let _scFmt          = 'c';
+let _scLastInput    = '';
+let _scLastXorKey   = '';
+let _scLastResult   = null;
+let _scAnalyseTimer = null;
+
+function scSetTransform(btn) {
+  document.querySelectorAll('.sc-pill').forEach(b => b.classList.remove('active'));
+  btn.classList.add('active');
+  _scTransform = btn.dataset.t;
+  document.getElementById('sc-key-row').style.display = _scTransform === 'xor_key' ? 'flex' : 'none';
+}
+
+function scSetFmt(btn) {
+  document.querySelectorAll('.sc-fmt-pill').forEach(b => b.classList.remove('active'));
+  btn.classList.add('active');
+  _scFmt = btn.dataset.fmt;
+  // re-process with new format if we have prior state
+  if (_scLastInput) scProcess(true);
+}
+
+function scOnInput() {
+  const val = document.getElementById('sc-input').value;
+  const bytes = val.length;
+  document.getElementById('sc-input-info').textContent = bytes ? `${bytes} chars` : '';
+  document.getElementById('sc-detected-badge').style.display = 'none';
+  clearTimeout(_scAnalyseTimer);
+  if (!val.trim()) return;
+  _scAnalyseTimer = setTimeout(async () => {
+    const r = await fetch('/api/shellcode/analyse', {
+      method: 'POST', headers: {'Content-Type':'application/json'},
+      body: JSON.stringify({input: val})
+    }).then(r => r.json()).catch(() => null);
+    if (r?.ok) {
+      const badge = document.getElementById('sc-detected-badge');
+      badge.textContent = r.detected_fmt;
+      badge.style.display = '';
+      const kb = r.size > 1024 ? (r.size/1024).toFixed(1)+' KB' : r.size+' B';
+      document.getElementById('sc-input-info').textContent = `${r.size} bytes (${kb}) · entropy ${r.entropy}`;
+    }
+  }, 500);
+}
+
+async function scProcess(fmtOnly = false) {
+  const input  = document.getElementById('sc-input').value.trim();
+  if (!input) { toast('Paste or upload shellcode first', 'warn'); return; }
+  const xorKey = document.getElementById('sc-xor-key').value.trim();
+  const varName = document.getElementById('sc-var-name').value.trim() || 'buf';
+
+  // if switching format and we had xor_random, reuse the resolved key
+  let transform = _scTransform;
+  let resolvedKey = xorKey;
+  if (fmtOnly && _scLastResult?.xor_key_0x && _scTransform === 'xor_random') {
+    transform   = 'xor_key';
+    resolvedKey = _scLastResult.xor_key_0x;
+  }
+
+  document.getElementById('sc-process-btn').disabled = true;
+  document.getElementById('sc-process-btn').textContent = '⏳ …';
+
+  const r = await fetch('/api/shellcode/process', {
+    method: 'POST', headers: {'Content-Type':'application/json'},
+    body: JSON.stringify({
+      input, output_format: _scFmt,
+      transform, xor_key: resolvedKey, var_name: varName
+    })
+  }).then(r => r.json()).catch(e => ({ok: false, error: String(e)}));
+
+  document.getElementById('sc-process-btn').disabled = false;
+  document.getElementById('sc-process-btn').textContent = '⚙️ Process';
+
+  if (!r.ok) { toast('Error: ' + r.error, 'error'); return; }
+
+  _scLastInput  = input;
+  _scLastResult = r;
+
+  // render output
+  const codeEl = document.getElementById('sc-output-code');
+  codeEl.className = `language-${r.hljs_lang}`;
+  codeEl.textContent = r.output;
+  if (typeof hljs !== 'undefined' && r.output.length < 40000) {
+    delete codeEl.dataset.highlighted;
+    hljs.highlightElement(codeEl);
+  }
+
+  const outKb = r.output_size > 1024 ? (r.output_size/1024).toFixed(1)+' KB' : r.output_size+' B';
+  document.getElementById('sc-output-info').textContent =
+    `${r.output_size} bytes · ${outKb} · ${r.detected_fmt || ''}`;
+
+  // XOR key box
+  if (r.xor_key_hex) {
+    document.getElementById('sc-key-hex').textContent = r.xor_key_hex;
+    document.getElementById('sc-key-0x').textContent  = r.xor_key_0x;
+    document.getElementById('sc-key-display').style.display = '';
+  } else {
+    document.getElementById('sc-key-display').style.display = 'none';
+  }
+
+  // enable copy/download
+  document.getElementById('sc-copy-btn').disabled = false;
+  document.getElementById('sc-dl-btn').disabled   = false;
+
+  // analysis panel
+  const stats = r.input_stats || {};
+  _scRenderAnalysis(stats);
+}
+
+function _scRenderAnalysis(s) {
+  if (!s.size) return;
+  const kb = s.size > 1024 ? (s.size/1024).toFixed(1)+' KB' : s.size+' B';
+  const entColor = s.entropy > 7 ? 'var(--red)' : s.entropy > 5.5 ? 'var(--yellow)' : 'var(--green)';
+  const nullColor = s.null_bytes > 0 ? 'var(--red)' : 'var(--green)';
+
+  const badges = [
+    {icon:'📏', label: kb,                       color:'var(--blue)'},
+    {icon:'🌡️', label:`entropy ${s.entropy}`,    color: entColor},
+    {icon:'∅',  label:`${s.null_bytes} null (${s.null_pct}%)`, color: nullColor},
+    {icon:'🖥️', label:`arch: ${s.arch}`,         color:'var(--purple)'},
+  ];
+  document.getElementById('sc-stat-badges').innerHTML = badges.map(b =>
+    `<span class="sc-badge" style="border-color:${b.color}30;color:${b.color};background:${b.color}10">${b.icon} ${escHtml(b.label)}</span>`
+  ).join('');
+
+  document.getElementById('sc-pattern-label').textContent = s.detected || '';
+
+  document.getElementById('sc-top-bytes').innerHTML = (s.top_bytes || []).map(b => {
+    const w = Math.min(60, Math.round(b.pct / 100 * 60));
+    return `<span class="sc-byte-bar"><code>${escHtml(b.byte)}</code><div class="sc-byte-track"><div class="sc-byte-fill" style="width:${w}px"></div></div><span style="color:var(--dim)">${b.pct}%</span></span>`;
+  }).join('');
+
+  document.getElementById('sc-md5').textContent    = s.md5 || '';
+  document.getElementById('sc-sha256').textContent = s.sha256 || '';
+  document.getElementById('sc-analysis').style.display = '';
+}
+
+function scClear() {
+  document.getElementById('sc-input').value = '';
+  document.getElementById('sc-output-code').textContent = '';
+  document.getElementById('sc-detected-badge').style.display = 'none';
+  document.getElementById('sc-input-info').textContent = '';
+  document.getElementById('sc-output-info').textContent = 'output will appear after processing';
+  document.getElementById('sc-key-display').style.display = 'none';
+  document.getElementById('sc-analysis').style.display = 'none';
+  document.getElementById('sc-copy-btn').disabled = true;
+  document.getElementById('sc-dl-btn').disabled   = true;
+  _scLastInput = ''; _scLastResult = null;
+}
+
+async function scHandleFileUpload(file) {
+  if (!file) return;
+  document.getElementById('sc-input-info').textContent = `loading ${file.name}…`;
+  const fd = new FormData();
+  fd.append('file', file, file.name);
+  const r = await fetch('/api/shellcode/upload', {method:'POST', body: fd})
+    .then(r => r.json()).catch(e => ({ok:false, error:String(e)}));
+  if (!r.ok) { toast('Upload error: ' + r.error, 'error'); return; }
+  document.getElementById('sc-input').value = r.hex;
+  document.getElementById('sc-detected-badge').textContent = 'raw binary';
+  document.getElementById('sc-detected-badge').style.display = '';
+  const kb = r.size > 1024 ? (r.size/1024).toFixed(1)+' KB' : r.size+' B';
+  document.getElementById('sc-input-info').textContent =
+    `${r.size} bytes (${kb}) · entropy ${r.entropy}`;
+  // show analysis immediately
+  _scRenderAnalysis(r);
+  toast(`Loaded ${file.name} (${kb})`, 'ok');
+}
+
+function scCopy() {
+  const text = document.getElementById('sc-output-code').textContent;
+  if (!text) return;
+  navigator.clipboard.writeText(text).then(() => toast('Copied to clipboard', 'ok'));
+}
+
+function scCopyKey() {
+  const key = document.getElementById('sc-key-hex').textContent;
+  if (!key) return;
+  navigator.clipboard.writeText(key).then(() => toast('XOR key copied', 'ok'));
+}
+
+function scDownload() {
+  if (!_scLastResult?.xor_key_bytes?.length && !_scLastInput) return;
+  // download the raw output bytes (re-encoded from hex input post-transform)
+  const code = document.getElementById('sc-output-code').textContent;
+  const blob  = new Blob([code], {type: 'text/plain'});
+  const a     = document.createElement('a');
+  a.href      = URL.createObjectURL(blob);
+  a.download  = `shellcode_${_scFmt}.txt`;
+  a.click();
+  URL.revokeObjectURL(a.href);
 }
 
 // -----------------------------------------------------------------
