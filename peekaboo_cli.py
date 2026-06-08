@@ -98,6 +98,7 @@ DEFCON Demo Labs Singapore 2026 | by @cocomelonc
 | `builder`   | Compile malware research modules; browse build history   |
 | `shellcode` | Parse, analyse, transform and reformat shellcode         |
 | `yara`      | Generate YARA rules from binaries; scan with yara-python |
+| `malpedia`  | APT actors, malware families, reports, YARA from Malpedia|
 
 ## Global commands
 
@@ -139,6 +140,12 @@ DEFCON Demo Labs Singapore 2026 | by @cocomelonc
     peekaboo [yara] > gen /tmp/payload.exe
     peekaboo [yara] > save /tmp/payload_rule.yar
     peekaboo [yara] > scan /tmp/payload_copy.exe
+
+    peekaboo > malpedia
+    peekaboo [malpedia] > reports 10
+    peekaboo [malpedia] > actors lazarus
+    peekaboo [malpedia] > actor lazarus_group
+    peekaboo [malpedia] > search apt28
 """,
     },
 
@@ -921,6 +928,254 @@ List all available transform IDs with descriptions.
 """,
     },
 
+    # ── malpedia ──────────────────────────────────────────────────────────────
+    "malpedia": {
+        "_overview": """\
+# Malpedia
+
+Browse 1007 APT threat actors, 3750 malware families, recent threat intel
+reports and per-family YARA rules from Malpedia
+(https://malpedia.caad.fkie.fraunhofer.de).
+
+Works unauthenticated for public data.
+Set `config/malpedia_config.json -> api_token` for full access.
+
+## Commands
+
+| command           | description                                         |
+|-------------------|-----------------------------------------------------|
+| `status`          | API version, auth status, cache info                |
+| `reports [N]`     | recent threat intel reports (default 20)            |
+| `actors [query]`  | list or search threat actors (paginated)            |
+| `families [query]`| list or search malware families (paginated)         |
+| `actor <id>`      | full actor detail: country, families, TTPs, refs    |
+| `family <id>`     | full family detail: description, attribution, URLs  |
+| `yara <id>`       | YARA rules for a malware family from Malpedia       |
+| `search <query>`  | search actors + families simultaneously             |
+| `refresh`         | force refresh cached actor/family lists             |
+| `help [cmd]`      | show this help, or docs for a specific command      |
+| `back`            | return to main menu                                 |
+
+## Quick start
+
+    status                          -- check API connectivity
+    reports 10                      -- latest 10 threat intel reports
+    actors lazarus                  -- find Lazarus Group actor entry
+    actor lazarus_group             -- full detail: country, TTPs, 136 families
+    families cobalt                 -- find Cobalt Strike family entry
+    family win.cobalt_strike        -- description, attribution, reference URLs
+    yara win.cobalt_strike          -- fetch + display YARA rules
+    yara win.mimikatz save /tmp/mimi.yar  -- fetch and save to file
+    search apt29                    -- search actors and families at once
+""",
+        "status": """\
+## status
+
+Show Malpedia API status, version, authentication state and cache info.
+
+**Usage:**
+
+    status
+""",
+        "reports": """\
+## reports
+
+Fetch and display recent threat intelligence reports from the Malpedia library.
+
+**Usage:**
+
+    reports [N]
+
+**Parameters:**
+
+- `N` -- optional; number of reports to fetch (default 20, max 100)
+
+**Examples:**
+
+    reports
+    reports 10
+    reports 50
+
+**Output:** table with date, organisation, title and tagged malware families,
+followed by a numbered URL list for easy copy-paste.
+
+**Notes:**
+
+- Scrapes the public Malpedia library page; no API token required
+- Report URLs are absolute (https://malpedia.caad.fkie.fraunhofer.de/...)
+  unless the report is hosted externally, in which case the original URL is shown
+""",
+        "actors": """\
+## actors
+
+List or search threat actors.
+
+**Usage:**
+
+    actors [query]
+
+**Parameters:**
+
+- `query` -- optional; searches actor ID, common name and synonyms via the
+  Malpedia search API
+
+**Examples:**
+
+    actors
+    actors lazarus
+    actors apt28
+    actors china
+
+**Notes:**
+
+- 20 entries per page; press **Enter** to advance
+- Use `actor <id>` to drill into full detail for any listed actor
+- Without a query, actors are listed alphabetically from the local cache
+""",
+        "families": """\
+## families
+
+List or search malware families.
+
+**Usage:**
+
+    families [query]
+
+**Parameters:**
+
+- `query` -- optional; searches family ID and alt names via the Malpedia API
+
+**Examples:**
+
+    families
+    families cobalt
+    families win.mimikatz
+    families ransomware
+
+**Notes:**
+
+- 20 entries per page; press **Enter** to advance
+- Family IDs follow the format `platform.name` (e.g. `win.cobalt_strike`)
+- Use `family <id>` to drill into full detail
+""",
+        "actor": """\
+## actor
+
+Show full detail for a threat actor.
+
+**Usage:**
+
+    actor <id>
+
+**Parameters:**
+
+- `id` -- actor ID (e.g. `lazarus_group`, `apt28`); partial match supported
+
+**Examples:**
+
+    actor lazarus_group
+    actor apt28
+    actor cozy_bear
+
+**Output:**
+
+1. Header panel: ID, name, country, synonyms, target categories, victims
+2. Malware families table: family ID, common name, attribution
+3. External reference URLs
+""",
+        "family": """\
+## family
+
+Show full detail for a malware family.
+
+**Usage:**
+
+    family <id>
+
+**Parameters:**
+
+- `id` -- family ID in `platform.name` format; partial match supported
+
+**Examples:**
+
+    family win.cobalt_strike
+    family win.mimikatz
+    family apk.888_rat
+
+**Output:**
+
+1. Header panel: ID, common name, alt names, updated date, attribution
+2. Description (full text, pager for long entries)
+3. Reference URLs (up to 10)
+""",
+        "yara": """\
+## yara
+
+Fetch and display YARA rules for a malware family from Malpedia.
+
+**Usage:**
+
+    yara <family-id> [save <path>]
+
+**Parameters:**
+
+- `family-id` -- Malpedia family ID (e.g. `win.cobalt_strike`)
+- `save <path>` -- optional; save the rules to a file
+
+**Examples:**
+
+    yara win.cobalt_strike
+    yara win.mimikatz save /tmp/mimikatz.yar
+    yara elf.bashlite
+
+**Output:** syntax-highlighted YARA rules (pager for long rule sets).
+
+**Notes:**
+
+- Only `tlp_white` rules are returned for unauthenticated access
+- Some families have no rules available
+""",
+        "search": """\
+## search
+
+Search actors and malware families simultaneously.
+
+**Usage:**
+
+    search <query>
+
+**Parameters:**
+
+- `query` -- case-insensitive; searches actor names/synonyms and family IDs/alt names
+
+**Examples:**
+
+    search lazarus
+    search cobalt strike
+    search ransomware
+    search apt29
+
+**Output:** two sections -- Actor Matches and Family Matches.
+""",
+        "refresh": """\
+## refresh
+
+Force-refresh the local actor and family ID caches from the Malpedia API.
+
+**Usage:**
+
+    refresh
+
+**Notes:**
+
+- Caches are stored in `data/malpedia_actors_cache.json` and
+  `data/malpedia_families_cache.json`
+- On first run the caches are populated automatically; use `refresh` after
+  Malpedia updates its data or when the local cache is stale
+- Actor list: ~979 entries; Family list: ~3700+ entries
+""",
+    },
+
     # ── yara ──────────────────────────────────────────────────────────────────
     "yara": {
         "_overview": """\
@@ -1306,7 +1561,7 @@ def print_banner() -> None:
 # -- top-level commands --------------------------------------------------------
 TOP_COMMANDS = [
     "evasion", "library", "artifacts", "builder", "shellcode", "yara",
-    "help", "exit", "quit",
+    "malpedia", "help", "exit", "quit",
 ]
 
 TOP_HELP = [
@@ -1316,6 +1571,7 @@ TOP_HELP = [
     ("builder",   "Compile malware research modules; browse build history"),
     ("shellcode", "Parse, analyse, transform and reformat shellcode"),
     ("yara",      "Generate YARA rules from binaries; scan with yara-python"),
+    ("malpedia",  "APT actors, malware families, reports, YARA from Malpedia"),
     ("help",      "show this help"),
     ("exit",      "quit peekaboo-cli"),
 ]
@@ -2518,6 +2774,568 @@ def run_evasion(ev_mod) -> None:
             console.print(
                 f"\n  [ok][+] saved:[/ok] [cmd]{out_path}[/cmd]  "
                 f"[dim]{len(patched)//1024} KB  ({delta_str})[/dim]\n"
+            )
+
+        else:
+            console.print(
+                f"[warn][!] unknown command: {cmd}  "
+                f"(type  help  for commands)[/warn]"
+            )
+
+
+# -- malpedia lab -------------------------------------------------------------
+
+MALPEDIA_PAGE_SIZE = 20
+
+MALPEDIA_COMMANDS = [
+    "status", "reports", "actors", "families", "actor", "family",
+    "yara", "search", "refresh", "help", "back",
+]
+
+_MALPEDIA_BASE = "https://malpedia.caad.fkie.fraunhofer.de"
+
+
+def _mp_abs_url(url: str) -> str:
+    if url.startswith("http"):
+        return url
+    return _MALPEDIA_BASE + ("" if url.startswith("/") else "/") + url
+
+
+def _render_reports(reports: list[dict]) -> None:
+    if not reports:
+        console.print("  [warn][!] no reports returned[/warn]\n")
+        return
+
+    t = Table(box=box.ASCII, show_header=True, header_style="heading",
+              border_style="dim", padding=(0, 1),
+              title=f"Recent Threat Intel Reports  ({len(reports)})",
+              show_lines=True)
+    t.add_column("#",        style="dim",  min_width=3,  justify="right", no_wrap=True)
+    t.add_column("date",     style="dim",  min_width=11, no_wrap=True)
+    t.add_column("org",      style="info", min_width=14, no_wrap=True)
+    t.add_column("title",    style="cmd",  min_width=44)
+    t.add_column("families", style="warn", min_width=24)
+
+    for i, r in enumerate(reports, 1):
+        fams = " ".join(r.get("families", [])[:3])
+        if len(r.get("families", [])) > 3:
+            fams += f" +{len(r['families'])-3}"
+        t.add_row(
+            str(i),
+            r.get("date", "")[:11],
+            (r.get("org") or "")[:14],
+            (r.get("title") or "")[:44],
+            fams or "-",
+        )
+
+    console.print()
+    console.print(t)
+
+    # URL list (Markdown-style, clickable in modern terminals)
+    console.print()
+    console.print("  [heading]URLs[/heading]")
+    for i, r in enumerate(reports, 1):
+        url   = _mp_abs_url(r.get("url", ""))
+        title = (r.get("title") or url)[:60]
+        console.print(f"  [dim]{i:>2}.[/dim] [link={url}][cyan]{title}[/cyan][/link]")
+        console.print(f"       [dim]{url}[/dim]")
+    console.print()
+
+
+def _render_actors_table(actors: list, title: str = "Threat Actors",
+                          page: int = 0, rich_mode: bool = False) -> int:
+    total = len(actors)
+    pages = max(1, (total + MALPEDIA_PAGE_SIZE - 1) // MALPEDIA_PAGE_SIZE)
+    start = page * MALPEDIA_PAGE_SIZE
+    chunk = actors[start:start + MALPEDIA_PAGE_SIZE]
+
+    t = Table(box=box.ASCII, show_header=True, header_style="heading",
+              border_style="dim", padding=(0, 1),
+              title=f"{title}  [{start+1}-{min(start+len(chunk), total)} / {total}]",
+              show_lines=False)
+    t.add_column("#",           style="dim",  min_width=4,  justify="right", no_wrap=True)
+    t.add_column("actor-id",    style="cmd",  min_width=22, no_wrap=True)
+    if rich_mode:
+        t.add_column("common name", style="info", min_width=22)
+        t.add_column("synonyms",    style="dim",  min_width=30)
+
+    for i, a in enumerate(chunk, start + 1):
+        if isinstance(a, dict):
+            row = [str(i), a.get("name", "?")]
+            if rich_mode:
+                row += [
+                    a.get("common_name", "")[:22],
+                    ", ".join(a.get("synonyms", [])[:3]),
+                ]
+            t.add_row(*row)
+        else:
+            row = [str(i), str(a)]
+            if rich_mode:
+                row += ["", ""]
+            t.add_row(*row)
+
+    console.print()
+    console.print(t)
+    if pages > 1:
+        console.print(
+            f"  [dim]page {page+1}/{pages} -- "
+            f"press Enter for next page,  actor <id>  to drill in[/dim]\n"
+        )
+    return pages
+
+
+def _render_families_table(families: list, title: str = "Malware Families",
+                            page: int = 0) -> int:
+    total = len(families)
+    pages = max(1, (total + MALPEDIA_PAGE_SIZE - 1) // MALPEDIA_PAGE_SIZE)
+    start = page * MALPEDIA_PAGE_SIZE
+    chunk = families[start:start + MALPEDIA_PAGE_SIZE]
+
+    t = Table(box=box.ASCII, show_header=True, header_style="heading",
+              border_style="dim", padding=(0, 1),
+              title=f"{title}  [{start+1}-{min(start+len(chunk), total)} / {total}]",
+              show_lines=False)
+    t.add_column("#",          style="dim",  min_width=4,  justify="right", no_wrap=True)
+    t.add_column("family-id",  style="cmd",  min_width=24, no_wrap=True)
+    has_meta = isinstance(chunk[0] if chunk else None, dict)
+    if has_meta:
+        t.add_column("common name", style="info", min_width=22)
+        t.add_column("alt names",   style="dim",  min_width=22)
+
+    for i, f in enumerate(chunk, start + 1):
+        if isinstance(f, dict):
+            alts = ", ".join(f.get("alt_names", [])[:2])
+            t.add_row(str(i), f.get("name", "?"),
+                      f.get("common_name", "")[:22], alts[:22])
+        else:
+            row = [str(i), str(f)]
+            if has_meta:
+                row += ["", ""]
+            t.add_row(*row)
+
+    console.print()
+    console.print(t)
+    if pages > 1:
+        console.print(
+            f"  [dim]page {page+1}/{pages} -- "
+            f"press Enter for next page,  family <id>  to drill in[/dim]\n"
+        )
+    return pages
+
+
+def _render_actor_detail(a: dict) -> None:
+    if "error" in a:
+        console.print(f"  [err][!] {a['error']}[/err]\n")
+        return
+
+    synonyms = ", ".join(a.get("synonyms", [])[:6])
+    if len(a.get("synonyms", [])) > 6:
+        synonyms += f" +{len(a['synonyms'])-6}"
+    targets = ", ".join(a.get("targets", [])[:4])
+    victims = ", ".join(a.get("victims", [])[:4])
+    if len(a.get("victims", [])) > 4:
+        victims += f" +{len(a['victims'])-4}"
+
+    meta = (
+        f"  ID       : {a['id']}\n"
+        f"  Name     : {a.get('name', a['id'])}\n"
+        f"  Country  : {a.get('country') or '?'}\n"
+        f"  Synonyms : {synonyms or '-'}\n"
+        + (f"  Targets  : {targets}\n" if targets else "")
+        + (f"  Victims  : {victims}\n" if victims else "")
+        + (f"  Incident : {a['incident_type']}\n" if a.get("incident_type") else "")
+    )
+    console.print()
+    console.print(Panel(meta.rstrip(),
+                        title=f"[heading] Actor: {a.get('name', a['id'])} [/heading]",
+                        border_style="cyan", box=box.ASCII))
+
+    desc = (a.get("description") or "").strip()
+    if desc:
+        n_lines = desc.count("\n") + (len(desc) // 80) + 1
+        if n_lines > 12:
+            with console.pager(styles=True):
+                console.print(f"\n  [dim]{desc}[/dim]\n")
+        else:
+            console.print(f"\n  [dim]{desc[:600]}{'...' if len(desc)>600 else ''}[/dim]\n")
+
+    fams = a.get("families", [])
+    if fams:
+        ft = Table(box=box.ASCII, show_header=True, header_style="heading",
+                   border_style="dim", padding=(0, 1),
+                   title=f"Malware Families ({len(fams)})", show_lines=False)
+        ft.add_column("family-id",   style="cmd",  min_width=24, no_wrap=True)
+        ft.add_column("report URLs", style="dim",  min_width=4,  justify="right")
+        for f in fams[:20]:
+            ft.add_row(f["id"], str(len(f.get("urls", []))))
+        if len(fams) > 20:
+            console.print(f"  [dim]... +{len(fams)-20} more families[/dim]")
+        console.print(ft)
+
+    refs = a.get("refs", [])
+    if refs:
+        console.print()
+        console.print("  [heading]References[/heading]")
+        for i, ref in enumerate(refs[:10], 1):
+            url = _mp_abs_url(ref) if ref else ""
+            console.print(f"  [dim]{i:>2}.[/dim] [link={url}][cyan]{url[:80]}[/cyan][/link]")
+    console.print()
+
+
+def _render_family_detail(f: dict) -> None:
+    if "error" in f:
+        console.print(f"  [err][!] {f['error']}[/err]\n")
+        return
+
+    alts  = ", ".join(f.get("alt_names", [])[:6])
+    attrs = ", ".join(f.get("attribution", [])[:6])
+    if len(f.get("attribution", [])) > 6:
+        attrs += f" +{len(f['attribution'])-6}"
+
+    meta = (
+        f"  ID          : {f['id']}\n"
+        f"  Common name : {f.get('name', f['id'])}\n"
+        f"  Alt names   : {alts or '-'}\n"
+        f"  Updated     : {f.get('updated') or '?'}\n"
+        + (f"  Attribution : {attrs}\n" if attrs else "")
+    )
+    console.print()
+    console.print(Panel(meta.rstrip(),
+                        title=f"[heading] Family: {f.get('name', f['id'])} [/heading]",
+                        border_style="cyan", box=box.ASCII))
+
+    desc = (f.get("description") or "").strip()
+    if desc:
+        n_lines = (len(desc) // 80) + 1
+        if n_lines > 12:
+            with console.pager(styles=True):
+                console.print(f"\n{desc}\n")
+        else:
+            console.print(f"\n  [dim]{desc[:800]}{'...' if len(desc)>800 else ''}[/dim]\n")
+
+    urls = f.get("urls", [])
+    if urls:
+        console.print("  [heading]Reference URLs[/heading]")
+        for i, url in enumerate(urls[:10], 1):
+            abs_url = _mp_abs_url(url)
+            console.print(f"  [dim]{i:>2}.[/dim] [link={abs_url}][cyan]{abs_url[:80]}[/cyan][/link]")
+        if len(urls) > 10:
+            console.print(f"  [dim]  ... +{len(urls)-10} more[/dim]")
+    console.print()
+
+
+def run_malpedia() -> None:
+    """Interactive Malpedia sub-REPL."""
+    try:
+        import malpedia as _mp
+    except ImportError as exc:
+        console.print(f"[err][!] malpedia module unavailable: {exc}[/err]")
+        return
+
+    if not _mp.available():
+        console.print(
+            "  [err][!] malpediaclient not installed[/err]\n"
+            "  [dim]Install with: pip install malpediaclient[/dim]\n"
+        )
+        return
+
+    with console.status("[info]loading actor/family lists...[/info]", spinner="dots"):
+        actor_list   = _mp.list_actors()
+        family_list  = _mp.list_families()
+
+    completer = WordCompleter(
+        MALPEDIA_COMMANDS + actor_list[:200] + family_list[:200],
+        ignore_case=True,
+    )
+    session: PromptSession = PromptSession(
+        history=InMemoryHistory(),
+        completer=completer,
+        style=PT_STYLE,
+    )
+
+    console.print()
+    console.print(Panel(
+        f"  {len(actor_list)} threat actors  |  {len(family_list)} malware families\n"
+        f"  type  help  for commands,  reports  for latest threat intel,  back  to return",
+        title="[heading] Malpedia [/heading]",
+        border_style="cyan",
+        box=box.ASCII,
+    ))
+    console.print()
+
+    current_view: list  = []
+    current_title: str  = ""
+    current_page: int   = 0
+    total_pages: int    = 0
+    view_mode: str      = ""   # "actors" or "families"
+    view_rich: bool     = False
+
+    while True:
+        try:
+            raw = session.prompt("peekaboo [malpedia] > ", style=PT_STYLE).strip()
+        except (KeyboardInterrupt, EOFError):
+            console.print("\n[dim]use  back  to return[/dim]")
+            continue
+
+        if not raw:
+            if total_pages > 1 and current_page + 1 < total_pages:
+                current_page += 1
+                if view_mode == "actors":
+                    total_pages = _render_actors_table(
+                        current_view, current_title, current_page, view_rich
+                    )
+                else:
+                    total_pages = _render_families_table(
+                        current_view, current_title, current_page
+                    )
+            continue
+
+        parts = raw.split()
+        cmd   = parts[0].lower()
+        args  = parts[1:]
+
+        if cmd in ("back", "exit", "quit"):
+            break
+
+        elif cmd == "help":
+            show_help("malpedia", args[0] if args else None)
+
+        # -- status -----------------------------------------------------------
+        elif cmd == "status":
+            with console.status("[info]checking API...[/info]", spinner="dots"):
+                st = _mp.get_status()
+            if not st.get("ok"):
+                console.print(f"  [err][!] {st.get('error')}[/err]\n")
+                continue
+            t = Table(box=box.ASCII, show_header=False, border_style="dim",
+                      padding=(0, 2), title="Malpedia Status")
+            t.add_column("key",   style="info",    min_width=20)
+            t.add_column("value", style="heading", min_width=16)
+            t.add_row("API Version",    str(st.get("version", "?")))
+            t.add_row("Last Updated",   (st.get("date") or "?")[:19])
+            t.add_row("Authenticated",  "[ok]yes[/ok]" if st.get("authenticated") else "[warn]no (public)[/warn]")
+            t.add_row("Actors (cache)", str(len(actor_list)))
+            t.add_row("Families (cache)", str(len(family_list)))
+            t.add_row("Actors cached",  "[ok]yes[/ok]" if st.get("actors_cached") else "[warn]no[/warn]")
+            t.add_row("Families cached","[ok]yes[/ok]" if st.get("families_cached") else "[warn]no[/warn]")
+            console.print()
+            console.print(t)
+            console.print()
+
+        # -- reports [N] ------------------------------------------------------
+        elif cmd == "reports":
+            limit = 20
+            if args:
+                try:
+                    limit = max(1, min(int(args[0]), 100))
+                except ValueError:
+                    console.print("[warn][!] usage: reports [N][/warn]")
+                    continue
+            with console.status(
+                f"[info]fetching {limit} recent reports...[/info]", spinner="dots"
+            ):
+                reports = _mp.get_recent_reports(limit)
+            _render_reports(reports)
+
+        # -- actors [query] ---------------------------------------------------
+        elif cmd == "actors":
+            if args:
+                q = " ".join(args)
+                with console.status(f"[info]searching actors: {q}...[/info]", spinner="dots"):
+                    hits = _mp.find_actor(q)
+                if not hits:
+                    console.print(f"  [warn][!] no actors found for '{q}'[/warn]\n")
+                    continue
+                current_view  = hits
+                current_title = f"Actor search: {q}"
+                view_rich     = True
+            else:
+                current_view  = actor_list
+                current_title = "Threat Actors"
+                view_rich     = False
+            current_page = 0
+            view_mode    = "actors"
+            total_pages  = _render_actors_table(
+                current_view, current_title, current_page, view_rich
+            )
+
+        # -- families [query] -------------------------------------------------
+        elif cmd == "families":
+            if args:
+                q = " ".join(args)
+                with console.status(f"[info]searching families: {q}...[/info]", spinner="dots"):
+                    hits = _mp.find_family(q)
+                if not hits:
+                    console.print(f"  [warn][!] no families found for '{q}'[/warn]\n")
+                    continue
+                current_view  = hits
+                current_title = f"Family search: {q}"
+            else:
+                current_view  = family_list
+                current_title = "Malware Families"
+            current_page = 0
+            view_mode    = "families"
+            total_pages  = _render_families_table(
+                current_view, current_title, current_page
+            )
+
+        # -- actor <id> -------------------------------------------------------
+        elif cmd == "actor":
+            if not args:
+                console.print("[warn][!] usage: actor <id>  e.g.  actor lazarus_group[/warn]")
+                continue
+            aid = "_".join(args).lower()
+            # try partial match in cached list
+            if aid not in actor_list:
+                matches = [a for a in actor_list if aid in a]
+                if len(matches) == 1:
+                    aid = matches[0]
+                elif len(matches) > 1:
+                    console.print(
+                        f"  [warn][!] ambiguous '{aid}': "
+                        f"{', '.join(matches[:5])}"
+                        f"{'...' if len(matches)>5 else ''}[/warn]\n"
+                    )
+                    continue
+                elif not matches:
+                    console.print(f"  [err][!] actor not found: '{aid}'[/err]\n")
+                    continue
+            with console.status(f"[info]loading actor: {aid}...[/info]", spinner="dots"):
+                detail = _mp.get_actor(aid)
+            _render_actor_detail(detail)
+
+        # -- family <id> ------------------------------------------------------
+        elif cmd == "family":
+            if not args:
+                console.print("[warn][!] usage: family <id>  e.g.  family win.cobalt_strike[/warn]")
+                continue
+            fid = args[0].lower()
+            if fid not in family_list:
+                matches = [f for f in family_list if fid in f]
+                if len(matches) == 1:
+                    fid = matches[0]
+                elif len(matches) > 1:
+                    console.print(
+                        f"  [warn][!] ambiguous '{fid}': "
+                        f"{', '.join(matches[:5])}"
+                        f"{'...' if len(matches)>5 else ''}[/warn]\n"
+                    )
+                    continue
+                elif not matches:
+                    console.print(f"  [err][!] family not found: '{fid}'[/err]\n")
+                    continue
+            with console.status(f"[info]loading family: {fid}...[/info]", spinner="dots"):
+                detail = _mp.get_family(fid)
+            _render_family_detail(detail)
+
+        # -- yara <family-id> [save <path>] -----------------------------------
+        elif cmd == "yara":
+            if not args:
+                console.print("[warn][!] usage: yara <family-id> [save <path>][/warn]")
+                continue
+            fid      = args[0].lower()
+            save_arg = None
+            if len(args) >= 3 and args[1].lower() == "save":
+                save_arg = Path(" ".join(args[2:])).expanduser().resolve()
+
+            try:
+                c = _mp._get_client()
+                if not c:
+                    console.print("  [err][!] malpedia client unavailable[/err]\n")
+                    continue
+                with console.status(
+                    f"[info]fetching YARA rules for {fid}...[/info]", spinner="dots"
+                ):
+                    raw = c.get_yara(fid)
+            except Exception as exc:
+                console.print(f"  [err][!] API error: {exc}[/err]\n")
+                continue
+
+            if not raw or not isinstance(raw, dict):
+                console.print(f"  [warn][!] no YARA rules found for '{fid}'[/warn]\n")
+                continue
+
+            # raw = {tlp_level: {rule_name: rule_text, ...}, ...}
+            all_rules: list[tuple[str, str, str]] = []
+            for tlp, rules in raw.items():
+                if isinstance(rules, dict):
+                    for rname, rtext in rules.items():
+                        all_rules.append((tlp, rname, rtext))
+
+            if not all_rules:
+                console.print(f"  [warn][!] no public rules for '{fid}'[/warn]\n")
+                continue
+
+            combined = "\n\n".join(f"// {tlp} / {rname}\n{rtext}"
+                                   for tlp, rname, rtext in all_rules)
+            n_lines  = combined.count("\n") + 1
+
+            try:
+                syn = Syntax(combined, "yara", theme="monokai",
+                             line_numbers=True, word_wrap=False)
+            except Exception:
+                syn = Syntax(combined, "text", theme="monokai",
+                             line_numbers=True, word_wrap=False)
+
+            panel = Panel(
+                syn,
+                title=f"[heading] YARA: {fid}  ({len(all_rules)} rule(s)) [/heading]",
+                border_style="dim", box=box.ASCII,
+            )
+            if n_lines > 40:
+                with console.pager(styles=True):
+                    console.print(panel)
+            else:
+                console.print()
+                console.print(panel)
+                console.print()
+
+            if save_arg:
+                try:
+                    save_arg.write_text(combined, encoding="utf-8")
+                    console.print(
+                        f"  [ok][+] saved:[/ok] [cmd]{save_arg}[/cmd]  "
+                        f"[dim]{len(combined)} chars[/dim]\n"
+                    )
+                except Exception as exc:
+                    console.print(f"  [err][!] write error: {exc}[/err]\n")
+
+        # -- search <query> ---------------------------------------------------
+        elif cmd == "search":
+            if not args:
+                console.print("[warn][!] usage: search <query>[/warn]")
+                continue
+            q = " ".join(args)
+            with console.status(f"[info]searching '{q}'...[/info]", spinner="dots"):
+                actor_hits  = _mp.find_actor(q)
+                family_hits = _mp.find_family(q)
+
+            console.print()
+            if actor_hits:
+                _render_actors_table(
+                    actor_hits, f"Actor matches: {q}", 0, rich_mode=True
+                )
+            else:
+                console.print(f"  [dim]no actor matches for '{q}'[/dim]")
+
+            if family_hits:
+                _render_families_table(
+                    family_hits, f"Family matches: {q}", 0
+                )
+            else:
+                console.print(f"  [dim]no family matches for '{q}'[/dim]")
+
+            if not actor_hits and not family_hits:
+                console.print(f"\n  [warn][!] no results for '{q}'[/warn]\n")
+
+        # -- refresh ----------------------------------------------------------
+        elif cmd == "refresh":
+            with console.status("[info]refreshing caches...[/info]", spinner="dots"):
+                actor_list  = _mp.list_actors(force_refresh=True)
+                family_list = _mp.list_families(force_refresh=True)
+            console.print(
+                f"  [ok][+] refreshed:[/ok] "
+                f"[dim]{len(actor_list)} actors, {len(family_list)} families[/dim]\n"
             )
 
         else:
@@ -3745,6 +4563,9 @@ def main() -> None:
 
         elif cmd == "yara":
             run_yara()
+
+        elif cmd == "malpedia":
+            run_malpedia()
 
         else:
             console.print(
