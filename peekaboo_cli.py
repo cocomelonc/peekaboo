@@ -95,6 +95,7 @@ DEFCON Demo Labs Singapore 2026 | by @cocomelonc
 | `evasion`   | PE evasion scorer and surgical patch transforms          |
 | `library`   | MITRE ATT&CK module library -- browse, search, view code |
 | `artifacts` | Artifact map: 410 techniques mapped to 4799 Sigma rules  |
+| `builder`   | Compile malware research modules; browse build history   |
 
 ## Global commands
 
@@ -119,6 +120,11 @@ DEFCON Demo Labs Singapore 2026 | by @cocomelonc
     peekaboo > artifacts
     peekaboo [artifacts] > show T1055
     peekaboo [artifacts] > rules T1059.001 high
+
+    peekaboo > builder
+    peekaboo [builder] > list windows
+    peekaboo [builder] > build malware-injection-17
+    peekaboo [builder] > history
 """,
     },
 
@@ -586,6 +592,193 @@ Show global artifact map statistics.
 **Output:** technique count, total Sigma rules, unique tactics, unique Sysmon EventIDs, build timestamp.
 """,
     },
+
+    # ── builder ───────────────────────────────────────────────────────────────
+    "builder": {
+        "_overview": """\
+# Builder
+
+Compile peekaboo malware research modules directly from the CLI.
+Uses the same MingW / GCC backend as the dashboard builder.
+
+Output binaries are written to `samples/<session-id>/`.
+Each build is saved to the peekaboo database automatically.
+
+**Supported compilers:**
+
+| compiler    | targets                         |
+|-------------|---------------------------------|
+| `mingw-gcc` | Windows x64 (C)                 |
+| `mingw-gpp` | Windows x64 (C++)               |
+| `gcc`       | Linux x64 (C)                   |
+| `gpp`       | Linux x64 (C++)                 |
+
+Note: `nasm` and `nim` modules are listed but cannot be built via
+the CLI builder (the dashboard handles them separately).
+
+## Commands
+
+| command               | description                                     |
+|-----------------------|-------------------------------------------------|
+| `list [filter]`       | list compilable modules; filter by platform/cat |
+| `search <query>`      | search by slug, T-ID, title or category         |
+| `build <slug>`        | compile module -- shows colorized compiler log  |
+| `history [N]`         | last N builds from DB (default 20)              |
+| `show <build-id>`     | full compiler log for a specific build          |
+| `help [cmd]`          | show this help, or docs for a specific command  |
+| `back`                | return to main menu                             |
+
+## Filters for list
+
+    list windows       -- only Windows/MingW modules
+    list linux         -- only Linux/GCC modules
+    list injection     -- only modules in the injection category
+    list persistence   -- only persistence modules
+""",
+        "list": """\
+## list
+
+Show a paginated table of compilable modules, with optional filter.
+
+**Usage:**
+
+    list [filter]
+
+**Parameters:**
+
+- `filter` -- optional; platform name (`windows`, `linux`) or partial category
+  name (`injection`, `persistence`, `evasion`, etc.)
+
+**Examples:**
+
+    list
+    list windows
+    list linux
+    list injection
+    list crypto
+
+**Columns:** # | slug | platform | compiler | category | T-IDs | title
+
+**Notes:**
+
+- 20 entries per page; press **Enter** to advance
+- Modules marked non-compilable (nasm, nim) are excluded
+- Use `build <slug>` to compile the selected module
+""",
+        "search": """\
+## search
+
+Search compilable modules by slug, title, T-ID or category.
+
+**Usage:**
+
+    search <query>
+
+**Parameters:**
+
+- `query` -- case-insensitive; matches slug, title, T-ID prefix, or category
+
+**Examples:**
+
+    search T1055
+    search process injection
+    search hollowing
+    search nim
+    search persistence
+
+**Notes:**
+
+- Results replace the current list and support paging
+- Non-compilable modules are excluded from results
+""",
+        "build": """\
+## build
+
+Compile a module and save the output binary to `samples/<session-id>/`.
+
+**Usage:**
+
+    build <slug>
+
+**Parameters:**
+
+- `slug` -- module slug from the list/search table; partial match supported
+
+**Examples:**
+
+    build malware-injection-17
+    build malware-tricks-54
+    build malware-evasion-12
+
+**Output:**
+
+1. Pre-build summary: slug, platform, compiler, source file
+2. Compiler command and live log output (colorized)
+3. BUILD OK / BUILD FAILED panel with output path and file size
+
+**Notes:**
+
+- The original source files are never modified (copied to a temp dir)
+- Credential placeholders (Telegram token, GitHub PAT, etc.) are
+  automatically substituted from `config/*.json` before compilation
+- Output binary lands in `samples/<session-id>/<slug>.exe` (Windows)
+  or `samples/<session-id>/<slug>` (Linux)
+- The build result is saved to the peekaboo database automatically
+- If the compiler is not installed, an error is shown with the
+  expected binary name (e.g. `x86_64-w64-mingw32-gcc`)
+""",
+        "history": """\
+## history
+
+Show recent build history from the peekaboo database.
+
+**Usage:**
+
+    history [N]
+
+**Parameters:**
+
+- `N` -- optional; number of builds to show (default 20, max 100)
+
+**Examples:**
+
+    history
+    history 5
+    history 50
+
+**Columns:** # | build-id | slug | status | date | duration | rc
+
+**Notes:**
+
+- Builds from both the CLI and the dashboard are listed
+- Use `show <build-id>` for the full compiler log of any listed build
+""",
+        "show": """\
+## show
+
+Show full details and compiler log for a specific build.
+
+**Usage:**
+
+    show <build-id>
+
+**Parameters:**
+
+- `build-id` -- the ID from the `history` table (e.g. `cli-a3f9b1c2`)
+- Partial prefix match is supported (first 6+ chars usually unique)
+
+**Examples:**
+
+    show cli-a3f9b1c2
+    show cli-a3f9
+
+**Output:**
+
+1. Build metadata panel: ID, slug, platform, compiler, status, date, duration
+2. Full compiler log with colorized `[ok]` / `[fail]` / `[warn]` markers
+   (long logs open in a pager; press `q` to exit)
+""",
+    },
 }
 
 
@@ -636,13 +829,14 @@ def print_banner() -> None:
 
 # -- top-level commands --------------------------------------------------------
 TOP_COMMANDS = [
-    "evasion", "library", "artifacts", "help", "exit", "quit",
+    "evasion", "library", "artifacts", "builder", "help", "exit", "quit",
 ]
 
 TOP_HELP = [
     ("evasion",   "PE evasion scorer + surgical patch transforms"),
     ("library",   "MITRE ATT&CK module library -- browse, search, view source"),
     ("artifacts", "Artifact map -- 410 techniques, 4799 Sigma rules, EventID coverage"),
+    ("builder",   "Compile malware research modules; browse build history"),
     ("help",      "show this help"),
     ("exit",      "quit peekaboo-cli"),
 ]
@@ -1854,6 +2048,467 @@ def run_evasion(ev_mod) -> None:
             )
 
 
+# -- builder -------------------------------------------------------------------
+
+import uuid as _uuid
+from datetime import datetime as _dt
+
+BUILD_PAGE_SIZE = 20
+
+BUILDER_COMMANDS = [
+    "list", "search", "build", "history", "show", "help", "back",
+]
+
+BUILDER_HELP = [
+    ("list [filter]",    "list compilable modules; filter by platform or category"),
+    ("search <query>",   "search by slug, title, T-ID or category"),
+    ("build <slug>",     "compile module and save to samples/"),
+    ("history [N]",      "show last N builds from DB (default 20)"),
+    ("show <build-id>",  "full compiler log for a specific build"),
+    ("help",             "show this help"),
+    ("back",             "return to main menu"),
+]
+
+
+def _render_build_table(entries: list[dict], title: str = "Compilable Modules",
+                         page: int = 0) -> int:
+    total  = len(entries)
+    pages  = max(1, (total + BUILD_PAGE_SIZE - 1) // BUILD_PAGE_SIZE)
+    start  = page * BUILD_PAGE_SIZE
+    chunk  = entries[start:start + BUILD_PAGE_SIZE]
+
+    t = Table(box=box.ASCII, show_header=True, header_style="heading",
+              border_style="dim", padding=(0, 1),
+              title=f"{title}  [{start+1}-{min(start+len(chunk), total)} / {total}]",
+              show_lines=False)
+    t.add_column("#",         style="dim",  min_width=4,  justify="right", no_wrap=True)
+    t.add_column("slug",      style="cmd",  min_width=24, no_wrap=True)
+    t.add_column("platform",  style="info", min_width=8,  no_wrap=True)
+    t.add_column("compiler",  style="warn", min_width=10, no_wrap=True)
+    t.add_column("category",  style="dim",  min_width=14, no_wrap=True)
+    t.add_column("T-IDs",                   min_width=14, no_wrap=True)
+    t.add_column("title",                   min_width=36)
+
+    for i, e in enumerate(chunk, start + 1):
+        tids = " ".join(e["attack_ids"][:2])
+        if len(e["attack_ids"]) > 2:
+            tids += f" +{len(e['attack_ids'])-2}"
+        t.add_row(
+            str(i),
+            e["slug"],
+            e["platform"],
+            e["compiler"],
+            e["category"],
+            tids or "-",
+            e["title"][:36] + ("..." if len(e["title"]) > 36 else ""),
+        )
+
+    console.print()
+    console.print(t)
+    if pages > 1:
+        console.print(
+            f"  [dim]page {page+1}/{pages} -- "
+            f"press Enter for next page,  build <slug>  to compile[/dim]\n"
+        )
+    return pages
+
+
+def _render_history_table(builds: list[dict]) -> None:
+    if not builds:
+        console.print("  [dim](no builds yet)[/dim]\n")
+        return
+
+    t = Table(box=box.ASCII, show_header=True, header_style="heading",
+              border_style="dim", padding=(0, 1), title=f"Build History ({len(builds)} runs)",
+              show_lines=False)
+    t.add_column("#",        style="dim",    min_width=4,  justify="right", no_wrap=True)
+    t.add_column("build-id", style="cmd",    min_width=14, no_wrap=True)
+    t.add_column("slug",     style="info",   min_width=24, no_wrap=True)
+    t.add_column("status",                   min_width=8,  no_wrap=True)
+    t.add_column("date",     style="dim",    min_width=16, no_wrap=True)
+    t.add_column("duration", style="dim",    min_width=8,  justify="right", no_wrap=True)
+    t.add_column("rc",       style="dim",    min_width=4,  justify="right", no_wrap=True)
+
+    for i, b in enumerate(builds, 1):
+        status  = b.get("status", "?")
+        s_style = "ok" if status == "success" else \
+                  "err" if status == "failed" else "warn"
+        s_tag   = "[OK]" if status == "success" else \
+                  "[FAIL]" if status == "failed" else f"[{status}]"
+
+        params  = b.get("params", {})
+        if params.get("slug"):
+            slug = params["slug"][:24]
+        elif params.get("malware") or params.get("injection"):
+            parts = [params.get("malware",""), params.get("injection","")]
+            slug  = "/".join(p for p in parts if p)[:24]
+        else:
+            slug = b.get("id", "?")[:24]
+
+        created = (b.get("created") or "")[:16]
+
+        dur = ""
+        try:
+            if b.get("start_time") and b.get("end_time"):
+                s = _dt.fromisoformat(b["start_time"])
+                e2 = _dt.fromisoformat(b["end_time"])
+                secs = (e2 - s).total_seconds()
+                dur = f"{secs:.1f}s"
+        except Exception:
+            pass
+
+        rc = "" if b.get("returncode") is None else str(b["returncode"])
+
+        t.add_row(
+            str(i),
+            b.get("id", "?")[:14],
+            slug,
+            Text(s_tag, style=s_style),
+            created,
+            dur,
+            rc,
+        )
+
+    console.print()
+    console.print(t)
+    console.print()
+
+
+def _render_build_log(log: str, ok: bool) -> None:
+    """Print colorized compiler log lines."""
+    if not log:
+        return
+    console.print()
+    for line in log.splitlines():
+        stripped = line.strip()
+        if not stripped:
+            continue
+        if stripped.startswith("[ok]"):
+            console.print(f"  [ok]{stripped}[/ok]")
+        elif stripped.startswith("[fail]"):
+            console.print(f"  [err]{stripped}[/err]")
+        elif stripped.startswith("[warn]"):
+            console.print(f"  [warn]{stripped}[/warn]")
+        elif stripped.startswith("[compile]"):
+            console.print(f"  [cmd]{stripped}[/cmd]")
+        elif "error:" in stripped.lower():
+            console.print(f"  [err]{stripped}[/err]")
+        elif "warning:" in stripped.lower():
+            console.print(f"  [warn]{stripped}[/warn]")
+        else:
+            console.print(f"  [dim]{stripped}[/dim]")
+    console.print()
+
+
+def _render_build_detail(b: dict) -> None:
+    params  = b.get("params", {})
+    status  = b.get("status", "?")
+    s_style = "ok" if status == "success" else "err" if status == "failed" else "warn"
+
+    dur = ""
+    try:
+        if b.get("start_time") and b.get("end_time"):
+            s = _dt.fromisoformat(b["start_time"])
+            e2 = _dt.fromisoformat(b["end_time"])
+            dur = f"{(e2-s).total_seconds():.1f}s"
+    except Exception:
+        pass
+
+    meta = (
+        f"  ID       : {b.get('id','?')}\n"
+        f"  Slug     : {params.get('slug', '?')}\n"
+        f"  Platform : {params.get('platform', '?')}\n"
+        f"  Compiler : {params.get('compiler', '?')}\n"
+        f"  Status   : {status}\n"
+        f"  Date     : {(b.get('created') or '')[:19]}\n"
+        f"  Duration : {dur or '?'}\n"
+        f"  rc       : {b.get('returncode','?')}"
+    )
+    console.print()
+    console.print(Panel(meta,
+                        title=f"[heading] Build: {b.get('id','?')} [/heading]",
+                        border_style=s_style, box=box.ASCII))
+
+    log = b.get("output") or b.get("log", "") or ""
+    if log:
+        lines = log.splitlines()
+        if len(lines) > 60:
+            with console.pager(styles=True):
+                _render_build_log(log, status == "success")
+        else:
+            _render_build_log(log, status == "success")
+
+
+def run_builder() -> None:
+    """Interactive builder sub-REPL."""
+    try:
+        import discovery as _disc
+    except ImportError as exc:
+        console.print(f"[err][!] discovery module unavailable: {exc}[/err]")
+        return
+    try:
+        import compiler as _compiler
+    except ImportError as exc:
+        console.print(f"[err][!] compiler module unavailable: {exc}[/err]")
+        return
+    try:
+        import db as _db
+    except ImportError as exc:
+        console.print(f"[err][!] db module unavailable: {exc}[/err]")
+        return
+
+    with console.status("[info]scanning modules...[/info]", spinner="dots"):
+        all_mods = [m for m in _disc.scan_all() if m.get("compilable", True)]
+
+    slug_map: dict[str, dict] = {m["slug"]: m for m in all_mods}
+    all_slugs = sorted(slug_map.keys())
+
+    completer = WordCompleter(BUILDER_COMMANDS + all_slugs, ignore_case=True)
+    session: PromptSession = PromptSession(
+        history=InMemoryHistory(),
+        completer=completer,
+        style=PT_STYLE,
+    )
+
+    win_n = sum(1 for m in all_mods if m["platform"] == "windows")
+    lin_n = sum(1 for m in all_mods if m["platform"] == "linux")
+
+    console.print()
+    console.print(Panel(
+        f"  {len(all_mods)} compilable modules  |  "
+        f"{win_n} Windows  {lin_n} Linux\n"
+        f"  type  help  for commands,  list  to browse,  back  to return",
+        title="[heading] Builder [/heading]",
+        border_style="cyan",
+        box=box.ASCII,
+    ))
+    console.print()
+
+    current_view: list[dict] = all_mods
+    current_title = "Compilable Modules"
+    current_page  = 0
+    total_pages   = 0
+
+    while True:
+        try:
+            raw = session.prompt("peekaboo [builder] > ", style=PT_STYLE).strip()
+        except (KeyboardInterrupt, EOFError):
+            console.print("\n[dim]use  back  to return[/dim]")
+            continue
+
+        if not raw:
+            if total_pages > 1 and current_page + 1 < total_pages:
+                current_page += 1
+                total_pages = _render_build_table(
+                    current_view, current_title, current_page
+                )
+            continue
+
+        parts = raw.split()
+        cmd   = parts[0].lower()
+        args  = parts[1:]
+
+        # -- back -------------------------------------------------------------
+        if cmd in ("back", "exit", "quit"):
+            break
+
+        # -- help -------------------------------------------------------------
+        elif cmd == "help":
+            show_help("builder", args[0] if args else None)
+
+        # -- list [filter] ----------------------------------------------------
+        elif cmd == "list":
+            if args:
+                f = args[0].lower()
+                if f in ("windows", "linux", "macos"):
+                    current_view = [m for m in all_mods if m["platform"] == f]
+                    current_title = f"Compilable Modules: platform={f}"
+                else:
+                    current_view = [m for m in all_mods
+                                    if f in m["category"].lower()]
+                    current_title = f"Compilable Modules: category~{f}"
+                if not current_view:
+                    console.print(
+                        f"  [warn][!] no compilable modules matching '{f}'[/warn]\n"
+                    )
+                    continue
+            else:
+                current_view  = all_mods
+                current_title = "Compilable Modules"
+            current_page = 0
+            total_pages  = _render_build_table(
+                current_view, current_title, current_page
+            )
+
+        # -- search -----------------------------------------------------------
+        elif cmd == "search":
+            if not args:
+                console.print("[warn][!] usage: search <query>[/warn]")
+                continue
+            q = " ".join(args).lower()
+            hits = [
+                m for m in all_mods
+                if q in m["slug"].lower()
+                or q in m["title"].lower()
+                or q in m["category"].lower()
+                or any(q in tid.lower() for tid in m["attack_ids"])
+            ]
+            if not hits:
+                console.print(f"  [warn][!] no results for '{q}'[/warn]\n")
+                continue
+            current_view  = hits
+            current_title = f"Search: {q}"
+            current_page  = 0
+            total_pages   = _render_build_table(
+                current_view, current_title, current_page
+            )
+
+        # -- build <slug> -----------------------------------------------------
+        elif cmd == "build":
+            if not args:
+                console.print("[warn][!] usage: build <slug>[/warn]")
+                continue
+            slug = args[0]
+            mod = slug_map.get(slug)
+            if not mod:
+                matches = [s for s in slug_map if slug in s]
+                if len(matches) == 1:
+                    slug = matches[0]
+                    mod  = slug_map[slug]
+                elif len(matches) > 1:
+                    console.print(
+                        f"  [warn][!] ambiguous '{slug}': "
+                        f"{', '.join(matches[:5])}"
+                        f"{'...' if len(matches) > 5 else ''}[/warn]\n"
+                    )
+                    continue
+                else:
+                    console.print(f"  [err][!] module not found: '{slug}'[/err]\n")
+                    continue
+
+            # pre-build summary
+            console.print()
+            console.print(Panel(
+                f"  Slug     : {mod['slug']}\n"
+                f"  Title    : {mod['title']}\n"
+                f"  Platform : {mod['platform']}\n"
+                f"  Compiler : {mod['compiler']}\n"
+                f"  Source   : {mod['src_path']}",
+                title="[heading] Build: Pre-flight [/heading]",
+                border_style="cyan", box=box.ASCII,
+            ))
+            console.print()
+
+            session_id = _uuid.uuid4().hex[:12]
+            build_id   = f"cli-{_uuid.uuid4().hex[:8]}"
+            start_t    = _dt.now()
+
+            with console.status(
+                f"[info]compiling {mod['slug']} ({mod['compiler']})...[/info]",
+                spinner="dots"
+            ):
+                ok, log, out_path = _compiler.compile_module(mod["id"], session_id)
+
+            end_t   = _dt.now()
+            elapsed = (end_t - start_t).total_seconds()
+
+            _render_build_log(log, ok)
+
+            if ok:
+                out_size = out_path.stat().st_size if out_path and out_path.exists() else 0
+                console.print(Panel(
+                    f"  Output : {out_path}\n"
+                    f"  Size   : {out_size:,} bytes  ({out_size//1024} KB)\n"
+                    f"  Time   : {elapsed:.2f}s",
+                    title="[ok] BUILD OK [/ok]",
+                    border_style="ok", box=box.ASCII,
+                ))
+            else:
+                console.print(Panel(
+                    f"  Slug     : {mod['slug']}\n"
+                    f"  Compiler : {mod['compiler']}\n"
+                    f"  Elapsed  : {elapsed:.2f}s\n"
+                    f"  [dim]Check log above for error details[/dim]",
+                    title="[err] BUILD FAILED [/err]",
+                    border_style="err", box=box.ASCII,
+                ))
+
+            console.print()
+
+            # save to db
+            try:
+                _db.save_build({
+                    "id":         build_id,
+                    "params":     {
+                        "slug":     mod["slug"],
+                        "platform": mod["platform"],
+                        "compiler": mod["compiler"],
+                    },
+                    "status":     "success" if ok else "failed",
+                    "output":     log,
+                    "returncode": 0 if ok else 1,
+                    "created":    start_t.isoformat(),
+                    "start_time": start_t.isoformat(),
+                    "end_time":   end_t.isoformat(),
+                })
+                console.print(f"  [dim]build saved: {build_id}[/dim]\n")
+            except Exception as exc:
+                console.print(f"  [warn][!] db save error: {exc}[/warn]\n")
+
+        # -- history [N] ------------------------------------------------------
+        elif cmd == "history":
+            limit = 20
+            if args:
+                try:
+                    limit = max(1, min(int(args[0]), 100))
+                except ValueError:
+                    console.print("[warn][!] usage: history [N]  (N is a number)[/warn]")
+                    continue
+            try:
+                builds = _db.get_builds(limit)
+                _render_history_table(builds)
+            except Exception as exc:
+                console.print(f"  [err][!] db error: {exc}[/err]\n")
+
+        # -- show <build-id> --------------------------------------------------
+        elif cmd == "show":
+            if not args:
+                console.print("[warn][!] usage: show <build-id>[/warn]")
+                continue
+            bid = args[0]
+            try:
+                b = _db.get_build(bid)
+            except Exception as exc:
+                console.print(f"  [err][!] db error: {exc}[/err]\n")
+                continue
+            if not b:
+                # try prefix match from recent builds
+                try:
+                    recent = _db.get_builds(100)
+                    matches = [x for x in recent if x["id"].startswith(bid)]
+                    if len(matches) == 1:
+                        b = matches[0]
+                    elif len(matches) > 1:
+                        console.print(
+                            f"  [warn][!] ambiguous id prefix '{bid}': "
+                            f"{', '.join(x['id'] for x in matches[:4])}[/warn]\n"
+                        )
+                        continue
+                    else:
+                        console.print(f"  [err][!] build not found: '{bid}'[/err]\n")
+                        continue
+                except Exception as exc:
+                    console.print(f"  [err][!] db error: {exc}[/err]\n")
+                    continue
+            _render_build_detail(b)
+
+        else:
+            console.print(
+                f"[warn][!] unknown command: {cmd}  "
+                f"(type  help  for commands)[/warn]"
+            )
+
+
 # -- top-level REPL ------------------------------------------------------------
 
 def main() -> None:
@@ -1901,6 +2556,9 @@ def main() -> None:
 
         elif cmd == "artifacts":
             run_artifacts()
+
+        elif cmd == "builder":
+            run_builder()
 
         else:
             console.print(

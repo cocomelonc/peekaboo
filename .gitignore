@@ -6,6 +6,9 @@ dashboard/peekaboo.db*
 dashboard/builds.json
 data/enterprise-attack.json
 # Byte-compiled / optimized / DLL files
+*_pycache_*
+*__pycache__*
+__pycache__/*
 __pycache__/
 *.py[codz]
 *$py.class
