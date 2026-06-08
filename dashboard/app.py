@@ -1410,6 +1410,108 @@ def api_shellcode_upload():
     return jsonify(stats)
 
 
+# -- Evasion Score + Obfuscation Lab -------------------------------------------
+
+try:
+    import evasion as _evasion
+    HAS_EVASION = True
+except ImportError:
+    HAS_EVASION = False
+
+
+@app.route("/api/evasion/analyse", methods=["POST"])
+def api_evasion_analyse():
+    if not HAS_EVASION:
+        return jsonify({"ok": False, "error": "evasion module not available"}), 503
+    data = request.get_json(force=True) or {}
+    session_id = data.get("session_id", "").strip()
+    filename   = data.get("filename", "").strip()
+    if not session_id or not filename:
+        return jsonify({"ok": False, "error": "session_id and filename required"}), 400
+    filepath = (SAMPLES_DIR / session_id / filename).resolve()
+    if not str(filepath).startswith(str(SAMPLES_DIR.resolve())):
+        return jsonify({"ok": False, "error": "invalid path"}), 400
+    if not filepath.exists():
+        return jsonify({"ok": False, "error": "file not found"}), 404
+    raw = filepath.read_bytes()
+    result = _evasion.analyse(raw, filename)
+    return jsonify(result)
+
+
+@app.route("/api/evasion/upload", methods=["POST"])
+def api_evasion_upload():
+    if not HAS_EVASION:
+        return jsonify({"ok": False, "error": "evasion module not available"}), 503
+    f = request.files.get("file")
+    if not f:
+        return jsonify({"ok": False, "error": "no file uploaded"}), 400
+    raw = f.read(1024 * 1024 * 32)  # 32 MB cap
+    if not raw:
+        return jsonify({"ok": False, "error": "empty file"}), 400
+    result = _evasion.analyse(raw, f.filename or "uploaded")
+    return jsonify(result)
+
+
+@app.route("/api/evasion/patch", methods=["POST"])
+def api_evasion_patch():
+    """Apply selected PE patch transforms; return patched binary as download."""
+    if not HAS_EVASION:
+        return jsonify({"ok": False, "error": "evasion module not available"}), 503
+
+    patch_ids: list[str] = []
+    raw: bytes = b""
+    out_name = "patched.exe"
+
+    if request.content_type and "multipart" in request.content_type:
+        f = request.files.get("file")
+        if not f:
+            return jsonify({"ok": False, "error": "no file"}), 400
+        raw = f.read(1024 * 1024 * 32)
+        out_name = "patched_" + (f.filename or "binary")
+        try:
+            patch_ids = json.loads(request.form.get("patches", "[]"))
+        except Exception:
+            patch_ids = []
+    else:
+        data = request.get_json(force=True) or {}
+        patch_ids = data.get("patches", [])
+        session_id = data.get("session_id", "").strip()
+        filename   = data.get("filename", "").strip()
+        if session_id and filename:
+            filepath = (SAMPLES_DIR / session_id / filename).resolve()
+            if not str(filepath).startswith(str(SAMPLES_DIR.resolve())):
+                return jsonify({"ok": False, "error": "invalid path"}), 400
+            if filepath.exists():
+                raw = filepath.read_bytes()
+                out_name = "patched_" + filename
+
+    if not raw:
+        return jsonify({"ok": False, "error": "no binary data"}), 400
+    if not patch_ids:
+        return jsonify({"ok": False, "error": "no patches requested"}), 400
+
+    allowed_patches = {
+        "timestamp", "fake_timestamp", "rich_header", "debug_dir",
+        "section_rename", "checksum", "dos_stub", "stomp_dos_header",
+        "entropy_padding", "set_aslr_dep", "clear_high_entropy_va",
+        "flip_subsystem", "stomp_rwx_flags", "spoof_imagebase",
+        "wipe_overlay", "zero_bound_imports", "zero_load_config",
+        "zero_exports", "zero_security_dir",
+    }
+    patch_ids = [p for p in patch_ids if p in allowed_patches]
+
+    patched, applied = _evasion.apply_patches(raw, patch_ids)
+
+    return Response(
+        patched,
+        mimetype="application/octet-stream",
+        headers={
+            "Content-Disposition": f'attachment; filename="{out_name}"',
+            "X-Patches-Applied":   "; ".join(applied),
+        }
+    )
+
+
 # -- Artifact Map (Sigma -> ATT&CK technique artifacts) -------------------------
 
 try:

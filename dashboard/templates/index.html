@@ -303,6 +303,50 @@ code{font-family:var(--mono);font-size:12px;background:var(--bg4);padding:1px 5p
 .art-code-item{font-family:var(--mono);font-size:11px;padding:5px 10px;background:var(--bg3);border-radius:4px;margin-bottom:4px;border:1px solid var(--sep);word-break:break-all;color:var(--text2)}
 .art-code-item:hover{background:var(--bg4);color:var(--text)}
 
+/* -- evasion lab -- */
+.ev-layout{display:grid;grid-template-columns:1fr 340px;gap:18px;align-items:start}
+.ev-gauge-wrap{display:flex;flex-direction:column;align-items:center;padding:24px 16px 16px}
+.ev-gauge-svg{display:block}
+.ev-score-num{font-family:var(--mono);font-size:42px;font-weight:700;text-align:center;line-height:1;margin-top:-8px}
+.ev-grade{font-size:14px;font-weight:700;padding:3px 14px;border-radius:20px;display:inline-block;margin:6px auto 0;letter-spacing:.5px}
+.ev-grade.A{background:rgba(86,217,138,.2);color:var(--green);border:1px solid rgba(86,217,138,.4)}
+.ev-grade.B{background:rgba(114,217,245,.15);color:var(--cyan);border:1px solid rgba(114,217,245,.35)}
+.ev-grade.C{background:rgba(255,209,102,.15);color:var(--yellow);border:1px solid rgba(255,209,102,.35)}
+.ev-grade.D{background:rgba(255,179,71,.15);color:var(--orange);border:1px solid rgba(255,179,71,.35)}
+.ev-grade.F{background:rgba(255,120,117,.15);color:var(--red);border:1px solid rgba(255,120,117,.35)}
+.ev-cat-bar{display:flex;align-items:center;gap:10px;margin-bottom:8px}
+.ev-cat-label{font-size:11px;color:var(--dim);width:90px;flex-shrink:0}
+.ev-cat-track{flex:1;height:7px;background:var(--bg3);border-radius:4px;overflow:hidden}
+.ev-cat-fill{height:100%;border-radius:4px;transition:width .5s ease}
+.ev-cat-val{font-family:var(--mono);font-size:11px;width:30px;text-align:right;flex-shrink:0}
+.ev-finding{padding:11px 14px;border-radius:7px;margin-bottom:7px;border-left:3px solid;background:var(--bg3);transition:background .12s}
+.ev-finding:hover{background:var(--bg4)}
+.ev-finding.critical{border-color:var(--red);background:rgba(255,120,117,.07)}
+.ev-finding.high{border-color:var(--orange);background:rgba(255,179,71,.07)}
+.ev-finding.medium{border-color:var(--yellow);background:rgba(255,209,102,.07)}
+.ev-finding.low{border-color:var(--blue);background:rgba(97,175,239,.07)}
+.ev-finding.ok{border-color:var(--green);background:rgba(86,217,138,.05)}
+.ev-finding.info{border-color:var(--dim);background:var(--bg3)}
+.ev-finding-title{font-size:13px;font-weight:600;margin-bottom:3px;line-height:1.3}
+.ev-finding-detail{font-size:11px;color:var(--text2);margin-bottom:4px;line-height:1.4}
+.ev-finding-sug{font-size:11px;color:var(--cyan);font-style:italic;display:flex;gap:5px;align-items:flex-start}
+.ev-sev{font-size:10px;font-weight:700;padding:1px 7px;border-radius:3px;text-transform:uppercase;flex-shrink:0}
+.ev-sev.critical{background:rgba(255,120,117,.2);color:var(--red)}
+.ev-sev.high{background:rgba(255,179,71,.18);color:var(--orange)}
+.ev-sev.medium{background:rgba(255,209,102,.15);color:var(--yellow)}
+.ev-sev.low{background:rgba(97,175,239,.12);color:var(--blue)}
+.ev-sev.ok{background:rgba(86,217,138,.15);color:var(--green)}
+.ev-sev.info{background:var(--bg4);color:var(--dim)}
+.ev-patch-row{display:flex;align-items:flex-start;gap:10px;padding:10px 12px;background:var(--bg3);border-radius:6px;margin-bottom:6px;cursor:pointer;transition:background .12s;border:1px solid var(--sep)}
+.ev-patch-row:hover{background:var(--bg4)}
+.ev-patch-row input[type=checkbox]{accent-color:var(--green);width:15px;height:15px;flex-shrink:0;margin-top:2px;cursor:pointer}
+.ev-patch-label{font-size:13px;font-weight:600;color:var(--text)}
+.ev-patch-desc{font-size:11px;color:var(--dim);margin-top:2px}
+.ev-section-row{display:flex;align-items:center;gap:8px;padding:7px 10px;background:var(--bg3);border-radius:5px;margin-bottom:4px;font-size:12px;font-family:var(--mono)}
+.ev-import-tag{display:inline-flex;align-items:center;gap:5px;padding:3px 9px;border-radius:4px;font-size:11px;background:rgba(255,120,117,.1);border:1px solid rgba(255,120,117,.25);color:var(--red);font-family:var(--mono);margin:2px}
+.ev-upload-zone{border:2px dashed var(--sep);border-radius:8px;padding:28px;text-align:center;cursor:pointer;transition:border-color .2s,background .2s}
+.ev-upload-zone:hover,.ev-upload-zone.drag-over{border-color:var(--purple);background:rgba(198,120,221,.06)}
+
 /* -- APT campaign -- */
 .apt-layout{display:grid;grid-template-columns:340px 1fr;gap:18px;align-items:start}
 .apt-panel{background:var(--bg2);border:1px solid var(--sep);border-radius:var(--r);padding:18px}
@@ -414,6 +458,9 @@ code{font-family:var(--mono);font-size:12px;background:var(--bg4);padding:1px 5p
     </div>
     <div class="nav-item" onclick="showPanel('shellcode')" id="nav-shellcode">
       <span class="nav-icon">🧰</span> Shellcode
+    </div>
+    <div class="nav-item" onclick="showPanel('evasion')" id="nav-evasion">
+      <span class="nav-icon">😈</span> Evasion Lab
     </div>
     <div class="nav-item" onclick="showPanel('library')" id="nav-library">
       <span class="nav-icon">📦</span> Module Library
@@ -682,6 +729,159 @@ code{font-family:var(--mono);font-size:12px;background:var(--bg4);padding:1px 5p
       <div><span style="color:var(--dim)">MD5 </span><code id="sc-md5" style="color:var(--yellow)"></code></div>
       <div><span style="color:var(--dim)">SHA256 </span><code id="sc-sha256" style="color:var(--green);word-break:break-all"></code></div>
     </div>
+  </div>
+
+</div>
+
+<!-- ════════ EVASION LAB ════════ -->
+<div id="panel-evasion" class="panel">
+
+  <!-- source tabs -->
+  <div style="display:flex;gap:10px;margin-bottom:16px;align-items:center;flex-wrap:wrap">
+    <button class="btn btn-primary btn-sm" id="ev-tab-sample-btn" onclick="evSetTab('sample')">📦 From Sample</button>
+    <button class="btn btn-ghost btn-sm"   id="ev-tab-upload-btn" onclick="evSetTab('upload')">⬆️ Upload File</button>
+    <span style="margin-left:auto;font-size:12px;color:var(--dim)">entropy · import fingerprint · string indicators · PE structure · surgical patch transforms</span>
+  </div>
+
+  <!-- FROM SAMPLE -->
+  <div id="ev-src-sample">
+    <div class="card mb-16">
+      <div class="card-header">
+        <span style="font-size:20px">😈</span>
+        <div><div class="card-title">Evasion Score Analyser</div><div class="card-sub">select a compiled sample to score</div></div>
+        <button class="btn btn-ghost btn-sm" style="margin-left:auto" onclick="loadEvasionScanner()">↻ Refresh</button>
+      </div>
+      <div style="display:flex;gap:12px;align-items:center;flex-wrap:wrap;margin-top:8px">
+        <div class="vt-select" id="ev-session-drop" style="flex:1.5;min-width:220px">
+          <div class="vt-select-val" onclick="vtToggleDrop('ev-session-drop')">
+            <span id="ev-session-label" class="vt-ph">- select session -</span>
+            <span class="vt-select-arrow">▼</span>
+          </div>
+          <div class="vt-select-menu" id="ev-session-menu"></div>
+        </div>
+        <div class="vt-select" id="ev-file-drop" style="flex:1;min-width:180px">
+          <div class="vt-select-val" onclick="vtToggleDrop('ev-file-drop')">
+            <span id="ev-file-label" class="vt-ph">- select file -</span>
+            <span class="vt-select-arrow">▼</span>
+          </div>
+          <div class="vt-select-menu" id="ev-file-menu"></div>
+        </div>
+        <button class="btn btn-primary" id="ev-analyse-btn" onclick="evAnalyse()" disabled>⚡ Analyse</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- UPLOAD -->
+  <div id="ev-src-upload" style="display:none">
+    <div class="card mb-16">
+      <div class="card-header">
+        <span style="font-size:20px">😈</span>
+        <div><div class="card-title">Evasion Score Analyser</div><div class="card-sub">upload any PE binary to score</div></div>
+      </div>
+      <div class="ev-upload-zone" id="ev-drop-zone"
+           onclick="document.getElementById('ev-file-input').click()"
+           ondragover="event.preventDefault();this.classList.add('drag-over')"
+           ondragleave="this.classList.remove('drag-over')"
+           ondrop="evHandleDrop(event)">
+        <div style="font-size:32px;margin-bottom:8px">😈</div>
+        <div style="font-size:14px;font-weight:600;margin-bottom:4px">Drop PE binary here</div>
+        <div style="font-size:12px;color:var(--dim)">.exe / .dll / .sys - up to 32 MB</div>
+      </div>
+      <input type="file" id="ev-file-input" style="display:none" accept=".exe,.dll,.sys,.bin" onchange="evHandleFile(this)">
+    </div>
+  </div>
+
+  <!-- RESULTS -->
+  <div id="ev-results" style="display:none">
+
+    <!-- score + categories sidebar / findings main -->
+    <div class="ev-layout">
+
+      <!-- LEFT: findings list -->
+      <div>
+        <div class="card mb-16">
+          <div class="card-header">
+            <span style="font-size:16px">🔍</span>
+            <div class="card-title">Findings</div>
+            <div id="ev-finding-counts" style="margin-left:auto;font-size:12px;color:var(--dim)"></div>
+          </div>
+          <div id="ev-findings-list" style="margin-top:8px"></div>
+        </div>
+
+        <!-- PE sections -->
+        <div class="card mb-16" id="ev-sections-card" style="display:none">
+          <div class="card-header"><span style="font-size:16px">📋</span><div class="card-title">PE Sections</div></div>
+          <div id="ev-sections-list" style="margin-top:8px"></div>
+        </div>
+
+        <!-- suspicious imports -->
+        <div class="card" id="ev-imports-card" style="display:none">
+          <div class="card-header"><span style="font-size:16px">📦</span><div class="card-title">Flagged Imports</div></div>
+          <div id="ev-imports-list" style="margin-top:8px;display:flex;flex-wrap:wrap;gap:4px"></div>
+        </div>
+      </div>
+
+      <!-- RIGHT: score gauge + patches -->
+      <div>
+        <!-- score gauge card -->
+        <div class="card mb-16">
+          <div class="ev-gauge-wrap">
+            <svg class="ev-gauge-svg" width="180" height="110" viewBox="0 0 180 110">
+              <path d="M20,100 A70,70 0 0,1 160,100" fill="none" stroke="var(--bg3)" stroke-width="14" stroke-linecap="round"/>
+              <path id="ev-gauge-arc" d="M20,100 A70,70 0 0,1 160,100" fill="none" stroke="var(--green)" stroke-width="14" stroke-linecap="round"
+                    stroke-dasharray="220" stroke-dashoffset="220" style="transition:stroke-dashoffset .8s ease,stroke .4s"/>
+              <text x="90" y="85" text-anchor="middle" fill="var(--dim)" font-size="11" font-family="var(--mono)">EVASION SCORE</text>
+            </svg>
+            <div class="ev-score-num" id="ev-score-num">-</div>
+            <div id="ev-grade-badge" style="text-align:center;margin-top:6px"></div>
+          </div>
+          <div style="padding:0 16px 16px">
+            <div class="ev-cat-bar">
+              <div class="ev-cat-label">Entropy</div>
+              <div class="ev-cat-track"><div class="ev-cat-fill" id="ev-bar-entropy" style="width:0%;background:var(--blue)"></div></div>
+              <div class="ev-cat-val" id="ev-val-entropy">-</div>
+            </div>
+            <div class="ev-cat-bar">
+              <div class="ev-cat-label">Imports</div>
+              <div class="ev-cat-track"><div class="ev-cat-fill" id="ev-bar-imports" style="width:0%;background:var(--orange)"></div></div>
+              <div class="ev-cat-val" id="ev-val-imports">-</div>
+            </div>
+            <div class="ev-cat-bar">
+              <div class="ev-cat-label">Strings</div>
+              <div class="ev-cat-track"><div class="ev-cat-fill" id="ev-bar-strings" style="width:0%;background:var(--purple)"></div></div>
+              <div class="ev-cat-val" id="ev-val-strings">-</div>
+            </div>
+            <div class="ev-cat-bar">
+              <div class="ev-cat-label">PE Structure</div>
+              <div class="ev-cat-track"><div class="ev-cat-fill" id="ev-bar-structure" style="width:0%;background:var(--green)"></div></div>
+              <div class="ev-cat-val" id="ev-val-structure">-</div>
+            </div>
+          </div>
+          <div style="padding:0 16px 12px;border-top:1px solid var(--sep);margin-top:4px;padding-top:12px">
+            <div style="font-size:11px;color:var(--dim);display:flex;gap:16px;flex-wrap:wrap" id="ev-file-stats"></div>
+          </div>
+        </div>
+
+        <!-- patch transforms card -->
+        <div class="card" id="ev-patches-card" style="display:none">
+          <div class="card-header">
+            <span style="font-size:16px">🔧</span>
+            <div><div class="card-title">Patch Transforms</div><div class="card-sub">apply surgical PE modifications</div></div>
+          </div>
+          <div id="ev-patch-list" style="margin-top:10px"></div>
+          <div style="display:flex;gap:8px;margin-top:12px">
+            <button class="btn btn-primary" onclick="evApplyPatches()" id="ev-patch-btn">🔧 Apply &amp; Download</button>
+            <button class="btn btn-ghost btn-sm" onclick="evSelectAllPatches()">Select All</button>
+          </div>
+          <div id="ev-patch-status" style="font-size:12px;color:var(--dim);margin-top:8px;min-height:18px"></div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- empty state -->
+  <div id="ev-empty" class="empty" style="margin-top:40px">
+    Select a compiled sample or upload a PE binary, then click <strong>Analyse</strong> to score evasion potential and get improvement suggestions.
   </div>
 
 </div>
@@ -1333,6 +1533,7 @@ let mitreGroups    = [];
 const PANEL_META = {
   builder:   ['Builder',           'compile malware for EDR benchmarking'],
   shellcode: ['Shellcode',         'parse · encode · convert · analyse shellcode'],
+  evasion:   ['Evasion Lab',       'score AV evasion potential + apply PE patch transforms'],
   library:   ['Module Library',   'browse 190+ techniques from meow & blog'],
   samples:  ['Samples',          'compiled binaries organized by session'],
   apt:      ['APT Campaign',     'Malpedia -> TTPs -> auto-compile pipeline'],
@@ -1360,6 +1561,7 @@ function showPanel(id) {
   document.getElementById('topbar-sub').textContent = sub;
   currentPanel = id;
 
+  if (id === 'evasion')   loadEvasionScanner();
   if (id === 'library' && libModules.length === 0) loadLibrary();
   if (id === 'samples')   loadSamples();
   if (id === 'apt')       loadPipelineSessions();
@@ -3794,6 +3996,293 @@ function _esc(s) {
 }
 
 // ── rebuild SSE ───────────────────────────────────────────────
+
+// =============================================================
+// Evasion Lab
+// =============================================================
+
+let _evSession = null;
+let _evFile    = null;
+let _evResult  = null;
+let _evTab     = 'sample';
+let _evUploadData = null;  // {raw: ArrayBuffer, name: string} for upload tab
+
+function evSetTab(tab) {
+  _evTab = tab;
+  document.getElementById('ev-src-sample').style.display = tab === 'sample' ? '' : 'none';
+  document.getElementById('ev-src-upload').style.display = tab === 'upload' ? '' : 'none';
+  document.getElementById('ev-tab-sample-btn').className = 'btn btn-sm ' + (tab === 'sample' ? 'btn-primary' : 'btn-ghost');
+  document.getElementById('ev-tab-upload-btn').className = 'btn btn-sm ' + (tab === 'upload' ? 'btn-primary' : 'btn-ghost');
+  document.getElementById('ev-results').style.display = 'none';
+  document.getElementById('ev-empty').style.display = '';
+}
+
+async function loadEvasionScanner() {
+  if (_evTab !== 'sample') return;
+  try {
+    const samples = await fetch('/api/samples').then(r => r.json());
+    const menu = document.getElementById('ev-session-menu');
+    menu.innerHTML = '';
+    if (!samples.length) {
+      menu.innerHTML = '<div class="vt-select-opt text-dim" style="font-style:italic">No samples yet</div>';
+      return;
+    }
+    samples.forEach(s => {
+      const d = document.createElement('div');
+      d.className = 'vt-select-opt';
+      d.textContent = `${s.session_id} · ${s.actor || 'unknown'} · ${s.files?.length || 0} file(s)`;
+      d.onclick = () => {
+        _evSession = s.session_id;
+        document.getElementById('ev-session-label').textContent = `${s.session_id} (${s.actor || 'no actor'})`;
+        document.getElementById('ev-session-label').classList.remove('vt-ph');
+        document.getElementById('ev-session-drop').classList.remove('vt-open');
+        evUpdateFileList(s);
+      };
+      menu.appendChild(d);
+    });
+  } catch(e) { toast('Error loading samples: ' + e.message, 'err'); }
+}
+
+function evUpdateFileList(sample) {
+  const menu  = document.getElementById('ev-file-menu');
+  const label = document.getElementById('ev-file-label');
+  _evFile = null;
+  label.textContent = '- select file -';
+  label.classList.add('vt-ph');
+  document.getElementById('ev-analyse-btn').disabled = true;
+  menu.innerHTML = '';
+  (sample.files || []).forEach(f => {
+    const d = document.createElement('div');
+    d.className = 'vt-select-opt';
+    d.textContent = `${f.name} (${(f.size/1024).toFixed(1)} KB)`;
+    d.onclick = () => {
+      _evFile = f.name;
+      label.textContent = f.name;
+      label.classList.remove('vt-ph');
+      document.getElementById('ev-file-drop').classList.remove('vt-open');
+      document.getElementById('ev-analyse-btn').disabled = false;
+    };
+    menu.appendChild(d);
+  });
+}
+
+async function evAnalyse() {
+  if (!_evSession || !_evFile) return;
+  _evShowLoading();
+  try {
+    const r = await fetch('/api/evasion/analyse', {
+      method: 'POST',
+      headers: {'Content-Type': 'application/json'},
+      body: JSON.stringify({session_id: _evSession, filename: _evFile}),
+    });
+    const d = await r.json();
+    if (!d.ok) { toast(d.error, 'err'); return; }
+    _evResult = d;
+    _evRenderResults(d);
+  } catch(e) { toast('Analysis failed: ' + e.message, 'err'); }
+}
+
+function evHandleDrop(ev) {
+  ev.preventDefault();
+  document.getElementById('ev-drop-zone').classList.remove('drag-over');
+  const f = ev.dataTransfer.files[0];
+  if (f) evUploadFile(f);
+}
+
+function evHandleFile(input) {
+  const f = input.files[0];
+  if (f) evUploadFile(f);
+  input.value = '';
+}
+
+async function evUploadFile(file) {
+  _evShowLoading();
+  const fd = new FormData();
+  fd.append('file', file);
+  try {
+    const r = await fetch('/api/evasion/upload', {method:'POST', body: fd});
+    const d = await r.json();
+    if (!d.ok) { toast(d.error, 'err'); _evShowEmpty(); return; }
+    _evResult = d;
+    _evUploadData = {name: file.name, file: file};
+    _evRenderResults(d);
+  } catch(e) { toast('Upload failed: ' + e.message, 'err'); _evShowEmpty(); }
+}
+
+function _evShowLoading() {
+  document.getElementById('ev-empty').style.display = 'none';
+  document.getElementById('ev-results').style.display = 'none';
+  // could add a spinner here
+}
+
+function _evShowEmpty() {
+  document.getElementById('ev-empty').style.display = '';
+  document.getElementById('ev-results').style.display = 'none';
+}
+
+function _evRenderResults(d) {
+  document.getElementById('ev-empty').style.display   = 'none';
+  document.getElementById('ev-results').style.display = '';
+
+  // ── score gauge ──────────────────────────────────────────
+  const score = d.score;
+  const arcEl = document.getElementById('ev-gauge-arc');
+  const arcLen = 220;
+  const dashOff = arcLen - (score / 100) * arcLen;
+  const scoreColor = score >= 80 ? 'var(--green)' : score >= 65 ? 'var(--cyan)' :
+                     score >= 50 ? 'var(--yellow)' : score >= 35 ? 'var(--orange)' : 'var(--red)';
+  arcEl.style.stroke = scoreColor;
+  setTimeout(() => { arcEl.style.strokeDashoffset = dashOff; }, 50);
+
+  document.getElementById('ev-score-num').textContent = score;
+  document.getElementById('ev-score-num').style.color = scoreColor;
+  document.getElementById('ev-grade-badge').innerHTML =
+    `<span class="ev-grade ${d.grade}">${d.grade} - ${_evGradeLabel(d.grade)}</span>`;
+
+  // ── category bars ─────────────────────────────────────────
+  const cats = [
+    ['entropy', d.score_entropy], ['imports', d.score_imports],
+    ['strings', d.score_strings], ['structure', d.score_structure],
+  ];
+  cats.forEach(([cat, val]) => {
+    document.getElementById(`ev-bar-${cat}`).style.width = (val / 25 * 100) + '%';
+    document.getElementById(`ev-val-${cat}`).textContent = val + '/25';
+  });
+
+  // ── file stats ────────────────────────────────────────────
+  document.getElementById('ev-file-stats').innerHTML = `
+    <span>📄 <strong>${d.filename || 'binary'}</strong></span>
+    <span>${(d.size/1024).toFixed(1)} KB</span>
+    <span>entropy <strong>${d.file_entropy}</strong></span>
+    <span>${d.is_pe ? '✓ PE' : '⚠ non-PE'}</span>
+    <span style="font-family:var(--mono);font-size:10px;color:var(--dim)">${d.md5.slice(0,16)}…</span>`;
+
+  // ── findings ──────────────────────────────────────────────
+  const counts = {critical:0, high:0, medium:0, low:0, ok:0};
+  (d.findings || []).forEach(f => { counts[f.severity] = (counts[f.severity]||0) + 1; });
+  const countHtml = Object.entries(counts)
+    .filter(([,v]) => v > 0)
+    .map(([k,v]) => `<span class="ev-sev ${k}" style="margin-left:4px">${v} ${k}</span>`)
+    .join('');
+  document.getElementById('ev-finding-counts').innerHTML = countHtml;
+
+  const fl = document.getElementById('ev-findings-list');
+  fl.innerHTML = (d.findings || []).map(f => `
+    <div class="ev-finding ${f.severity}">
+      <div style="display:flex;align-items:flex-start;gap:8px;margin-bottom:4px">
+        <span class="ev-sev ${f.severity}">${f.severity}</span>
+        <div class="ev-finding-title">${_esc(f.title)}</div>
+      </div>
+      ${f.detail ? `<div class="ev-finding-detail">${_esc(f.detail)}</div>` : ''}
+      ${f.suggestion ? `<div class="ev-finding-sug"><span>→</span><span>${_esc(f.suggestion)}</span></div>` : ''}
+    </div>`).join('');
+
+  // ── PE sections ───────────────────────────────────────────
+  const secs = d.sections || [];
+  if (secs.length) {
+    document.getElementById('ev-sections-card').style.display = '';
+    document.getElementById('ev-sections-list').innerHTML = secs.map(s => {
+      const entColor = s.entropy > 7.0 ? 'var(--red)' : s.entropy > 6.5 ? 'var(--yellow)' : 'var(--green)';
+      const flags = [s.exec && 'X', s.write && 'W', s.read && 'R'].filter(Boolean).join('');
+      return `<div class="ev-section-row">
+        <span style="width:80px;font-weight:700;color:var(--cyan)">${_esc(s.name)}</span>
+        <span style="color:${entColor};width:45px">H=${s.entropy}</span>
+        <span style="color:var(--dim);width:80px">${(s.size/1024).toFixed(1)}KB</span>
+        <span style="color:${s.rwx ? 'var(--red)' : 'var(--dim)'}">[ ${flags} ]</span>
+        ${s.rwx ? '<span style="color:var(--red);font-size:10px;margin-left:6px">⚠ RWX!</span>' : ''}
+      </div>`;
+    }).join('');
+  } else {
+    document.getElementById('ev-sections-card').style.display = 'none';
+  }
+
+  // ── suspicious imports ────────────────────────────────────
+  const imps = d.suspicious_imports || [];
+  if (imps.length) {
+    document.getElementById('ev-imports-card').style.display = '';
+    document.getElementById('ev-imports-list').innerHTML = imps.map(imp =>
+      `<span class="ev-import-tag" title="${_esc(imp.reason)}">${_esc(imp.name)}</span>`
+    ).join('');
+  } else {
+    document.getElementById('ev-imports-card').style.display = 'none';
+  }
+
+  // ── patch transforms ──────────────────────────────────────
+  const patches = d.patches_available || [];
+  if (patches.length) {
+    document.getElementById('ev-patches-card').style.display = '';
+    document.getElementById('ev-patch-list').innerHTML = patches.map(p => `
+      <label class="ev-patch-row">
+        <input type="checkbox" class="ev-patch-cb" data-id="${p.id}" checked>
+        <div>
+          <div class="ev-patch-label">${_esc(p.label)}</div>
+          <div class="ev-patch-desc">${_esc(p.desc)}</div>
+        </div>
+      </label>`).join('');
+    document.getElementById('ev-patch-status').textContent = '';
+  } else {
+    document.getElementById('ev-patches-card').style.display = 'none';
+  }
+}
+
+function _evGradeLabel(g) {
+  return {A:'Strong evasion',B:'Good evasion',C:'Moderate risk',D:'High detection risk',F:'Easily detected'}[g] || '';
+}
+
+function evSelectAllPatches() {
+  document.querySelectorAll('.ev-patch-cb').forEach(cb => cb.checked = true);
+}
+
+async function evApplyPatches() {
+  if (!_evResult) return;
+  const checked = [...document.querySelectorAll('.ev-patch-cb:checked')].map(cb => cb.dataset.id);
+  if (!checked.length) { toast('Select at least one patch', 'info'); return; }
+
+  const btn = document.getElementById('ev-patch-btn');
+  btn.disabled = true;
+  btn.textContent = '⏳ Patching…';
+  document.getElementById('ev-patch-status').textContent = 'Applying patches…';
+
+  try {
+    let resp;
+    if (_evTab === 'upload' && _evUploadData?.file) {
+      const fd = new FormData();
+      fd.append('file', _evUploadData.file);
+      fd.append('patches', JSON.stringify(checked));
+      resp = await fetch('/api/evasion/patch', {method:'POST', body: fd});
+    } else {
+      resp = await fetch('/api/evasion/patch', {
+        method: 'POST',
+        headers: {'Content-Type': 'application/json'},
+        body: JSON.stringify({session_id: _evSession, filename: _evFile, patches: checked}),
+      });
+    }
+
+    if (!resp.ok) {
+      const err = await resp.json().catch(() => ({error: resp.statusText}));
+      toast(err.error || 'Patch failed', 'err');
+      return;
+    }
+
+    const applied = resp.headers.get('X-Patches-Applied') || '';
+    const blob = await resp.blob();
+    const fname = resp.headers.get('Content-Disposition')?.match(/filename="([^"]+)"/)?.[1] || 'patched.exe';
+    const a = document.createElement('a');
+    a.href = URL.createObjectURL(blob);
+    a.download = fname;
+    a.click();
+    URL.revokeObjectURL(a.href);
+
+    document.getElementById('ev-patch-status').textContent = '✓ Downloaded: ' + fname;
+    if (applied) toast('Patches applied: ' + applied.split(';').length, 'ok');
+  } catch(e) {
+    toast('Patch error: ' + e.message, 'err');
+    document.getElementById('ev-patch-status').textContent = '✗ ' + e.message;
+  } finally {
+    btn.disabled = false;
+    btn.textContent = '🔧 Apply & Download';
+  }
+}
 
 function artRebuild() {
   const btn  = document.getElementById('art-rebuild-btn');
