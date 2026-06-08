@@ -607,7 +607,7 @@ code{font-family:var(--mono);font-size:12px;background:var(--bg4);padding:1px 5p
       <!-- session picker -->
       <div class="vt-select" id="vt-session-drop" style="flex:1.5;min-width:220px">
         <div class="vt-select-val" onclick="vtToggleDrop('vt-session-drop')">
-          <span id="vt-session-label" class="vt-ph">— select session —</span>
+          <span id="vt-session-label" class="vt-ph">- select session -</span>
           <span class="vt-select-arrow">▼</span>
         </div>
         <div class="vt-select-menu" id="vt-session-menu"></div>
@@ -615,7 +615,7 @@ code{font-family:var(--mono);font-size:12px;background:var(--bg4);padding:1px 5p
       <!-- file picker -->
       <div class="vt-select" id="vt-file-drop" style="flex:1;min-width:180px">
         <div class="vt-select-val" onclick="vtToggleDrop('vt-file-drop')">
-          <span id="vt-file-label" class="vt-ph">— select file —</span>
+          <span id="vt-file-label" class="vt-ph">- select file -</span>
           <span class="vt-select-arrow">▼</span>
         </div>
         <div class="vt-select-menu" id="vt-file-menu"></div>
@@ -1880,15 +1880,15 @@ async function loadVtScanner() {
   // reset file menu & labels
   document.getElementById('vt-file-menu').innerHTML = '';
   const sl = document.getElementById('vt-session-label');
-  sl.textContent = '— select session —'; sl.className = 'vt-ph';
+  sl.textContent = '- select session -'; sl.className = 'vt-ph';
   const fl = document.getElementById('vt-file-label');
-  fl.textContent = '— select file —';   fl.className = 'vt-ph';
+  fl.textContent = '- select file -';   fl.className = 'vt-ph';
 }
 
 function vtUpdateFileList() {
   _vtSelectedFile = '';
   const fl = document.getElementById('vt-file-label');
-  fl.textContent = '— select file —'; fl.className = 'vt-ph';
+  fl.textContent = '- select file -'; fl.className = 'vt-ph';
 
   const menu   = document.getElementById('vt-file-menu');
   menu.innerHTML = '';
