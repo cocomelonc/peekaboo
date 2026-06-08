@@ -235,6 +235,15 @@ code{font-family:var(--mono);font-size:12px;background:var(--bg4);padding:1px 5p
 .vt-select-opt:hover{background:var(--bg3)}
 .vt-select-opt.vt-selected{color:var(--purple);font-weight:600}
 .vt-ph{color:var(--dim);font-style:italic}
+/* -- YARA panel -- */
+.yara-code{background:#0d1117;border:1px solid var(--sep);border-radius:6px;padding:16px;font-family:'Fira Code','Cascadia Code','Consolas',monospace;font-size:12px;line-height:1.6;white-space:pre;overflow-x:auto;max-height:600px;overflow-y:auto}
+.yara-stat-badge{display:inline-flex;align-items:center;gap:6px;padding:5px 12px;border-radius:20px;font-size:12px;font-weight:600;border:1px solid var(--sep);background:var(--bg3)}
+.yara-section-row{display:flex;align-items:center;gap:8px;padding:6px 0;border-bottom:1px solid var(--sep);font-size:12px}
+.yara-section-row:last-child{border-bottom:none}
+.yara-ent-bar{height:6px;border-radius:3px;background:var(--bg3);flex:1;overflow:hidden;min-width:60px}
+.yara-ent-fill{height:100%;border-radius:3px;transition:width .3s}
+.yara-upload-zone{border:2px dashed var(--sep);border-radius:8px;padding:32px;text-align:center;cursor:pointer;transition:border-color .2s,background .2s}
+.yara-upload-zone:hover,.yara-upload-zone.drag-over{border-color:var(--purple);background:rgba(198,120,221,.06)}
 
 /* -- APT campaign -- */
 .apt-layout{display:grid;grid-template-columns:340px 1fr;gap:18px;align-items:start}
@@ -360,7 +369,10 @@ code{font-family:var(--mono);font-size:12px;background:var(--bg4);padding:1px 5p
       <span class="nav-icon">🎯</span> APT Campaign
     </div>
     <div class="nav-item" onclick="showPanel('coverage')" id="nav-coverage">
-      <span class="nav-icon">🦠</span> VT Scanner
+      <span class="nav-icon">🦠</span> VirusTotal
+    </div>
+    <div class="nav-item" onclick="showPanel('yara')" id="nav-yara">
+      <span class="nav-icon">🔰</span> YARA
     </div>
     <div class="nav-item" onclick="showPanel('mitre')" id="nav-mitre">
       <span class="nav-icon">🛡️</span> MITRE ATT&amp;CK
@@ -658,6 +670,122 @@ code{font-family:var(--mono);font-size:12px;background:var(--bg4);padding:1px 5p
   <!-- Empty state -->
   <div id="vt-empty" class="empty" style="margin-top:40px">
     Select a compiled sample from the dropdown above and click <strong>Scan</strong> to analyse it with VirusTotal.
+  </div>
+
+</div>
+
+<!-- ════════ YARA Generator ════════ -->
+<div id="panel-yara" class="panel">
+
+  <!-- source selector tabs -->
+  <div style="display:flex;gap:10px;margin-bottom:16px;align-items:center">
+    <button class="btn btn-primary btn-sm" id="yara-tab-sample" onclick="yaraSetTab('sample')">📦 From Sample</button>
+    <button class="btn btn-ghost btn-sm"   id="yara-tab-upload" onclick="yaraSetTab('upload')">⬆️ Upload File</button>
+    <span style="margin-left:auto;font-size:12px;color:var(--dim)">generates YARA rules from PE metadata · strings · entry-point bytes · import hash</span>
+  </div>
+
+  <!-- ── from sample ── -->
+  <div id="yara-src-sample">
+    <div class="card mb-16">
+      <div class="card-header">
+        <span style="font-size:18px">🔰</span>
+        <div><div class="card-title">YARA Rule Generator</div><div class="card-sub">select a compiled sample to analyse</div></div>
+        <button class="btn btn-ghost btn-sm" style="margin-left:auto" onclick="loadYaraScanner()">↻ Refresh</button>
+      </div>
+      <div style="display:flex;gap:12px;align-items:center;flex-wrap:wrap;margin-top:8px">
+        <div class="vt-select" id="yara-session-drop" style="flex:1.5;min-width:220px">
+          <div class="vt-select-val" onclick="vtToggleDrop('yara-session-drop')">
+            <span id="yara-session-label" class="vt-ph">- select session -</span>
+            <span class="vt-select-arrow">▼</span>
+          </div>
+          <div class="vt-select-menu" id="yara-session-menu"></div>
+        </div>
+        <div class="vt-select" id="yara-file-drop" style="flex:1;min-width:180px">
+          <div class="vt-select-val" onclick="vtToggleDrop('yara-file-drop')">
+            <span id="yara-file-label" class="vt-ph">- select file -</span>
+            <span class="vt-select-arrow">▼</span>
+          </div>
+          <div class="vt-select-menu" id="yara-file-menu"></div>
+        </div>
+        <button class="btn btn-primary" onclick="yaraGenerate()" id="yara-gen-btn" style="white-space:nowrap;flex-shrink:0">
+          ⚙️ Generate
+        </button>
+      </div>
+    </div>
+  </div>
+
+  <!-- ── upload file ── -->
+  <div id="yara-src-upload" style="display:none">
+    <div class="card mb-16">
+      <div class="card-header">
+        <span style="font-size:18px">⬆️</span>
+        <div><div class="card-title">Upload Malware Sample</div><div class="card-sub">analyse any PE file directly</div></div>
+      </div>
+      <div class="yara-upload-zone" id="yara-drop-zone" onclick="document.getElementById('yara-file-input').click()"
+           ondragover="event.preventDefault();this.classList.add('drag-over')"
+           ondragleave="this.classList.remove('drag-over')"
+           ondrop="yaraHandleDrop(event)">
+        <div style="font-size:32px;margin-bottom:8px">📂</div>
+        <div style="color:var(--fg);font-size:14px;margin-bottom:4px">Drop a PE file here or click to browse</div>
+        <div style="color:var(--dim);font-size:12px">.exe · .dll · .sys · .bin</div>
+        <input type="file" id="yara-file-input" style="display:none" onchange="yaraHandleFile(this.files[0])">
+      </div>
+    </div>
+  </div>
+
+  <!-- progress -->
+  <div id="yara-progress" class="card mb-16" style="display:none">
+    <div class="card-header">
+      <span style="font-size:16px">⚙️</span>
+      <div class="card-title" id="yara-progress-title">Analysing…</div>
+    </div>
+    <div class="vt-progress-bar"><div class="vt-progress-fill" id="yara-progress-fill" style="width:30%"></div></div>
+  </div>
+
+  <!-- results -->
+  <div id="yara-results" style="display:none">
+
+    <!-- stat badges row -->
+    <div style="display:flex;flex-wrap:wrap;gap:8px;margin-bottom:16px" id="yara-badges"></div>
+
+    <div class="grid-2" style="align-items:start;gap:18px">
+
+      <!-- left: rule code -->
+      <div class="card">
+        <div class="card-header">
+          <span style="font-size:16px">📄</span>
+          <div class="card-title">Generated Rule</div>
+          <div style="display:flex;gap:8px;margin-left:auto">
+            <button class="btn btn-ghost btn-sm" onclick="yaraCopy()">📋 Copy</button>
+            <button class="btn btn-ghost btn-sm" onclick="yaraDownload()">⬇️ Download</button>
+          </div>
+        </div>
+        <pre id="yara-code-pre" class="yara-code"><code id="yara-code" class="language-yaml"></code></pre>
+      </div>
+
+      <!-- right: PE section table + hashes -->
+      <div style="display:flex;flex-direction:column;gap:14px">
+
+        <div class="card">
+          <div class="card-header"><span style="font-size:16px">🔍</span><div class="card-title">File Hashes</div></div>
+          <div style="font-size:12px;display:flex;flex-direction:column;gap:6px;margin-top:6px">
+            <div style="display:flex;gap:8px"><span style="color:var(--dim);width:60px">MD5</span><code id="yara-hash-md5" style="font-size:11px;color:var(--yellow);word-break:break-all"></code></div>
+            <div style="display:flex;gap:8px"><span style="color:var(--dim);width:60px">SHA256</span><code id="yara-hash-sha256" style="font-size:11px;color:var(--green);word-break:break-all"></code></div>
+          </div>
+        </div>
+
+        <div class="card" id="yara-sections-card" style="display:none">
+          <div class="card-header"><span style="font-size:16px">📦</span><div class="card-title">PE Sections</div></div>
+          <div id="yara-sections-list" style="margin-top:6px"></div>
+        </div>
+
+      </div>
+    </div>
+  </div>
+
+  <!-- empty state -->
+  <div id="yara-empty" class="empty" style="margin-top:40px">
+    Select a compiled sample or upload a file, then click <strong>Generate</strong> to create a YARA detection rule.
   </div>
 
 </div>
@@ -963,6 +1091,7 @@ const PANEL_META = {
   samples:  ['Samples',          'compiled binaries organized by session'],
   apt:      ['APT Campaign',     'Malpedia -> TTPs -> auto-compile pipeline'],
   coverage: ['VT Scanner',       'VirusTotal malware detection analysis'],
+  yara:     ['YARA Generator',   'auto-generate YARA rules from PE samples'],
   mitre:    ['MITRE ATT&CK',     'groups, techniques, peekaboo library'],
   malpedia: ['Malpedia',         'threat actors & malware families'],
   c2:       ['C2 Panel',         'binary delivery over covert channels'],
@@ -988,6 +1117,7 @@ function showPanel(id) {
   if (id === 'samples')   loadSamples();
   if (id === 'apt')       loadPipelineSessions();
   if (id === 'coverage')  loadVtScanner();
+  if (id === 'yara')      loadYaraScanner();
   if (id === 'beacons')   loadBeacons();
   if (id === 'malpedia')  { if (!malpReports.length) loadMalpReports(); }
   if (id === 'mitre')     loadMitreLib();
@@ -2059,6 +2189,197 @@ function vtFilterResults(filter) {
     cards = '<div class="empty" style="grid-column:1/-1">No results match the filter</div>';
   }
   grid.innerHTML = cards;
+}
+
+// -----------------------------------------------------------------
+// YARA Generator
+// -----------------------------------------------------------------
+let _yaraSamples         = [];
+let _yaraSelectedSession = '';
+let _yaraSelectedFile    = '';
+let _yaraCurrentRule     = '';
+let _yaraCurrentName     = '';
+
+function yaraSetTab(tab) {
+  document.getElementById('yara-src-sample').style.display = tab === 'sample' ? '' : 'none';
+  document.getElementById('yara-src-upload').style.display = tab === 'upload' ? '' : 'none';
+  document.getElementById('yara-tab-sample').className = tab === 'sample' ? 'btn btn-primary btn-sm' : 'btn btn-ghost btn-sm';
+  document.getElementById('yara-tab-upload').className = tab === 'upload' ? 'btn btn-primary btn-sm' : 'btn btn-ghost btn-sm';
+}
+
+async function loadYaraScanner() {
+  const samples = await fetch('/api/samples').then(r => r.json()).catch(() => []);
+  _yaraSamples = samples;
+  _yaraSelectedSession = '';
+  _yaraSelectedFile    = '';
+
+  const menu = document.getElementById('yara-session-menu');
+  menu.innerHTML = '';
+  if (samples.length) {
+    for (const s of samples) {
+      const nf    = (s.files || []).length;
+      const label = `${s.session_id}${s.actor ? '  ·  ' + s.actor : ''}  (${nf} file${nf !== 1 ? 's' : ''})`;
+      const div   = document.createElement('div');
+      div.className   = 'vt-select-opt';
+      div.textContent = label;
+      div.dataset.sid = s.session_id;
+      div.onclick     = () => yaraSelectSession(s.session_id, label);
+      menu.appendChild(div);
+    }
+  } else {
+    menu.innerHTML = '<div class="vt-select-opt vt-ph">no samples found</div>';
+  }
+  document.getElementById('yara-file-menu').innerHTML = '';
+  const sl = document.getElementById('yara-session-label'); sl.textContent = '- select session -'; sl.className = 'vt-ph';
+  const fl = document.getElementById('yara-file-label');    fl.textContent = '- select file -';    fl.className = 'vt-ph';
+}
+
+function yaraSelectSession(sid, label) {
+  _yaraSelectedSession = sid;
+  const lbl = document.getElementById('yara-session-label');
+  lbl.textContent = label; lbl.className = '';
+  document.querySelectorAll('#yara-session-menu .vt-select-opt').forEach(o =>
+    o.classList.toggle('vt-selected', o.dataset.sid === sid));
+  vtCloseDrop('yara-session-drop');
+  // populate file menu
+  _yaraSelectedFile = '';
+  const fMenu = document.getElementById('yara-file-menu');
+  fMenu.innerHTML = '';
+  const fl = document.getElementById('yara-file-label'); fl.textContent = '- select file -'; fl.className = 'vt-ph';
+  const sample = _yaraSamples.find(s => s.session_id === sid);
+  if (!sample || !(sample.files || []).length) {
+    fMenu.innerHTML = '<div class="vt-select-opt vt-ph">no files found</div>'; return;
+  }
+  for (const f of sample.files) {
+    const kb    = f.size > 1024 ? (f.size / 1024).toFixed(1) + ' KB' : f.size + ' B';
+    const flabel = `${f.name}  (${kb})`;
+    const div   = document.createElement('div');
+    div.className     = 'vt-select-opt';
+    div.textContent   = flabel;
+    div.dataset.fname = f.name;
+    div.onclick       = () => { _yaraSelectedFile = f.name; const l = document.getElementById('yara-file-label'); l.textContent = flabel; l.className = ''; document.querySelectorAll('#yara-file-menu .vt-select-opt').forEach(o => o.classList.toggle('vt-selected', o.dataset.fname === f.name)); vtCloseDrop('yara-file-drop'); };
+    fMenu.appendChild(div);
+  }
+}
+
+async function yaraGenerate() {
+  const sid   = _yaraSelectedSession;
+  const fname = _yaraSelectedFile;
+  if (!sid || !fname) { toast('Select a session and file first', 'warn'); return; }
+
+  document.getElementById('yara-results').style.display  = 'none';
+  document.getElementById('yara-empty').style.display    = 'none';
+  document.getElementById('yara-progress').style.display = '';
+  document.getElementById('yara-progress-title').textContent = `Analysing ${fname}…`;
+  document.getElementById('yara-progress-fill').style.width  = '40%';
+  document.getElementById('yara-gen-btn').disabled = true;
+
+  const r = await fetch('/api/yara/generate', {
+    method: 'POST',
+    headers: {'Content-Type': 'application/json'},
+    body: JSON.stringify({session_id: sid, filename: fname}),
+  }).then(r => r.json()).catch(e => ({ok: false, error: String(e)}));
+
+  document.getElementById('yara-progress').style.display = 'none';
+  document.getElementById('yara-gen-btn').disabled = false;
+
+  if (!r.ok) { toast('YARA error: ' + r.error, 'error'); document.getElementById('yara-empty').style.display = ''; return; }
+  _yaraRenderResults(r, fname);
+}
+
+function yaraHandleFile(file) {
+  if (!file) return;
+  document.getElementById('yara-drop-zone').querySelector('div:nth-child(2)').textContent = file.name;
+  yaraGenerateFromUpload(file);
+}
+
+function yaraHandleDrop(e) {
+  e.preventDefault();
+  document.getElementById('yara-drop-zone').classList.remove('drag-over');
+  const file = e.dataTransfer.files[0];
+  if (file) yaraHandleFile(file);
+}
+
+async function yaraGenerateFromUpload(file) {
+  document.getElementById('yara-results').style.display  = 'none';
+  document.getElementById('yara-empty').style.display    = 'none';
+  document.getElementById('yara-progress').style.display = '';
+  document.getElementById('yara-progress-title').textContent = `Analysing ${file.name}…`;
+  document.getElementById('yara-progress-fill').style.width  = '40%';
+
+  const fd = new FormData();
+  fd.append('file', file, file.name);
+  const r = await fetch('/api/yara/upload', {method: 'POST', body: fd})
+    .then(r => r.json()).catch(e => ({ok: false, error: String(e)}));
+
+  document.getElementById('yara-progress').style.display = 'none';
+  if (!r.ok) { toast('YARA error: ' + r.error, 'error'); document.getElementById('yara-empty').style.display = ''; return; }
+  _yaraRenderResults(r, file.name);
+}
+
+function _yaraRenderResults(r, filename) {
+  _yaraCurrentRule = r.rule;
+  _yaraCurrentName = r.rule_name || 'peekaboo_rule';
+
+  // badges
+  const kb = r.size > 1048576 ? (r.size/1048576).toFixed(2)+' MB' : r.size > 1024 ? (r.size/1024).toFixed(1)+' KB' : r.size+' B';
+  const badges = [
+    {icon: '📁', label: filename, color: 'var(--blue)'},
+    {icon: '📏', label: kb, color: 'var(--dim)'},
+    {icon: '🔤', label: `${r.string_count} strings`, color: 'var(--yellow)'},
+    r.has_pe ? {icon: '🗂️', label: `${r.pe_sections.length} PE sections`, color: 'var(--green)'} : null,
+    r.pe_imphash ? {icon: '🔑', label: 'imphash', color: 'var(--purple)'} : null,
+    r.high_entropy_count > 0 ? {icon: '⚠️', label: `${r.high_entropy_count} high-entropy section(s)`, color: 'var(--red)'} : null,
+  ].filter(Boolean);
+
+  document.getElementById('yara-badges').innerHTML = badges.map(b =>
+    `<span class="yara-stat-badge" style="border-color:${b.color}20;color:${b.color}">${b.icon} ${escHtml(b.label)}</span>`
+  ).join('');
+
+  // hashes
+  document.getElementById('yara-hash-md5').textContent    = r.md5;
+  document.getElementById('yara-hash-sha256').textContent = r.sha256;
+
+  // PE sections table
+  if (r.has_pe && r.pe_sections.length) {
+    document.getElementById('yara-sections-card').style.display = '';
+    document.getElementById('yara-sections-list').innerHTML = r.pe_sections.map(s => {
+      const pct   = Math.min(100, Math.round(s.entropy / 8 * 100));
+      const color = s.entropy > 7 ? 'var(--red)' : s.entropy > 6 ? 'var(--yellow)' : 'var(--green)';
+      const kb2   = s.size > 1024 ? (s.size/1024).toFixed(1)+' KB' : s.size+' B';
+      return `<div class="yara-section-row">
+        <code style="width:80px;font-size:11px;color:var(--purple)">${escHtml(s.name)}</code>
+        <div class="yara-ent-bar"><div class="yara-ent-fill" style="width:${pct}%;background:${color}"></div></div>
+        <span style="color:${color};font-size:11px;width:36px;text-align:right">${s.entropy}</span>
+        <span style="color:var(--dim);font-size:11px;width:60px;text-align:right">${kb2}</span>
+      </div>`;
+    }).join('');
+  } else {
+    document.getElementById('yara-sections-card').style.display = 'none';
+  }
+
+  // syntax-highlighted rule
+  const codeEl = document.getElementById('yara-code');
+  codeEl.textContent = r.rule;
+  if (typeof hljs !== 'undefined') { delete codeEl.dataset.highlighted; hljs.highlightElement(codeEl); }
+
+  document.getElementById('yara-results').style.display = '';
+  toast(`Rule "${_yaraCurrentName}" generated - ${r.string_count} string indicators`, 'ok');
+}
+
+function yaraCopy() {
+  if (!_yaraCurrentRule) return;
+  navigator.clipboard.writeText(_yaraCurrentRule).then(() => toast('Rule copied to clipboard', 'ok'));
+}
+
+function yaraDownload() {
+  if (!_yaraCurrentRule) return;
+  const blob = new Blob([_yaraCurrentRule], {type: 'text/plain'});
+  const a    = document.createElement('a');
+  a.href     = URL.createObjectURL(blob);
+  a.download = `${_yaraCurrentName}.yar`;
+  a.click();
+  URL.revokeObjectURL(a.href);
 }
 
 // -----------------------------------------------------------------

@@ -1,5 +1,5 @@
 {
-  "bitbucket_token_base64": "token",
+  "bitbucket_token_base64": "test-test-bWVvdy1tZW93LXRva2VuLQ==",
   "bitbucket_workspace": "meow-test",
   "bitbucket_repo": "meow-shellcode"
 }

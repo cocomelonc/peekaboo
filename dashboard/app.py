@@ -1305,5 +1305,54 @@ def api_vtscan_file(sha256: str):
     return jsonify(result)
 
 
+# -- YARA rule generator -------------------------------------------------------
+
+try:
+    import yaragen as _yaragen
+    HAS_YARAGEN = True
+except ImportError:
+    HAS_YARAGEN = False
+
+
+@app.route("/api/yara/generate", methods=["POST"])
+def api_yara_generate():
+    if not HAS_YARAGEN:
+        return jsonify({"ok": False, "error": "yaragen module not available"}), 503
+    data = request.get_json(force=True) or {}
+    session_id = data.get("session_id", "").strip()
+    filename   = data.get("filename", "").strip()
+    if not session_id or not filename:
+        return jsonify({"ok": False, "error": "session_id and filename required"}), 400
+    filepath = (SAMPLES_DIR / session_id / filename).resolve()
+    if not str(filepath).startswith(str(SAMPLES_DIR.resolve())):
+        return jsonify({"ok": False, "error": "invalid path"}), 400
+    result = _yaragen.generate_rule(filepath)
+    return jsonify(result)
+
+
+@app.route("/api/yara/upload", methods=["POST"])
+def api_yara_upload():
+    """Generate a YARA rule from an uploaded file (no session needed)."""
+    if not HAS_YARAGEN:
+        return jsonify({"ok": False, "error": "yaragen module not available"}), 503
+    f = request.files.get("file")
+    if not f:
+        return jsonify({"ok": False, "error": "no file uploaded"}), 400
+    import tempfile, os
+    with tempfile.NamedTemporaryFile(delete=False, suffix="_" + f.filename) as tmp:
+        f.save(tmp.name)
+        tmp_path = Path(tmp.name)
+    try:
+        result = _yaragen.generate_rule(tmp_path)
+        result["rule_name"] = re.sub(r'[^a-zA-Z0-9_]', '_',
+                                     Path(f.filename).stem) or result.get("rule_name", "uploaded")
+    finally:
+        try:
+            os.unlink(tmp_path)
+        except Exception:
+            pass
+    return jsonify(result)
+
+
 if __name__ == "__main__":
     app.run(debug=True, host="0.0.0.0", port=5000)
