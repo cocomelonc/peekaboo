@@ -92,7 +92,8 @@ def generate_rule(filepath: Path) -> dict:
     pe_sections = []
     pe_imphash  = ""
     needs_pe_import = False
-    str_idx = 0
+    str_idx  = 0
+    imp_vars: list[str] = []   # tracks $imp_* var names for condition
 
     # -- PE analysis ----------------------------------------------------------
     if HAS_PEFILE:
@@ -149,6 +150,7 @@ def generate_rule(filepath: Path) -> dict:
                         if _INTERESTING_RE.search(name_s) and not _NOISE_RE.match(name_s):
                             vname = f'$imp_{str_idx}'
                             strings.append(f'{vname} = "{_yara_escape(name_s)}"')
+                            imp_vars.append(vname)
                             str_idx += 1
                             if str_idx > 6:
                                 break
@@ -210,9 +212,10 @@ def generate_rule(filepath: Path) -> dict:
         str_idx += 1
 
     # string condition: require at least 2 of the string indicators
-    if str_vars:
-        sample = str_vars[:8]
-        conditions.append(f'2 of ({", ".join(sample)})')
+    # include ALL declared $imp_*, $s*, $w* variables so none are unreferenced
+    all_str_vars = imp_vars + str_vars
+    if all_str_vars:
+        conditions.append(f'2 of ({", ".join(all_str_vars)})')
 
     # filesize bounds ±25%
     lo = int(size * 0.75)
@@ -255,7 +258,7 @@ def generate_rule(filepath: Path) -> dict:
         "md5":                md5,
         "sha256":             sha256,
         "size":               size,
-        "string_count":       len(str_vars),
+        "string_count":       len(all_str_vars),
         "has_pe":             HAS_PEFILE and bool(pe_sections),
         "pe_sections":        pe_sections,
         "pe_imphash":         pe_imphash,

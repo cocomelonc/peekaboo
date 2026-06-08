@@ -97,6 +97,7 @@ DEFCON Demo Labs Singapore 2026 | by @cocomelonc
 | `artifacts` | Artifact map: 410 techniques mapped to 4799 Sigma rules  |
 | `builder`   | Compile malware research modules; browse build history   |
 | `shellcode` | Parse, analyse, transform and reformat shellcode         |
+| `yara`      | Generate YARA rules from binaries; scan with yara-python |
 
 ## Global commands
 
@@ -133,6 +134,11 @@ DEFCON Demo Labs Singapore 2026 | by @cocomelonc
     peekaboo [shellcode] > transform xor_random
     peekaboo [shellcode] > format python
     peekaboo [shellcode] > generate
+
+    peekaboo > yara
+    peekaboo [yara] > gen /tmp/payload.exe
+    peekaboo [yara] > save /tmp/payload_rule.yar
+    peekaboo [yara] > scan /tmp/payload_copy.exe
 """,
     },
 
@@ -915,6 +921,154 @@ List all available transform IDs with descriptions.
 """,
     },
 
+    # ── yara ──────────────────────────────────────────────────────────────────
+    "yara": {
+        "_overview": """\
+# YARA Lab
+
+Generate a YARA detection rule from any PE or raw binary file.
+Optionally scan a target file against the generated rule.
+
+The generator extracts:
+
+- **PE metadata** -- imphash, section count, entry-point byte pattern
+- **Interesting strings** -- 10 suspicious ASCII strings (imports, registry
+  keys, C2 APIs, tool names); 4 wide strings
+- **Filesize bounds** -- +/-25% around the original file size
+- **Condition** -- requires >= 2 string matches + PE structural checks
+
+## Workflow
+
+    gen <path>          -- generate YARA rule from a file
+    show                -- display the last generated rule
+    save <path>         -- save rule to a .yar file
+    info                -- metadata for last generated rule (hashes, sections)
+    scan <path>         -- scan a target file against the current rule
+
+## Condition logic
+
+The generated rule uses AND-chained conditions:
+
+    $ep at pe.entry_point           (entry-point byte pattern)
+    pe.imphash() == "..."           (import hash)
+    pe.number_of_sections == N
+    2 of ($s0, $s1, ..., $w12, ...) (string indicators)
+    filesize >= LO and filesize <= HI
+
+Non-PE files skip the PE-specific conditions and rely on strings + filesize.
+""",
+        "gen": """\
+## gen
+
+Generate a YARA rule from a binary file.
+
+**Usage:**
+
+    gen <path>
+
+**Parameters:**
+
+- `path` -- path to PE (.exe/.dll/.sys) or raw binary; `~` expansion supported
+
+**Examples:**
+
+    gen /tmp/payload.exe
+    gen ~/samples/beacon.dll
+    gen samples/malware-injection-17/malware-injection-17.exe
+
+**Output:**
+
+1. Metadata panel: file, size, MD5, SHA256, PE sections with entropy bars
+2. Syntax-highlighted YARA rule
+
+**Notes:**
+
+- Requires `pefile` for PE analysis (already installed in peekaboo venv)
+- The generated rule is held in memory; use `save` to write it to disk
+- Rule name is derived from the filename (non-alphanumeric -> underscore)
+""",
+        "show": """\
+## show
+
+Display the last generated YARA rule.
+
+**Usage:**
+
+    show
+
+**Notes:**
+
+- Requires a prior `gen` call in this session
+- Long rules open in a pager; press `q` to exit
+""",
+        "save": """\
+## save
+
+Save the last generated rule to a file.
+
+**Usage:**
+
+    save <path>
+
+**Parameters:**
+
+- `path` -- output file path; conventionally `.yar` or `.yara` extension
+
+**Examples:**
+
+    save /tmp/beacon_rule.yar
+    save ~/rules/malware-trick-52.yar
+
+**Notes:**
+
+- Overwrites existing files without prompting
+- Requires a prior `gen` call in this session
+""",
+        "info": """\
+## info
+
+Show metadata for the last generated rule.
+
+**Usage:**
+
+    info
+
+**Output:**
+
+- Rule name, file path, MD5, SHA256, file size
+- PE sections table with entropy bars (if PE file)
+- Import hash (imphash), string count, high-entropy section count
+""",
+        "scan": """\
+## scan
+
+Scan a file against the last generated YARA rule.
+
+**Usage:**
+
+    scan <path>
+
+**Parameters:**
+
+- `path` -- target file to scan
+
+**Examples:**
+
+    scan /tmp/unknown.exe
+    scan ~/samples/test.bin
+
+**Requirements:**
+
+- `yara-python` must be installed:  pip install yara-python
+- Requires a prior `gen` call in this session
+
+**Output:**
+
+- MATCH or NO MATCH result
+- For each match: rule name and matched strings with file offsets
+""",
+    },
+
     # ── builder ───────────────────────────────────────────────────────────────
     "builder": {
         "_overview": """\
@@ -1151,7 +1305,8 @@ def print_banner() -> None:
 
 # -- top-level commands --------------------------------------------------------
 TOP_COMMANDS = [
-    "evasion", "library", "artifacts", "builder", "shellcode", "help", "exit", "quit",
+    "evasion", "library", "artifacts", "builder", "shellcode", "yara",
+    "help", "exit", "quit",
 ]
 
 TOP_HELP = [
@@ -1160,6 +1315,7 @@ TOP_HELP = [
     ("artifacts", "Artifact map -- 410 techniques, 4799 Sigma rules, EventID coverage"),
     ("builder",   "Compile malware research modules; browse build history"),
     ("shellcode", "Parse, analyse, transform and reformat shellcode"),
+    ("yara",      "Generate YARA rules from binaries; scan with yara-python"),
     ("help",      "show this help"),
     ("exit",      "quit peekaboo-cli"),
 ]
@@ -2371,6 +2527,267 @@ def run_evasion(ev_mod) -> None:
             )
 
 
+# -- yara lab ------------------------------------------------------------------
+
+YARA_COMMANDS = ["gen", "show", "save", "info", "scan", "help", "back"]
+
+
+def _render_yara_meta(result: dict) -> None:
+    ent_col = "ok"
+    hi = result.get("high_entropy_count", 0)
+    if hi:
+        ent_col = "err" if hi > 2 else "warn"
+
+    meta = (
+        f"  File      : {result.get('_filepath','?')}\n"
+        f"  Rule name : {result['rule_name']}\n"
+        f"  Size      : {result['size']:,} bytes\n"
+        f"  MD5       : [dim]{result['md5']}[/dim]\n"
+        f"  SHA256    : [dim]{result['sha256']}[/dim]\n"
+        f"  Strings   : {result['string_count']} indicators extracted\n"
+        f"  PE        : {'yes' if result['has_pe'] else 'no (non-PE / raw)'}\n"
+        + (f"  Imphash   : [dim]{result['pe_imphash']}[/dim]\n"
+           if result.get("pe_imphash") else "")
+        + (f"  Hi-ent sec: [{ent_col}]{hi}[/{ent_col}]"
+           if result["has_pe"] else "")
+    )
+    console.print()
+    console.print(Panel(meta.rstrip(),
+                        title="[heading] YARA Rule Info [/heading]",
+                        border_style="cyan", box=box.ASCII))
+
+    secs = result.get("pe_sections", [])
+    if secs:
+        t = Table(box=box.ASCII, show_header=True, header_style="heading",
+                  border_style="dim", padding=(0, 1), title="PE Sections")
+        t.add_column("name",    style="cmd",  min_width=10)
+        t.add_column("entropy", min_width=7,  justify="right")
+        t.add_column("size",    style="dim",  min_width=10, justify="right")
+        t.add_column("bar",                   min_width=24)
+        for s in secs:
+            ent = s["entropy"]
+            w   = int(min(ent, 8.0) / 8.0 * 22)
+            bar = Text("[" + "#" * w + "." * (22 - w) + "]",
+                       style="err" if ent > 7.2 else "warn" if ent > 6.5 else "ok")
+            ent_s = Text(f"{ent:.2f}",
+                         style="err" if ent > 7.2 else "warn" if ent > 6.5 else "dim")
+            t.add_row(s["name"], ent_s, f"{s['size']:,}", bar)
+        console.print(t)
+    console.print()
+
+
+def _render_yara_rule(rule_text: str) -> None:
+    n_lines = rule_text.count("\n") + 1
+    try:
+        syn = Syntax(rule_text, "yara", theme="monokai",
+                     line_numbers=True, word_wrap=False)
+    except Exception:
+        syn = Syntax(rule_text, "text", theme="monokai",
+                     line_numbers=True, word_wrap=False)
+
+    panel = Panel(syn, title="[heading] YARA Rule [/heading]",
+                  border_style="dim", box=box.ASCII)
+    if n_lines > 40:
+        with console.pager(styles=True):
+            console.print(panel)
+    else:
+        console.print()
+        console.print(panel)
+        console.print()
+
+
+def run_yara() -> None:
+    """Interactive YARA lab sub-REPL."""
+    try:
+        import yaragen as _yg
+    except ImportError as exc:
+        console.print(f"[err][!] yaragen module unavailable: {exc}[/err]")
+        return
+
+    yr_result: dict | None = None
+
+    completer = WordCompleter(YARA_COMMANDS, ignore_case=True)
+    session: PromptSession = PromptSession(
+        history=InMemoryHistory(),
+        completer=completer,
+        style=PT_STYLE,
+    )
+
+    console.print()
+    console.print(Panel(
+        "  Generate YARA detection rules from PE or raw binary files\n"
+        "  type  help  for commands,  back  to return",
+        title="[heading] YARA Lab [/heading]",
+        border_style="cyan",
+        box=box.ASCII,
+    ))
+    console.print()
+
+    while True:
+        hint = f" ({yr_result['rule_name']})" if yr_result else ""
+        try:
+            raw = session.prompt(
+                f"peekaboo [yara{hint}] > ",
+                style=PT_STYLE,
+            ).strip()
+        except (KeyboardInterrupt, EOFError):
+            console.print("\n[dim]use  back  to return[/dim]")
+            continue
+
+        if not raw:
+            continue
+
+        parts = raw.split()
+        cmd   = parts[0].lower()
+        args  = parts[1:]
+
+        # -- back -------------------------------------------------------------
+        if cmd in ("back", "exit", "quit"):
+            break
+
+        # -- help -------------------------------------------------------------
+        elif cmd == "help":
+            show_help("yara", args[0] if args else None)
+
+        # -- gen <path> -------------------------------------------------------
+        elif cmd == "gen":
+            if not args:
+                console.print("[warn][!] usage: gen <path>[/warn]")
+                continue
+            p = Path(" ".join(args)).expanduser().resolve()
+            if not p.exists():
+                console.print(f"[err][!] file not found: {p}[/err]")
+                continue
+
+            with console.status(
+                f"[info]generating YARA rule for {p.name}...[/info]",
+                spinner="dots"
+            ):
+                result = _yg.generate_rule(p)
+
+            if not result.get("ok"):
+                console.print(f"  [err][!] {result.get('error','failed')}[/err]\n")
+                continue
+
+            result["_filepath"] = str(p)
+            yr_result = result
+
+            _render_yara_meta(yr_result)
+            _render_yara_rule(yr_result["rule"])
+            console.print(
+                f"  [dim]use  save <path>  to write the rule to a file\n"
+                f"  use  scan <path>  to test it against another binary[/dim]\n"
+            )
+
+        # -- show -------------------------------------------------------------
+        elif cmd == "show":
+            if yr_result is None:
+                console.print("[warn][!] no rule generated yet -- use  gen <path>[/warn]")
+                continue
+            _render_yara_rule(yr_result["rule"])
+
+        # -- info -------------------------------------------------------------
+        elif cmd == "info":
+            if yr_result is None:
+                console.print("[warn][!] no rule generated yet -- use  gen <path>[/warn]")
+                continue
+            _render_yara_meta(yr_result)
+
+        # -- save <path> ------------------------------------------------------
+        elif cmd == "save":
+            if yr_result is None:
+                console.print("[warn][!] no rule generated yet -- use  gen <path>[/warn]")
+                continue
+            if not args:
+                console.print("[warn][!] usage: save <path>[/warn]")
+                continue
+            out_p = Path(" ".join(args)).expanduser().resolve()
+            try:
+                out_p.write_text(yr_result["rule"], encoding="utf-8")
+                console.print(
+                    f"  [ok][+] saved:[/ok] [cmd]{out_p}[/cmd]  "
+                    f"[dim]{len(yr_result['rule'])} chars[/dim]\n"
+                )
+            except Exception as exc:
+                console.print(f"  [err][!] write error: {exc}[/err]\n")
+
+        # -- scan <path> ------------------------------------------------------
+        elif cmd == "scan":
+            if yr_result is None:
+                console.print("[warn][!] no rule generated yet -- use  gen <path>[/warn]")
+                continue
+            if not args:
+                console.print("[warn][!] usage: scan <path>[/warn]")
+                continue
+            target = Path(" ".join(args)).expanduser().resolve()
+            if not target.exists():
+                console.print(f"[err][!] file not found: {target}[/err]")
+                continue
+
+            try:
+                import yara as _yara
+            except ImportError:
+                console.print(
+                    "  [err][!] yara-python not installed[/err]\n"
+                    "  [dim]Install with: pip install yara-python[/dim]\n"
+                )
+                continue
+
+            try:
+                with console.status("[info]compiling rule...[/info]", spinner="dots"):
+                    compiled = _yara.compile(source=yr_result["rule"])
+                with console.status(
+                    f"[info]scanning {target.name}...[/info]", spinner="dots"
+                ):
+                    matches = compiled.match(str(target))
+            except Exception as exc:
+                console.print(f"  [err][!] yara error: {exc}[/err]\n")
+                continue
+
+            if matches:
+                console.print()
+                console.print(Panel(
+                    f"  Target    : {target}\n"
+                    f"  Rule      : {yr_result['rule_name']}\n"
+                    f"  Matches   : {len(matches)}",
+                    title="[ok] MATCH [/ok]",
+                    border_style="ok", box=box.ASCII,
+                ))
+                for m in matches:
+                    mt = Table(box=box.ASCII, show_header=True, header_style="heading",
+                               border_style="dim", padding=(0, 1),
+                               title=f"Matched Strings: {m.rule}")
+                    mt.add_column("variable", style="warn", min_width=10, no_wrap=True)
+                    mt.add_column("offset",   style="dim",  min_width=10, justify="right")
+                    mt.add_column("data",     style="cmd",  min_width=30)
+                    for s in m.strings:
+                        offset   = s.instances[0].offset if s.instances else 0
+                        raw_data = s.instances[0].matched_data if s.instances else b""
+                        try:
+                            preview = raw_data.decode("ascii", errors="replace")[:40]
+                        except Exception:
+                            preview = raw_data.hex()[:40]
+                        mt.add_row(s.identifier, f"0x{offset:08x}", preview)
+                    console.print(mt)
+                console.print()
+            else:
+                console.print()
+                console.print(Panel(
+                    f"  Target : {target}\n"
+                    f"  Rule   : {yr_result['rule_name']}\n"
+                    f"  Result : no matches",
+                    title="[warn] NO MATCH [/warn]",
+                    border_style="warn", box=box.ASCII,
+                ))
+                console.print()
+
+        else:
+            console.print(
+                f"[warn][!] unknown command: {cmd}  "
+                f"(type  help  for commands)[/warn]"
+            )
+
+
 # -- shellcode lab -------------------------------------------------------------
 
 SHELLCODE_COMMANDS = [
@@ -3325,6 +3742,9 @@ def main() -> None:
 
         elif cmd == "shellcode":
             run_shellcode()
+
+        elif cmd == "yara":
+            run_yara()
 
         else:
             console.print(
