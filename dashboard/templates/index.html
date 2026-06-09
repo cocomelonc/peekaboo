@@ -1294,7 +1294,7 @@ code{font-family:var(--mono);font-size:12px;background:var(--bg4);padding:1px 5p
         <span style="font-size:20px">⬆️</span>
         <div>
           <div class="card-title">Upload File for Scanning</div>
-          <div class="card-sub">scan any PE binary directly — no session required</div>
+          <div class="card-sub">scan any PE binary directly - no session required</div>
         </div>
       </div>
       <div class="yara-upload-zone" id="vt-drop-zone"
@@ -1470,7 +1470,7 @@ code{font-family:var(--mono);font-size:12px;background:var(--bg4);padding:1px 5p
       <span style="font-size:20px">🔬</span>
       <div>
         <div class="card-title">PE Inspector</div>
-        <div class="card-sub">analyse PE binaries — sections, imports, entropy, threat scoring</div>
+        <div class="card-sub">analyse PE binaries - sections, imports, entropy, threat scoring</div>
       </div>
     </div>
     <div class="filter-bar" style="margin-bottom:0">
@@ -3489,7 +3489,7 @@ async function vtScanFromUpload(file) {
     return;
   }
   _vtCurrentScan = {analysis_id: r.analysis_id, sha256: r.sha256};
-  _vtSetProgress('🔬', 'Analyzing…', 40, 'analysis queued — polling (may take 1–3 min)…');
+  _vtSetProgress('🔬', 'Analyzing…', 40, 'analysis queued - polling (may take 1–3 min)…');
   _vtPollTimer = setInterval(_vtPollAnalysis, 9000);
   _vtPollAnalysis();
 }
