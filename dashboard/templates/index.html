@@ -486,11 +486,17 @@ code{font-family:var(--mono);font-size:12px;background:var(--bg4);padding:1px 5p
 .fw-600{font-weight:600}
 
 /* -- mitre tabs -- */
-.mitre-tabs{display:flex;gap:0;border-bottom:1px solid var(--sep);margin-bottom:16px}
-.mitre-tab{padding:9px 18px;font-size:13px;font-weight:500;color:var(--text2);cursor:pointer;border-bottom:2px solid transparent;margin-bottom:-1px;transition:color .15s,border-color .15s;user-select:none}
+.mitre-tabs{display:flex;gap:0;border-bottom:1px solid var(--sep);margin-bottom:16px;overflow-x:auto;-webkit-overflow-scrolling:touch;scrollbar-width:none}
+.mitre-tabs::-webkit-scrollbar{display:none}
+.mitre-tab{padding:9px 18px;font-size:13px;font-weight:500;color:var(--text2);cursor:pointer;border-bottom:2px solid transparent;margin-bottom:-1px;transition:color .15s,border-color .15s;user-select:none;white-space:nowrap;flex-shrink:0}
 .mitre-tab:hover{color:var(--text)}
 .mitre-tab.active{color:var(--purple);border-bottom-color:var(--purple)}
 .mitre-section{animation:fadeIn .15s ease}
+.mitre-detail-card{margin-top:12px}
+.mitre-code-wrap{margin:0;overflow:auto;max-height:420px;border-radius:6px}
+.mitre-code{font-size:11px;display:block;background:var(--bg3);padding:14px;border-radius:6px}
+.mitre-detail-meta{margin-top:6px;display:flex;gap:5px;flex-wrap:wrap}
+.mitre-detail-actions{margin-left:12px;display:flex;gap:8px;align-items:flex-start;flex-shrink:0}
 
 /* -- PE Inspector tabs (self-contained inside a card) -- */
 .pe-card{background:var(--bg2);border:1px solid var(--sep);border-radius:var(--r);overflow:hidden}
@@ -1472,7 +1478,7 @@ code{font-family:var(--mono);font-size:12px;background:var(--bg4);padding:1px 5p
       </div>
       <div id="mg-pages" class="page-bar"></div>
     </div>
-    <div id="mg-detail" class="card" style="display:none;margin-top:12px">
+    <div id="mg-detail" class="card mitre-detail-card" style="display:none">
       <div class="card-header">
         <div style="flex:1;min-width:0">
           <div class="card-title" id="mg-detail-name"></div>
@@ -1480,7 +1486,7 @@ code{font-family:var(--mono);font-size:12px;background:var(--bg4);padding:1px 5p
         </div>
         <button class="btn btn-ghost btn-sm" onclick="document.getElementById('mg-detail').style.display='none'">Close</button>
       </div>
-      <div id="mg-tech-rows"></div>
+      <div class="tbl-wrap" id="mg-tech-rows"></div>
     </div>
   </div>
 
@@ -1502,22 +1508,20 @@ code{font-family:var(--mono);font-size:12px;background:var(--bg4);padding:1px 5p
       </div>
       <div id="ml-pages" class="page-bar"></div>
     </div>
-    <div id="ml-detail" class="card" style="display:none;margin-top:12px">
+    <div id="ml-detail" class="card mitre-detail-card" style="display:none">
       <div class="card-header">
         <div style="flex:1;min-width:0">
           <div class="card-title" id="ml-detail-title"></div>
-          <div id="ml-detail-meta" style="margin-top:6px;display:flex;gap:5px;flex-wrap:wrap"></div>
+          <div id="ml-detail-meta" class="mitre-detail-meta"></div>
         </div>
-        <div style="margin-left:12px;display:flex;gap:8px;align-items:flex-start;flex-shrink:0">
+        <div class="mitre-detail-actions">
           <a id="ml-detail-blog" href="#" target="_blank"
              class="btn btn-ghost btn-xs" style="display:none">Blog post</a>
           <button class="btn btn-ghost btn-sm"
                   onclick="document.getElementById('ml-detail').style.display='none'">Close</button>
         </div>
       </div>
-      <pre style="margin:0;overflow:auto;max-height:420px;border-radius:6px"><code
-        id="ml-detail-code" class="language-c"
-        style="font-size:11px;display:block;background:var(--bg3);padding:14px;border-radius:6px"></code></pre>
+      <pre class="mitre-code-wrap"><code id="ml-detail-code" class="language-c mitre-code"></code></pre>
     </div>
   </div>
 
@@ -3629,7 +3633,7 @@ function _renderGroupRows(groups) {
     return;
   }
   el.innerHTML = `
-    <table class="data-table">
+    <div class="tbl-wrap"><table class="data-table">
       <thead><tr>
         <th>Group</th><th>Aliases</th><th>Description</th>
       </tr></thead>
@@ -3640,7 +3644,7 @@ function _renderGroupRows(groups) {
           <td><span class="text-xs text-dim" style="line-height:1.4">${escHtml((g.description||'').slice(0,90))}${(g.description||'').length>90?'...':''}</span></td>
         </tr>`).join('')}
       </tbody>
-    </table>`;
+    </table></div>`;
 }
 
 async function loadGroupTechniques(stixId, name) {
@@ -3660,7 +3664,7 @@ async function loadGroupTechniques(stixId, name) {
     return;
   }
   document.getElementById('mg-tech-rows').innerHTML = `
-    <table class="data-table">
+    <div class="tbl-wrap"><table class="data-table">
       <thead><tr>
         <th>ATT&amp;CK ID</th><th>Name</th><th>Tactic</th><th>Category</th><th>Blog</th>
       </tr></thead>
@@ -3677,7 +3681,7 @@ async function loadGroupTechniques(stixId, name) {
         </tr>`;
       }).join('')}
       </tbody>
-    </table>`;
+    </table></div>`;
   det.scrollIntoView({behavior:'smooth', block:'nearest'});
 }
 
@@ -3721,7 +3725,7 @@ function _renderLibRows(entries) {
     return;
   }
   el.innerHTML = `
-    <table class="data-table">
+    <div class="tbl-wrap"><table class="data-table">
       <thead><tr>
         <th>Title</th><th>ATT&amp;CK IDs</th><th>Category</th><th>Date</th><th>Source</th>
       </tr></thead>
@@ -3740,7 +3744,7 @@ function _renderLibRows(entries) {
         </tr>`;
       }).join('')}
       </tbody>
-    </table>`;
+    </table></div>`;
 }
 
 async function openLibDetail(slug) {
@@ -3832,7 +3836,7 @@ function _renderImplRows(rows) {
     'impact':                '#FF375F',
   };
   el.innerHTML = `
-    <table class="data-table">
+    <div class="tbl-wrap"><table class="data-table">
       <thead><tr>
         <th>ATT&amp;CK ID</th><th>Technique</th><th>Tactic</th><th>Platform</th><th>Blog slug</th><th>Notes</th><th>Blog</th>
       </tr></thead>
@@ -3854,7 +3858,7 @@ function _renderImplRows(rows) {
         </tr>`;
       }).join('')}
       </tbody>
-    </table>`;
+    </table></div>`;
 }
 
 // -----------------------------------------------------------------
