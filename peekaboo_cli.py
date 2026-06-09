@@ -7,7 +7,6 @@ Usage:
     /home/cocomelonc/hacking/peekaboo/py3/bin/python3 peekaboo_cli.py
 """
 from __future__ import annotations
-import os
 import sys
 import uuid
 from collections import Counter, defaultdict
