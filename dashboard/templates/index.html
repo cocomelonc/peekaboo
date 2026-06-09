@@ -246,8 +246,24 @@ code{font-family:var(--mono);font-size:12px;background:var(--bg4);padding:1px 5p
 .yara-upload-zone:hover,.yara-upload-zone.drag-over{border-color:var(--purple);background:rgba(198,120,221,.06)}
 
 /* -- shellcode tool -- */
-.sc-layout{display:grid;grid-template-columns:1fr 1fr;gap:18px;align-items:start}
+.sc-layout{display:grid;grid-template-columns:1fr 1fr;gap:18px;align-items:stretch}
 @media(max-width:960px){.sc-layout{grid-template-columns:1fr}}
+.sc-left{display:flex;flex-direction:column;gap:14px;height:100%}
+.sc-left > .card:last-child{flex:1;display:flex;flex-direction:column}
+.sc-output-card{display:flex;flex-direction:column;gap:10px}
+.sc-output-card .sc-code{flex:1;max-height:none;min-height:280px}
+.sc-detected-badge{display:none;margin-left:auto;font-size:11px;padding:3px 9px;border-radius:10px;font-weight:600;background:rgba(152,195,121,.15);color:var(--green);border:1px solid var(--green)}
+.sc-transform-pills{display:flex;flex-wrap:wrap;gap:6px;margin-bottom:12px}
+.sc-key-row{display:none;align-items:center;gap:8px;margin-bottom:12px}
+.sc-var-row{display:flex;gap:10px;align-items:center;flex-wrap:wrap;padding-top:2px}
+.sc-fmt-row{display:flex;flex-wrap:wrap;gap:5px;margin-bottom:10px}
+.sc-output-footer{display:flex;justify-content:space-between;align-items:center;margin-top:6px}
+.sc-pattern-label{margin-left:10px;font-size:12px;color:var(--yellow);font-weight:600}
+.sc-stat-badges{display:flex;flex-wrap:wrap;gap:8px;margin-bottom:14px}
+.sc-top-bytes-label{font-size:10px;font-weight:600;color:var(--dim);text-transform:uppercase;letter-spacing:.7px;margin-bottom:8px}
+.sc-top-bytes-row{display:flex;flex-wrap:wrap;gap:6px}
+.sc-hash-row{display:flex;gap:16px;flex-wrap:wrap;margin-top:12px;font-size:11px}
+.sc-output-info{font-size:11px;color:var(--dim)}
 .sc-pill{padding:5px 14px;border-radius:20px;font-size:12px;background:var(--bg3);border:1px solid var(--sep);color:var(--dim);cursor:pointer;transition:all .15s;white-space:nowrap}
 .sc-pill:hover{border-color:var(--purple);color:var(--fg)}
 .sc-pill.active{border-color:var(--purple);color:var(--purple);background:rgba(198,120,221,.12);font-weight:600}
@@ -304,7 +320,16 @@ code{font-family:var(--mono);font-size:12px;background:var(--bg4);padding:1px 5p
 .art-code-item:hover{background:var(--bg4);color:var(--text)}
 
 /* -- evasion lab -- */
-.ev-layout{display:grid;grid-template-columns:1fr 340px;gap:18px;align-items:start}
+.ev-layout{display:grid;grid-template-columns:1fr 1fr;gap:18px;align-items:stretch}
+.ev-layout > div{display:flex;flex-direction:column;gap:0}
+.ev-layout > div > .card{flex:1}
+@media(max-width:860px){.ev-layout{grid-template-columns:1fr}}
+.bld-layout{display:grid;grid-template-columns:1fr 1fr;gap:18px;align-items:stretch;margin-bottom:18px}
+@media(max-width:920px){.bld-layout{grid-template-columns:1fr}}
+.bld-form{display:flex;flex-direction:column;gap:14px;flex:1}
+.bld-label{display:block;font-size:11px;font-weight:600;color:var(--dim);text-transform:uppercase;letter-spacing:.5px;margin-bottom:6px}
+.bld-files-label{font-size:11px;font-weight:600;color:var(--dim);text-transform:uppercase;letter-spacing:.5px;margin-bottom:8px;border-top:1px solid var(--sep);padding-top:14px}
+.bld-files-list{display:flex;flex-wrap:wrap;gap:6px}
 .ev-gauge-wrap{display:flex;flex-direction:column;align-items:center;padding:24px 16px 16px}
 .ev-gauge-svg{display:block}
 .ev-score-num{font-family:var(--mono);font-size:42px;font-weight:700;text-align:center;line-height:1;margin-top:-8px}
@@ -346,9 +371,9 @@ code{font-family:var(--mono);font-size:12px;background:var(--bg4);padding:1px 5p
 .ev-import-tag{display:inline-flex;align-items:center;gap:5px;padding:3px 9px;border-radius:4px;font-size:11px;background:rgba(255,120,117,.1);border:1px solid rgba(255,120,117,.25);color:var(--red);font-family:var(--mono);margin:2px}
 .ev-upload-zone{border:2px dashed var(--sep);border-radius:8px;padding:28px;text-align:center;cursor:pointer;transition:border-color .2s,background .2s}
 .ev-upload-zone:hover,.ev-upload-zone.drag-over{border-color:var(--purple);background:rgba(198,120,221,.06)}
-.ev-hist-row{display:grid;grid-template-columns:1fr auto auto;gap:8px;align-items:start;padding:8px 10px;border-radius:6px;margin-bottom:4px;background:var(--bg3);border:1px solid var(--sep);font-size:12px}
+.ev-hist-row{display:grid;grid-template-columns:minmax(0,1fr) 80px 70px;gap:8px;align-items:start;padding:10px 12px;border-radius:6px;margin-bottom:6px;background:var(--bg3);border:1px solid var(--sep);font-size:12px}
 .ev-hist-row:hover{background:var(--bg4)}
-.ev-hist-fname{font-weight:600;color:var(--text);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:140px}
+.ev-hist-fname{font-weight:600;color:var(--text);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:100%}
 .ev-hist-meta{color:var(--dim);font-size:11px;margin-top:2px}
 .ev-hist-score{font-weight:700;font-size:13px;text-align:right}
 .ev-hist-delta{font-size:11px;color:var(--dim);text-align:right}
@@ -597,77 +622,92 @@ code{font-family:var(--mono);font-size:12px;background:var(--bg4);padding:1px 5p
 
 <!-- ════════ BUILDER ════════ -->
 <div id="panel-builder" class="panel active">
-  <div class="grid-2" style="margin-bottom:18px;align-items:start">
-    <div class="card">
+
+  <div class="bld-layout">
+
+    <!-- LEFT: combo builder form -->
+    <div class="card" style="display:flex;flex-direction:column">
       <div class="card-header">
         <span style="font-size:20px">🔨</span>
         <div><div class="card-title">Combo Builder</div><div class="card-sub">encrypt + inject + persist + exfil</div></div>
       </div>
-      <div style="margin-bottom:14px">
-        <label>Payload</label>
-        <div class="pill-select" id="b-pay-pills">{% for p in modules.payloads %}<span class="pill-opt" data-val="{{p}}" onclick="pickPill('b-payload','b-pay-pills',this)">{{p}}</span>{% endfor %}</div>
-        <input type="hidden" id="b-payload">
-      </div>
-      <div style="margin-bottom:14px">
-        <label>Encryption</label>
-        <div class="pill-select" id="b-enc-pills">{% for c in modules.crypto %}<span class="pill-opt" data-val="{{c}}" onclick="pickPill('b-enc','b-enc-pills',this)">{{c}}</span>{% endfor %}</div>
-        <input type="hidden" id="b-enc">
-      </div>
-      <div style="margin-bottom:8px">
-        <label>Mode</label>
-        <div class="seg-toggle" id="b-mode-seg" style="max-width:220px">
-          <span class="seg-opt" data-val="injection" onclick="pickSeg('b-malware','b-mode-seg',this)">injection</span>
-          <span class="seg-opt" data-val="stealer" onclick="pickSeg('b-malware','b-mode-seg',this)">stealer</span>
+
+      <div class="bld-form">
+        <div>
+          <span class="bld-label">Payload</span>
+          <div class="pill-select" id="b-pay-pills">{% for p in modules.payloads %}<span class="pill-opt" data-val="{{p}}" onclick="pickPill('b-payload','b-pay-pills',this)">{{p}}</span>{% endfor %}</div>
+          <input type="hidden" id="b-payload">
         </div>
-        <input type="hidden" id="b-malware">
+        <div>
+          <span class="bld-label">Encryption</span>
+          <div class="pill-select" id="b-enc-pills">{% for c in modules.crypto %}<span class="pill-opt" data-val="{{c}}" onclick="pickPill('b-enc','b-enc-pills',this)">{{c}}</span>{% endfor %}</div>
+          <input type="hidden" id="b-enc">
+        </div>
+        <div>
+          <span class="bld-label">Mode</span>
+          <div class="seg-toggle" id="b-mode-seg" style="max-width:260px">
+            <span class="seg-opt" data-val="injection" onclick="pickSeg('b-malware','b-mode-seg',this)">injection</span>
+            <span class="seg-opt" data-val="stealer"   onclick="pickSeg('b-malware','b-mode-seg',this)">stealer</span>
+          </div>
+          <input type="hidden" id="b-malware">
+        </div>
+        <div id="b-inj-wrap">
+          <span class="bld-label">Injection</span>
+          <div class="pill-select" id="b-inj-pills">{% for i in modules.injection %}<span class="pill-opt" data-val="{{i}}" onclick="pickPill('b-injection','b-inj-pills',this)">{{i}}</span>{% endfor %}</div>
+          <input type="hidden" id="b-injection">
+        </div>
+        <div id="b-stl-wrap" style="display:none">
+          <span class="bld-label">Stealer API</span>
+          <div class="pill-select" id="b-stl-pills">{% for s in modules.stealer %}<span class="pill-opt" data-val="{{s}}" onclick="pickPill('b-stealer','b-stl-pills',this)">{{s}}</span>{% endfor %}</div>
+          <input type="hidden" id="b-stealer">
+        </div>
+        <div>
+          <span class="bld-label">Persistence</span>
+          <div class="pill-select" id="b-per-pills">{% for r in modules.persistence %}<span class="pill-opt" data-val="{{r}}" onclick="pickPill('b-persistence','b-per-pills',this)">{{r}}</span>{% endfor %}{% if not modules.persistence %}<span style="font-size:11px;color:var(--dim)">no persistence modules</span>{% endif %}</div>
+          <input type="hidden" id="b-persistence" value="">
+        </div>
       </div>
-      <div id="b-inj-wrap" style="margin-bottom:14px">
-        <label>Injection</label>
-        <div class="pill-select" id="b-inj-pills">{% for i in modules.injection %}<span class="pill-opt" data-val="{{i}}" onclick="pickPill('b-injection','b-inj-pills',this)">{{i}}</span>{% endfor %}</div>
-        <input type="hidden" id="b-injection">
+
+      <div style="margin-top:auto;padding-top:16px">
+        <button class="btn btn-primary" style="width:100%" onclick="startBuild()" id="build-btn">
+          <span>⚡</span> Build Binary
+        </button>
       </div>
-      <div id="b-stl-wrap" style="display:none;margin-bottom:14px">
-        <label>Stealer API</label>
-        <div class="pill-select" id="b-stl-pills">{% for s in modules.stealer %}<span class="pill-opt" data-val="{{s}}" onclick="pickPill('b-stealer','b-stl-pills',this)">{{s}}</span>{% endfor %}</div>
-        <input type="hidden" id="b-stealer">
-      </div>
-      <div style="margin-bottom:14px">
-        <label>Persistence</label>
-        <div class="pill-select" id="b-per-pills">{% for r in modules.persistence %}<span class="pill-opt" data-val="{{r}}" onclick="pickPill('b-persistence','b-per-pills',this)">{{r}}</span>{% endfor %}{% if not modules.persistence %}<span style="font-size:11px;color:var(--dim);padding:4px 0">no persistence modules</span>{% endif %}</div>
-        <input type="hidden" id="b-persistence" value="">
-      </div>
-      <button class="btn btn-primary" onclick="startBuild()" id="build-btn">
-        <span>⚡</span> Build Binary
-      </button>
     </div>
 
-    <div class="card">
+    <!-- RIGHT: build output -->
+    <div class="card" style="display:flex;flex-direction:column">
       <div class="card-header">
         <span style="font-size:20px">📋</span>
         <div><div class="card-title">Build Output</div><div class="card-sub" id="build-status-label">idle</div></div>
-        <div id="build-status-dot" style="width:8px;height:8px;border-radius:50%;background:var(--dim);margin-left:auto"></div>
+        <div id="build-status-dot" style="width:8px;height:8px;border-radius:50%;background:var(--dim);margin-left:auto;flex-shrink:0"></div>
       </div>
-      <div class="terminal" id="build-output" style="min-height:220px">waiting for build…</div>
-      <div id="build-files" style="margin-top:12px;display:none">
-        <div style="font-size:12px;color:var(--dim);margin-bottom:8px;text-transform:uppercase;letter-spacing:.5px">Generated Files</div>
-        <div id="build-files-list"></div>
+      <div class="terminal" id="build-output" style="flex:1;min-height:220px">waiting for build…</div>
+      <div id="build-files" style="display:none">
+        <div class="bld-files-label">Generated Files</div>
+        <div id="build-files-list" class="bld-files-list"></div>
       </div>
     </div>
+
   </div>
 
+  <!-- build history -->
   <div class="card">
     <div class="card-header">
       <span style="font-size:18px">🕐</span>
       <div class="card-title">Build History</div>
       <button class="btn btn-sm" style="margin-left:auto;background:rgba(255,80,80,.12);border-color:rgba(255,80,80,.35);color:#ff6b6b" onclick="clearBuildHistory()">clear</button>
     </div>
-    <table class="tbl">
-      <thead><tr>
-        <th>ID</th><th>Mode</th><th>Encryption</th><th>Injection</th><th>Persistence</th><th>Status</th><th>Time</th>
-      </tr></thead>
-      <tbody id="build-history-tbody"></tbody>
-    </table>
+    <div class="tbl-wrap">
+      <table class="tbl">
+        <thead><tr>
+          <th>ID</th><th>Mode</th><th>Encryption</th><th>Injection</th><th>Persistence</th><th>Status</th><th>Time</th>
+        </tr></thead>
+        <tbody id="build-history-tbody"></tbody>
+      </table>
+    </div>
   </div>
+
 </div>
 
 <!-- ════════ SHELLCODE SWISS-ARMY KNIFE ════════ -->
@@ -675,14 +715,14 @@ code{font-family:var(--mono);font-size:12px;background:var(--bg4);padding:1px 5p
 
   <div class="sc-layout">
 
-    <!-- -- LEFT: input + transform -- -->
-    <div style="display:flex;flex-direction:column;gap:14px">
+    <!-- LEFT: input + transform -->
+    <div class="sc-left">
 
       <div class="card">
         <div class="card-header">
           <span style="font-size:18px">📥</span>
           <div><div class="card-title">Input</div><div class="card-sub">paste or upload shellcode in any format</div></div>
-          <span id="sc-detected-badge" style="display:none;margin-left:auto;font-size:11px;padding:3px 9px;border-radius:10px;font-weight:600;background:rgba(152,195,121,.15);color:var(--green);border:1px solid var(--green)"></span>
+          <span id="sc-detected-badge" class="sc-detected-badge"></span>
         </div>
         <textarea id="sc-input" spellcheck="false" placeholder="paste shellcode in any format:
 
@@ -704,7 +744,7 @@ code{font-family:var(--mono);font-size:12px;background:var(--bg4);padding:1px 5p
           <span style="font-size:16px">⚙️</span>
           <div class="card-title">Transform</div>
         </div>
-        <div style="display:flex;flex-wrap:wrap;gap:6px;margin-bottom:12px">
+        <div class="sc-transform-pills">
           <button class="sc-pill active" data-t="none"            onclick="scSetTransform(this)">None</button>
           <button class="sc-pill"        data-t="xor_random"      onclick="scSetTransform(this)">XOR random key</button>
           <button class="sc-pill"        data-t="xor_key"         onclick="scSetTransform(this)">XOR custom key</button>
@@ -713,11 +753,11 @@ code{font-family:var(--mono);font-size:12px;background:var(--bg4);padding:1px 5p
           <button class="sc-pill"        data-t="zlib_compress"   onclick="scSetTransform(this)">zlib compress</button>
           <button class="sc-pill"        data-t="zlib_decompress" onclick="scSetTransform(this)">zlib decompress</button>
         </div>
-        <div id="sc-key-row" style="display:none;align-items:center;gap:8px;margin-bottom:12px">
+        <div id="sc-key-row" class="sc-key-row">
           <span style="font-size:12px;color:var(--dim);flex-shrink:0">XOR key:</span>
           <input type="text" id="sc-xor-key" placeholder="0x41  ·  0x41,0x42,0x43  ·  mykey  ·  65" style="flex:1;font-family:monospace">
         </div>
-        <div style="display:flex;gap:10px;align-items:center;flex-wrap:wrap">
+        <div class="sc-var-row">
           <span style="font-size:12px;color:var(--dim)">Var name:</span>
           <input type="text" id="sc-var-name" value="buf" style="width:90px;font-family:monospace">
           <button class="btn btn-primary" id="sc-process-btn" onclick="scProcess()" style="margin-left:auto">⚙️ Process</button>
@@ -726,8 +766,8 @@ code{font-family:var(--mono);font-size:12px;background:var(--bg4);padding:1px 5p
 
     </div>
 
-    <!-- -- RIGHT: output -- -->
-    <div class="card" style="display:flex;flex-direction:column;gap:10px">
+    <!-- RIGHT: output -->
+    <div class="card sc-output-card">
       <div class="card-header">
         <span style="font-size:18px">📤</span>
         <div class="card-title">Output</div>
@@ -737,7 +777,7 @@ code{font-family:var(--mono);font-size:12px;background:var(--bg4);padding:1px 5p
         </div>
       </div>
       <!-- format pills -->
-      <div style="display:flex;flex-wrap:wrap;gap:5px">
+      <div class="sc-fmt-row">
         <button class="sc-fmt-pill active" data-fmt="c"          onclick="scSetFmt(this)">C array</button>
         <button class="sc-fmt-pill"        data-fmt="c_str"      onclick="scSetFmt(this)">C string</button>
         <button class="sc-fmt-pill"        data-fmt="python"     onclick="scSetFmt(this)">Python</button>
@@ -762,26 +802,26 @@ code{font-family:var(--mono);font-size:12px;background:var(--bg4);padding:1px 5p
       </div>
       <!-- code block -->
       <pre class="sc-code" id="sc-output-pre"><code id="sc-output-code" class="language-c"></code></pre>
-      <div style="display:flex;justify-content:space-between;align-items:center">
-        <span id="sc-output-info" style="font-size:11px;color:var(--dim)">output will appear after processing</span>
+      <div class="sc-output-footer">
+        <span id="sc-output-info" class="sc-output-info">output will appear after processing</span>
       </div>
     </div>
 
   </div>
 
-  <!-- -- analysis strip -- -->
+  <!-- analysis strip -->
   <div id="sc-analysis" class="card" style="display:none;margin-top:16px">
     <div class="card-header">
       <span style="font-size:16px">🔬</span>
       <div class="card-title">Analysis</div>
-      <span id="sc-pattern-label" style="margin-left:10px;font-size:12px;color:var(--yellow);font-weight:600"></span>
+      <span id="sc-pattern-label" class="sc-pattern-label"></span>
     </div>
-    <div style="display:flex;flex-wrap:wrap;gap:8px;margin-bottom:14px" id="sc-stat-badges"></div>
+    <div id="sc-stat-badges" class="sc-stat-badges"></div>
     <div>
-      <div style="font-size:10px;font-weight:600;color:var(--dim);text-transform:uppercase;letter-spacing:.7px;margin-bottom:8px">Top bytes (input)</div>
-      <div id="sc-top-bytes" style="display:flex;flex-wrap:wrap;gap:6px"></div>
+      <div class="sc-top-bytes-label">Top bytes (input)</div>
+      <div id="sc-top-bytes" class="sc-top-bytes-row"></div>
     </div>
-    <div style="display:flex;gap:16px;flex-wrap:wrap;margin-top:12px;font-size:11px">
+    <div class="sc-hash-row">
       <div><span style="color:var(--dim)">MD5 </span><code id="sc-md5" style="color:var(--yellow)"></code></div>
       <div><span style="color:var(--dim)">SHA256 </span><code id="sc-sha256" style="color:var(--green);word-break:break-all"></code></div>
     </div>
@@ -793,10 +833,10 @@ code{font-family:var(--mono);font-size:12px;background:var(--bg4);padding:1px 5p
 <div id="panel-evasion" class="panel">
 
   <!-- source tabs -->
-  <div style="display:flex;gap:10px;margin-bottom:16px;align-items:center;flex-wrap:wrap">
-    <button class="btn btn-primary btn-sm" id="ev-tab-sample-btn" onclick="evSetTab('sample')">📦 From Sample</button>
-    <button class="btn btn-ghost btn-sm"   id="ev-tab-upload-btn" onclick="evSetTab('upload')">⬆️ Upload File</button>
-    <span style="margin-left:auto;font-size:12px;color:var(--dim)">entropy · import fingerprint · string indicators · PE structure · surgical patch transforms</span>
+  <div class="filter-bar" style="margin-bottom:16px">
+    <button class="btn btn-primary btn-sm" id="ev-tab-sample-btn" onclick="evSetTab('sample')">From Sample</button>
+    <button class="btn btn-ghost btn-sm"   id="ev-tab-upload-btn" onclick="evSetTab('upload')">Upload File</button>
+    <span style="margin-left:auto;font-size:12px;color:var(--dim)">entropy &bull; imports &bull; strings &bull; PE structure &bull; surgical patch transforms</span>
   </div>
 
   <!-- FROM SAMPLE -->
@@ -850,37 +890,16 @@ code{font-family:var(--mono);font-size:12px;background:var(--bg4);padding:1px 5p
   <!-- RESULTS -->
   <div id="ev-results" style="display:none">
 
-    <!-- score + categories sidebar / findings main -->
-    <div class="ev-layout">
+    <!-- top 2-col: score gauge (left) + findings (right) -->
+    <div class="ev-layout mb-16">
 
-      <!-- LEFT: findings list -->
+      <!-- LEFT: score gauge + category bars -->
       <div>
-        <div class="card mb-16">
+        <div class="card" style="height:100%">
           <div class="card-header">
-            <span style="font-size:16px">🔍</span>
-            <div class="card-title">Findings</div>
-            <div id="ev-finding-counts" style="margin-left:auto;font-size:12px;color:var(--dim)"></div>
+            <div class="card-title">Evasion Score</div>
+            <div id="ev-grade-badge" style="margin-left:auto"></div>
           </div>
-          <div id="ev-findings-list" style="margin-top:8px"></div>
-        </div>
-
-        <!-- PE sections -->
-        <div class="card mb-16" id="ev-sections-card" style="display:none">
-          <div class="card-header"><span style="font-size:16px">📋</span><div class="card-title">PE Sections</div></div>
-          <div id="ev-sections-list" style="margin-top:8px"></div>
-        </div>
-
-        <!-- suspicious imports -->
-        <div class="card" id="ev-imports-card" style="display:none">
-          <div class="card-header"><span style="font-size:16px">📦</span><div class="card-title">Flagged Imports</div></div>
-          <div id="ev-imports-list" style="margin-top:8px;display:flex;flex-wrap:wrap;gap:4px"></div>
-        </div>
-      </div>
-
-      <!-- RIGHT: score gauge + patches -->
-      <div>
-        <!-- score gauge card -->
-        <div class="card mb-16">
           <div class="ev-gauge-wrap">
             <svg class="ev-gauge-svg" width="180" height="110" viewBox="0 0 180 110">
               <path d="M20,100 A70,70 0 0,1 160,100" fill="none" stroke="var(--bg3)" stroke-width="14" stroke-linecap="round"/>
@@ -889,9 +908,8 @@ code{font-family:var(--mono);font-size:12px;background:var(--bg4);padding:1px 5p
               <text x="90" y="85" text-anchor="middle" fill="var(--dim)" font-size="11" font-family="var(--mono)">EVASION SCORE</text>
             </svg>
             <div class="ev-score-num" id="ev-score-num">-</div>
-            <div id="ev-grade-badge" style="text-align:center;margin-top:6px"></div>
           </div>
-          <div style="padding:0 16px 16px">
+          <div style="margin-top:8px">
             <div class="ev-cat-bar">
               <div class="ev-cat-label">Entropy</div>
               <div class="ev-cat-track"><div class="ev-cat-fill" id="ev-bar-entropy" style="width:0%;background:var(--blue)"></div></div>
@@ -913,38 +931,70 @@ code{font-family:var(--mono);font-size:12px;background:var(--bg4);padding:1px 5p
               <div class="ev-cat-val" id="ev-val-structure">-</div>
             </div>
           </div>
-          <div style="padding:0 16px 12px;border-top:1px solid var(--sep);margin-top:4px;padding-top:12px">
-            <div style="font-size:11px;color:var(--dim);display:flex;gap:16px;flex-wrap:wrap" id="ev-file-stats"></div>
-          </div>
-        </div>
-
-        <!-- patch transforms card -->
-        <div class="card mb-16" id="ev-patches-card" style="display:none">
-          <div class="card-header">
-            <span style="font-size:16px">🔧</span>
-            <div><div class="card-title">Patch Transforms</div><div class="card-sub">apply surgical PE modifications</div></div>
-          </div>
-          <div id="ev-patch-list" style="margin-top:10px"></div>
-          <div style="display:flex;gap:8px;margin-top:12px">
-            <button class="btn btn-primary" onclick="evApplyPatches()" id="ev-patch-btn">🔧 Apply &amp; Download</button>
-            <button class="btn btn-ghost btn-sm" onclick="evSelectAllPatches()">Select All</button>
-          </div>
-          <div id="ev-patch-status" style="font-size:12px;color:var(--dim);margin-top:8px;min-height:18px"></div>
-        </div>
-
-        <!-- patch history card -->
-        <div class="card" id="ev-history-card">
-          <div class="card-header">
-            <span style="font-size:16px">📜</span>
-            <div><div class="card-title">Patch History</div><div class="card-sub">last 10 patch runs</div></div>
-            <button class="btn btn-ghost btn-sm" style="margin-left:auto" onclick="loadPatchHistory()">↻</button>
-          </div>
-          <div id="ev-history-list" style="margin-top:8px">
-            <div style="font-size:12px;color:var(--dim);text-align:center;padding:16px 0">no history yet</div>
+          <div style="border-top:1px solid var(--sep);margin-top:14px;padding-top:12px">
+            <div style="font-size:11px;color:var(--dim);display:flex;gap:14px;flex-wrap:wrap" id="ev-file-stats"></div>
           </div>
         </div>
       </div>
+
+      <!-- RIGHT: findings -->
+      <div>
+        <div class="card" style="height:100%">
+          <div class="card-header">
+            <div class="card-title">Findings</div>
+            <div id="ev-finding-counts" style="margin-left:auto;font-size:12px;display:flex;gap:4px;flex-wrap:wrap"></div>
+          </div>
+          <div id="ev-findings-list"></div>
+        </div>
+      </div>
     </div>
+
+    <!-- bottom: full-width tabbed card (sections / imports / patches / history) -->
+    <div class="pe-card">
+      <div class="pe-tabs">
+        <div class="pe-tab active" id="evtab-sections"  onclick="switchEvTab('sections')">PE Sections</div>
+        <div class="pe-tab"        id="evtab-imports"   onclick="switchEvTab('imports')">Flagged Imports</div>
+        <div class="pe-tab"        id="evtab-patches"   onclick="switchEvTab('patches')">Patch Transforms</div>
+        <div class="pe-tab"        id="evtab-history"   onclick="switchEvTab('history')">Patch History</div>
+      </div>
+      <div class="pe-tab-body">
+
+        <!-- sections -->
+        <div id="ev-tab-sections">
+          <div id="ev-sections-list">
+            <div class="empty" style="padding:20px 0"><div>No section data available</div></div>
+          </div>
+        </div>
+
+        <!-- imports -->
+        <div id="ev-tab-imports" style="display:none">
+          <div id="ev-imports-list" style="display:flex;flex-wrap:wrap;gap:6px;padding:4px 0">
+            <div class="text-dim text-sm">No flagged imports</div>
+          </div>
+        </div>
+
+        <!-- patches -->
+        <div id="ev-tab-patches" style="display:none">
+          <div id="ev-patch-list">
+            <div class="empty" style="padding:20px 0"><div>Run analysis to see available patch transforms</div></div>
+          </div>
+          <div style="display:flex;gap:8px;margin-top:14px;align-items:center;flex-wrap:wrap">
+            <button class="btn btn-primary" onclick="evApplyPatches()" id="ev-patch-btn">Apply &amp; Download</button>
+            <button class="btn btn-ghost btn-sm" onclick="evSelectAllPatches()">Select All</button>
+            <span id="ev-patch-status" style="font-size:12px;color:var(--dim);margin-left:4px"></span>
+          </div>
+        </div>
+
+        <!-- history -->
+        <div id="ev-tab-history" style="display:none">
+          <div id="ev-history-list">
+            <div style="font-size:12px;color:var(--dim);text-align:center;padding:20px 0">no history yet</div>
+          </div>
+        </div>
+
+      </div>
+    </div>
+
   </div>
 
   <!-- empty state -->
@@ -2301,9 +2351,9 @@ function pollBuild(build_id) {
 async function loadBuildFiles(build_id) {
   const d = await fetch(`/api/build/${build_id}/files`).then(r=>r.json());
   if (!d.files?.length) return;
-  document.getElementById('build-files').style.display = 'block';
+  document.getElementById('build-files').style.display = '';
   document.getElementById('build-files-list').innerHTML = d.files.map(f =>
-    `<a href="/api/build/${build_id}/download/${f.name}" class="btn btn-green btn-sm" style="margin-right:8px;margin-bottom:4px">⬇ ${f.name} (${(f.size/1024).toFixed(1)} KB)</a>`
+    `<a href="/api/build/${build_id}/download/${f.name}" class="btn btn-green btn-sm">⬇ ${f.name} (${(f.size/1024).toFixed(1)} KB)</a>`
   ).join('');
 }
 
@@ -4651,6 +4701,15 @@ function _evShowEmpty() {
   document.getElementById('ev-results').style.display = 'none';
 }
 
+function switchEvTab(tab) {
+  ['sections','imports','patches','history'].forEach(t => {
+    document.getElementById('evtab-' + t)?.classList.toggle('active', t === tab);
+    const el = document.getElementById('ev-tab-' + t);
+    if (el) el.style.display = t === tab ? '' : 'none';
+  });
+  if (tab === 'history') loadPatchHistory();
+}
+
 function _evRenderResults(d) {
   document.getElementById('ev-empty').style.display   = 'none';
   document.getElementById('ev-results').style.display = '';
@@ -4710,50 +4769,44 @@ function _evRenderResults(d) {
 
   // -- PE sections -------------------------------------------
   const secs = d.sections || [];
-  if (secs.length) {
-    document.getElementById('ev-sections-card').style.display = '';
-    document.getElementById('ev-sections-list').innerHTML = secs.map(s => {
-      const entColor = s.entropy > 7.0 ? 'var(--red)' : s.entropy > 6.5 ? 'var(--yellow)' : 'var(--green)';
-      const flags = [s.exec && 'X', s.write && 'W', s.read && 'R'].filter(Boolean).join('');
-      return `<div class="ev-section-row">
-        <span style="width:80px;font-weight:700;color:var(--cyan)">${_esc(s.name)}</span>
-        <span style="color:${entColor};width:45px">H=${s.entropy}</span>
-        <span style="color:var(--dim);width:80px">${(s.size/1024).toFixed(1)}KB</span>
-        <span style="color:${s.rwx ? 'var(--red)' : 'var(--dim)'}">[ ${flags} ]</span>
-        ${s.rwx ? '<span style="color:var(--red);font-size:10px;margin-left:6px">⚠ RWX!</span>' : ''}
-      </div>`;
-    }).join('');
-  } else {
-    document.getElementById('ev-sections-card').style.display = 'none';
-  }
+  document.getElementById('ev-sections-list').innerHTML = secs.length
+    ? secs.map(s => {
+        const entColor = s.entropy > 7.0 ? 'var(--red)' : s.entropy > 6.5 ? 'var(--yellow)' : 'var(--green)';
+        const flags = [s.exec && 'X', s.write && 'W', s.read && 'R'].filter(Boolean).join('');
+        return `<div class="ev-section-row">
+          <span style="width:80px;font-weight:700;color:var(--cyan)">${_esc(s.name)}</span>
+          <span style="color:${entColor};width:45px">H=${s.entropy}</span>
+          <span style="color:var(--dim);width:80px">${(s.size/1024).toFixed(1)}KB</span>
+          <span style="color:${s.rwx ? 'var(--red)' : 'var(--dim)'}">[ ${flags} ]</span>
+          ${s.rwx ? '<span style="color:var(--red);font-size:10px;margin-left:6px">⚠ RWX!</span>' : ''}
+        </div>`;
+      }).join('')
+    : '<div style="font-size:12px;color:var(--dim);padding:8px 0">No sections found</div>';
 
   // -- suspicious imports ------------------------------------
   const imps = d.suspicious_imports || [];
-  if (imps.length) {
-    document.getElementById('ev-imports-card').style.display = '';
-    document.getElementById('ev-imports-list').innerHTML = imps.map(imp =>
-      `<span class="ev-import-tag" title="${_esc(imp.reason)}">${_esc(imp.name)}</span>`
-    ).join('');
-  } else {
-    document.getElementById('ev-imports-card').style.display = 'none';
-  }
+  document.getElementById('ev-imports-list').innerHTML = imps.length
+    ? imps.map(imp => `<span class="ev-import-tag" title="${_esc(imp.reason)}">${_esc(imp.name)}</span>`).join('')
+    : '<div style="font-size:12px;color:var(--dim);padding:8px 0">No suspicious imports detected</div>';
 
   // -- patch transforms --------------------------------------
   const patches = d.patches_available || [];
-  if (patches.length) {
-    document.getElementById('ev-patches-card').style.display = '';
-    document.getElementById('ev-patch-list').innerHTML = patches.map(p => `
-      <label class="ev-patch-row">
-        <input type="checkbox" class="ev-patch-cb" data-id="${p.id}" checked>
-        <div>
-          <div class="ev-patch-label">${_esc(p.label)}</div>
-          <div class="ev-patch-desc">${_esc(p.desc)}</div>
-        </div>
-      </label>`).join('');
-    document.getElementById('ev-patch-status').textContent = '';
-  } else {
-    document.getElementById('ev-patches-card').style.display = 'none';
-  }
+  document.getElementById('ev-patch-list').innerHTML = patches.length
+    ? patches.map(p => `
+        <label class="ev-patch-row">
+          <input type="checkbox" class="ev-patch-cb" data-id="${p.id}" checked>
+          <div>
+            <div class="ev-patch-label">${_esc(p.label)}</div>
+            <div class="ev-patch-desc">${_esc(p.desc)}</div>
+          </div>
+        </label>`).join('')
+    : '<div style="font-size:12px;color:var(--dim);padding:8px 0">No patch transforms available</div>';
+  document.getElementById('ev-patch-status').textContent = '';
+
+  // switch to most relevant tab
+  if (secs.length) switchEvTab('sections');
+  else if (patches.length) switchEvTab('patches');
+  else switchEvTab('sections');
 }
 
 function _evGradeLabel(g) {
