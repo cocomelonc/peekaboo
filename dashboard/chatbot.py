@@ -835,7 +835,7 @@ void tea_decrypt(uint32_t v[2], const uint32_t k[4]) {
 
     # -- MITRE ATT&CK ---------------------------------------------------------
     (
-        r"mitre att.?ck|ttp|tactic|technique",
+        r"mitre att.?ck|mitre\b|att&ck|\bttps?\b|tactic\b|t1\d{3}",
         """## MITRE ATT&CK Coverage
 
 ### Technique mapping
