@@ -1726,14 +1726,14 @@ def show_help(module: str = "_top", cmd: str | None = None) -> None:
     """Render documentation from _DOCS using rich Markdown."""
     mod_docs = _DOCS.get(module)
     if mod_docs is None:
-        console.print(f"  [warn][!] no docs for module '{module}'[/warn]\n")
+        console.print(f"  [warn][=^..^=] no docs for module '{module}'[/warn]\n")
         return
 
     if cmd:
         text = mod_docs.get(cmd)
         if not text:
             console.print(
-                f"  [warn][!] no docs for '{cmd}' in module '{module}'\n"
+                f"  [warn][=^..^=] no docs for '{cmd}' in module '{module}'\n"
                 f"  available: {', '.join(k for k in mod_docs if not k.startswith('_'))}[/warn]\n"
             )
             return
@@ -2030,7 +2030,7 @@ def _render_all_rules(e: dict, level_filter: str | None = None) -> None:
     title += f"  ({len(rules)} rules)"
 
     if not rules:
-        console.print(f"  [warn][!] no rules match level '{level_filter}'[/warn]\n")
+        console.print(f"  [warn][=^..^=] no rules match level '{level_filter}'[/warn]\n")
         return
 
     rt = Table(box=box.ASCII, show_header=True, header_style="heading",
@@ -2066,7 +2066,7 @@ def run_artifacts() -> None:
     try:
         import db as _db
     except ImportError as e:
-        console.print(f"[err][!] db module unavailable: {e}[/err]")
+        console.print(f"[err][=^..^=] db module unavailable: {e}[/err]")
         return
 
     with console.status("[info]loading artifact map...[/info]", spinner="dots"):
@@ -2075,7 +2075,7 @@ def run_artifacts() -> None:
 
     if not all_entries:
         console.print(
-            "[warn][!] artifact map is empty -- "
+            "[warn][=^..^=] artifact map is empty -- "
             "open the dashboard and click Rebuild in the Artifact Map panel[/warn]"
         )
         return
@@ -2185,7 +2185,7 @@ def run_artifacts() -> None:
                 ]
                 if not current_view:
                     console.print(
-                        f"[warn][!] no techniques for tactic '{tac}' "
+                        f"[warn][=^..^=] no techniques for tactic '{tac}' "
                         f"-- type  tactics  to see valid names[/warn]"
                     )
                     continue
@@ -2201,7 +2201,7 @@ def run_artifacts() -> None:
         # -- search ------------------------------------------------------------
         elif cmd == "search":
             if not args:
-                console.print("[warn][!] usage: search <query>[/warn]")
+                console.print("[warn][=^..^=] usage: search <query>[/warn]")
                 continue
             q = " ".join(args).lower()
             hits = [
@@ -2212,7 +2212,7 @@ def run_artifacts() -> None:
                 or any(q in (cat or "").lower() for cat in e["categories"])
             ]
             if not hits:
-                console.print(f"  [warn][!] no results for '{q}'[/warn]\n")
+                console.print(f"  [warn][=^..^=] no results for '{q}'[/warn]\n")
                 continue
             current_view  = hits
             current_title = f"Search: {q}"
@@ -2224,7 +2224,7 @@ def run_artifacts() -> None:
         # -- show <T-ID> -------------------------------------------------------
         elif cmd == "show":
             if not args:
-                console.print("[warn][!] usage: show <T-ID>  e.g.  show T1055[/warn]")
+                console.print("[warn][=^..^=] usage: show <T-ID>  e.g.  show T1055[/warn]")
                 continue
             tid = args[0].upper()
             entry = tid_map.get(tid)
@@ -2235,13 +2235,13 @@ def run_artifacts() -> None:
                     entry = tid_map[matches[0]]
                 elif len(matches) > 1:
                     console.print(
-                        f"  [warn][!] ambiguous '{tid}': "
+                        f"  [warn][=^..^=] ambiguous '{tid}': "
                         f"{', '.join(matches[:6])}"
                         f"{'...' if len(matches) > 6 else ''}[/warn]\n"
                     )
                     continue
                 else:
-                    console.print(f"  [err][!] T-ID not found: '{tid}'[/err]\n")
+                    console.print(f"  [err][=^..^=] T-ID not found: '{tid}'[/err]\n")
                     continue
             _render_artifact_detail(entry)
 
@@ -2249,7 +2249,7 @@ def run_artifacts() -> None:
         elif cmd == "rules":
             if not args:
                 console.print(
-                    "[warn][!] usage: rules <T-ID> [level]  "
+                    "[warn][=^..^=] usage: rules <T-ID> [level]  "
                     "e.g.  rules T1055 high[/warn]"
                 )
                 continue
@@ -2261,13 +2261,13 @@ def run_artifacts() -> None:
                 if len(matches) == 1:
                     entry = tid_map[matches[0]]
                 else:
-                    console.print(f"  [err][!] T-ID not found: '{tid}'[/err]\n")
+                    console.print(f"  [err][=^..^=] T-ID not found: '{tid}'[/err]\n")
                     continue
             _render_all_rules(entry, level_filter)
 
         else:
             console.print(
-                f"[warn][!] unknown command: {cmd}  "
+                f"[warn][=^..^=] unknown command: {cmd}  "
                 f"(type  help  for commands)[/warn]"
             )
 
@@ -2435,12 +2435,12 @@ def run_library() -> None:
     try:
         import db as _db
     except ImportError as e:
-        console.print(f"[err][!] db module unavailable: {e}[/err]")
+        console.print(f"[err][=^..^=] db module unavailable: {e}[/err]")
         return
 
     all_entries = _db.get_mitre_entries()
     if not all_entries:
-        console.print("[warn][!] module library is empty - run the dashboard rebuild first[/warn]")
+        console.print("[warn][=^..^=] module library is empty - run the dashboard rebuild first[/warn]")
         return
 
     # build category -> entries map
@@ -2529,7 +2529,7 @@ def run_library() -> None:
                                     if cat in e["category"].lower()]
                 if not current_view:
                     console.print(
-                        f"[warn][!] no entries for category '{cat}' "
+                        f"[warn][=^..^=] no entries for category '{cat}' "
                         f"-- type  cats  to see valid categories[/warn]"
                     )
                     continue
@@ -2545,7 +2545,7 @@ def run_library() -> None:
         # -- search ------------------------------------------------------------
         elif cmd == "search":
             if not args:
-                console.print("[warn][!] usage: search <query>[/warn]")
+                console.print("[warn][=^..^=] usage: search <query>[/warn]")
                 continue
             q = " ".join(args).lower()
             hits = [
@@ -2556,7 +2556,7 @@ def run_library() -> None:
                 or any(q in tid.lower() for tid in e["attack_ids"])
             ]
             if not hits:
-                console.print(f"  [warn][!] no results for '{q}'[/warn]\n")
+                console.print(f"  [warn][=^..^=] no results for '{q}'[/warn]\n")
                 continue
             current_view  = hits
             current_title = f"Search: {q}"
@@ -2568,7 +2568,7 @@ def run_library() -> None:
         # -- show --------------------------------------------------------------
         elif cmd == "show":
             if not args:
-                console.print("[warn][!] usage: show <slug>[/warn]")
+                console.print("[warn][=^..^=] usage: show <slug>[/warn]")
                 continue
             slug = args[0]
             entry = slug_map.get(slug)
@@ -2579,20 +2579,20 @@ def run_library() -> None:
                     entry = slug_map[matches[0]]
                 elif len(matches) > 1:
                     console.print(
-                        f"  [warn][!] ambiguous slug '{slug}', "
+                        f"  [warn][=^..^=] ambiguous slug '{slug}', "
                         f"matches: {', '.join(matches[:5])}[/warn]\n"
                     )
                     continue
                 else:
                     console.print(
-                        f"  [err][!] slug not found: '{slug}'[/err]\n"
+                        f"  [err][=^..^=] slug not found: '{slug}'[/err]\n"
                     )
                     continue
             _render_module_detail(entry)
 
         else:
             console.print(
-                f"[warn][!] unknown command: {cmd}  "
+                f"[warn][=^..^=] unknown command: {cmd}  "
                 f"(type  help  for commands)[/warn]"
             )
 
@@ -2604,7 +2604,7 @@ def _load_evasion_module():
         import evasion as _ev
         return _ev
     except ImportError as e:
-        console.print(f"[err][!] evasion module unavailable: {e}[/err]")
+        console.print(f"[err][=^..^=] evasion module unavailable: {e}[/err]")
         return None
 
 
@@ -2763,7 +2763,7 @@ def _render_evasion_results(result: dict) -> None:
 def _render_patches_table(patches: list[dict],
                            selected: set[str]) -> None:
     if not patches:
-        console.print("[warn][!] no patches available for this binary[/warn]")
+        console.print("[warn][=^..^=] no patches available for this binary[/warn]")
         return
     t = Table(box=box.ASCII, show_header=True, header_style="heading",
               border_style="dim", padding=(0, 1), title="Available Patches")
@@ -2831,11 +2831,11 @@ def run_evasion(ev_mod) -> None:
         # -- load --------------------------------------------------------------
         elif cmd == "load":
             if not args:
-                console.print("[warn][!] usage: load <path>[/warn]")
+                console.print("[warn][=^..^=] usage: load <path>[/warn]")
                 continue
             p = Path(" ".join(args)).expanduser().resolve()
             if not p.exists():
-                console.print(f"[err][!] file not found: {p}[/err]")
+                console.print(f"[err][=^..^=] file not found: {p}[/err]")
                 continue
             try:
                 raw_data = p.read_bytes()
@@ -2843,16 +2843,16 @@ def run_evasion(ev_mod) -> None:
                 result   = None
                 selected = set()
                 console.print(
-                    f"[ok][+] loaded:[/ok] [cmd]{p.name}[/cmd]  "
+                    f"[ok][=^..^=] loaded:[/ok] [cmd]{p.name}[/cmd]  "
                     f"[dim]{len(raw_data)//1024} KB[/dim]"
                 )
             except Exception as e:
-                console.print(f"[err][!] read error: {e}[/err]")
+                console.print(f"[err][=^..^=] read error: {e}[/err]")
 
         # -- info --------------------------------------------------------------
         elif cmd == "info":
             if raw_data is None:
-                console.print("[warn][!] no file loaded - use  load <path>[/warn]")
+                console.print("[warn][=^..^=] no file loaded - use  load <path>[/warn]")
                 continue
             is_pe = raw_data[:2] == b'MZ'
             console.print(
@@ -2867,7 +2867,7 @@ def run_evasion(ev_mod) -> None:
         # -- analyse -----------------------------------------------------------
         elif cmd == "analyse":
             if raw_data is None:
-                console.print("[warn][!] no file loaded - use  load <path>[/warn]")
+                console.print("[warn][=^..^=] no file loaded - use  load <path>[/warn]")
                 continue
             with console.status("[info]analysing...[/info]", spinner="dots"):
                 result = ev_mod.analyse(raw_data, loaded_path.name)
@@ -2878,14 +2878,14 @@ def run_evasion(ev_mod) -> None:
         # -- patches -----------------------------------------------------------
         elif cmd == "patches":
             if result is None:
-                console.print("[warn][!] run  analyse  first[/warn]")
+                console.print("[warn][=^..^=] run  analyse  first[/warn]")
                 continue
             _render_patches_table(result["patches_available"], selected)
 
         # -- patch (toggle) ----------------------------------------------------
         elif cmd == "patch":
             if result is None:
-                console.print("[warn][!] run  analyse  first[/warn]")
+                console.print("[warn][=^..^=] run  analyse  first[/warn]")
                 continue
             if not args:
                 _render_patches_table(result["patches_available"], selected)
@@ -2897,17 +2897,17 @@ def run_evasion(ev_mod) -> None:
                 if pid in valid_ids:
                     if pid in selected:
                         selected.discard(pid)
-                        toggled.append(f"[-] {pid}")
+                        toggled.append(f"[=^..^=] {pid}")
                     else:
                         selected.add(pid)
-                        toggled.append(f"[+] {pid}")
+                        toggled.append(f"[=^..^=] {pid}")
                 else:
                     unknown.append(pid)
             for t in toggled:
-                style = "ok" if t.startswith("[+]") else "warn"
+                style = "ok" if t.startswith("[=^..^=]") else "warn"
                 console.print(f"  [{style}]{t}[/{style}]")
             for u in unknown:
-                console.print(f"  [err][!] unknown patch id: {u}[/err]")
+                console.print(f"  [err][=^..^=] unknown patch id: {u}[/err]")
             console.print(
                 f"\n  [dim]{len(selected)} patch(es) selected[/dim]\n"
             )
@@ -2915,13 +2915,13 @@ def run_evasion(ev_mod) -> None:
         # -- apply -------------------------------------------------------------
         elif cmd == "apply":
             if raw_data is None:
-                console.print("[warn][!] no file loaded[/warn]")
+                console.print("[warn][=^..^=] no file loaded[/warn]")
                 continue
             if result is None:
-                console.print("[warn][!] run  analyse  first[/warn]")
+                console.print("[warn][=^..^=] run  analyse  first[/warn]")
                 continue
             if not selected:
-                console.print("[warn][!] no patches selected - use  patch <id>[/warn]")
+                console.print("[warn][=^..^=] no patches selected - use  patch <id>[/warn]")
                 continue
 
             if args:
@@ -2937,13 +2937,13 @@ def run_evasion(ev_mod) -> None:
                 )
 
             if not applied:
-                console.print("[warn][!] no patches were applied[/warn]")
+                console.print("[warn][=^..^=] no patches were applied[/warn]")
                 continue
 
             try:
                 out_path.write_bytes(patched)
             except Exception as e:
-                console.print(f"[err][!] write error: {e}[/err]")
+                console.print(f"[err][=^..^=] write error: {e}[/err]")
                 continue
 
             # applied summary table
@@ -2960,13 +2960,13 @@ def run_evasion(ev_mod) -> None:
                          else f"{delta//1024} KB" if delta < 0
                          else "no size change")
             console.print(
-                f"\n  [ok][+] saved:[/ok] [cmd]{out_path}[/cmd]  "
+                f"\n  [ok][=^..^=] saved:[/ok] [cmd]{out_path}[/cmd]  "
                 f"[dim]{len(patched)//1024} KB  ({delta_str})[/dim]\n"
             )
 
         else:
             console.print(
-                f"[warn][!] unknown command: {cmd}  "
+                f"[warn][=^..^=] unknown command: {cmd}  "
                 f"(type  help  for commands)[/warn]"
             )
 
@@ -2991,7 +2991,7 @@ def _mp_abs_url(url: str) -> str:
 
 def _render_reports(reports: list[dict]) -> None:
     if not reports:
-        console.print("  [warn][!] no reports returned[/warn]\n")
+        console.print("  [warn][=^..^=] no reports returned[/warn]\n")
         return
 
     t = Table(box=box.ASCII, show_header=True, header_style="heading",
@@ -3113,7 +3113,7 @@ def _render_families_table(families: list, title: str = "Malware Families",
 
 def _render_actor_detail(a: dict) -> None:
     if "error" in a:
-        console.print(f"  [err][!] {a['error']}[/err]\n")
+        console.print(f"  [err][=^..^=] {a['error']}[/err]\n")
         return
 
     synonyms = ", ".join(a.get("synonyms", [])[:6])
@@ -3172,7 +3172,7 @@ def _render_actor_detail(a: dict) -> None:
 
 def _render_family_detail(f: dict) -> None:
     if "error" in f:
-        console.print(f"  [err][!] {f['error']}[/err]\n")
+        console.print(f"  [err][=^..^=] {f['error']}[/err]\n")
         return
 
     alts  = ", ".join(f.get("alt_names", [])[:6])
@@ -3217,12 +3217,12 @@ def run_malpedia() -> None:
     try:
         import malpedia as _mp
     except ImportError as exc:
-        console.print(f"[err][!] malpedia module unavailable: {exc}[/err]")
+        console.print(f"[err][=^..^=] malpedia module unavailable: {exc}[/err]")
         return
 
     if not _mp.available():
         console.print(
-            "  [err][!] malpediaclient not installed[/err]\n"
+            "  [err][=^..^=] malpediaclient not installed[/err]\n"
             "  [dim]Install with: pip install malpediaclient[/dim]\n"
         )
         return
@@ -3285,7 +3285,7 @@ def run_malpedia() -> None:
             with console.status("[info]checking API...[/info]", spinner="dots"):
                 st = _mp.get_status()
             if not st.get("ok"):
-                console.print(f"  [err][!] {st.get('error')}[/err]\n")
+                console.print(f"  [err][=^..^=] {st.get('error')}[/err]\n")
                 continue
             t = Table(box=box.ASCII, show_header=False, border_style="dim",
                       padding=(0, 2), title="Malpedia Status")
@@ -3309,7 +3309,7 @@ def run_malpedia() -> None:
                 try:
                     limit = max(1, min(int(args[0]), 100))
                 except ValueError:
-                    console.print("[warn][!] usage: reports [N][/warn]")
+                    console.print("[warn][=^..^=] usage: reports [N][/warn]")
                     continue
             with console.status(
                 f"[info]fetching {limit} recent reports...[/info]", spinner="dots"
@@ -3324,7 +3324,7 @@ def run_malpedia() -> None:
                 with console.status(f"[info]searching actors: {q}...[/info]", spinner="dots"):
                     hits = _mp.find_actor(q)
                 if not hits:
-                    console.print(f"  [warn][!] no actors found for '{q}'[/warn]\n")
+                    console.print(f"  [warn][=^..^=] no actors found for '{q}'[/warn]\n")
                     continue
                 current_view  = hits
                 current_title = f"Actor search: {q}"
@@ -3346,7 +3346,7 @@ def run_malpedia() -> None:
                 with console.status(f"[info]searching families: {q}...[/info]", spinner="dots"):
                     hits = _mp.find_family(q)
                 if not hits:
-                    console.print(f"  [warn][!] no families found for '{q}'[/warn]\n")
+                    console.print(f"  [warn][=^..^=] no families found for '{q}'[/warn]\n")
                     continue
                 current_view  = hits
                 current_title = f"Family search: {q}"
@@ -3362,7 +3362,7 @@ def run_malpedia() -> None:
         # -- actor <id> -------------------------------------------------------
         elif cmd == "actor":
             if not args:
-                console.print("[warn][!] usage: actor <id>  e.g.  actor lazarus_group[/warn]")
+                console.print("[warn][=^..^=] usage: actor <id>  e.g.  actor lazarus_group[/warn]")
                 continue
             aid = "_".join(args).lower()
             # try partial match in cached list
@@ -3372,13 +3372,13 @@ def run_malpedia() -> None:
                     aid = matches[0]
                 elif len(matches) > 1:
                     console.print(
-                        f"  [warn][!] ambiguous '{aid}': "
+                        f"  [warn][=^..^=] ambiguous '{aid}': "
                         f"{', '.join(matches[:5])}"
                         f"{'...' if len(matches)>5 else ''}[/warn]\n"
                     )
                     continue
                 elif not matches:
-                    console.print(f"  [err][!] actor not found: '{aid}'[/err]\n")
+                    console.print(f"  [err][=^..^=] actor not found: '{aid}'[/err]\n")
                     continue
             with console.status(f"[info]loading actor: {aid}...[/info]", spinner="dots"):
                 detail = _mp.get_actor(aid)
@@ -3387,7 +3387,7 @@ def run_malpedia() -> None:
         # -- family <id> ------------------------------------------------------
         elif cmd == "family":
             if not args:
-                console.print("[warn][!] usage: family <id>  e.g.  family win.cobalt_strike[/warn]")
+                console.print("[warn][=^..^=] usage: family <id>  e.g.  family win.cobalt_strike[/warn]")
                 continue
             fid = args[0].lower()
             if fid not in family_list:
@@ -3396,13 +3396,13 @@ def run_malpedia() -> None:
                     fid = matches[0]
                 elif len(matches) > 1:
                     console.print(
-                        f"  [warn][!] ambiguous '{fid}': "
+                        f"  [warn][=^..^=] ambiguous '{fid}': "
                         f"{', '.join(matches[:5])}"
                         f"{'...' if len(matches)>5 else ''}[/warn]\n"
                     )
                     continue
                 elif not matches:
-                    console.print(f"  [err][!] family not found: '{fid}'[/err]\n")
+                    console.print(f"  [err][=^..^=] family not found: '{fid}'[/err]\n")
                     continue
             with console.status(f"[info]loading family: {fid}...[/info]", spinner="dots"):
                 detail = _mp.get_family(fid)
@@ -3411,7 +3411,7 @@ def run_malpedia() -> None:
         # -- yara <family-id> [save <path>] -----------------------------------
         elif cmd == "yara":
             if not args:
-                console.print("[warn][!] usage: yara <family-id> [save <path>][/warn]")
+                console.print("[warn][=^..^=] usage: yara <family-id> [save <path>][/warn]")
                 continue
             fid      = args[0].lower()
             save_arg = None
@@ -3421,18 +3421,18 @@ def run_malpedia() -> None:
             try:
                 c = _mp._get_client()
                 if not c:
-                    console.print("  [err][!] malpedia client unavailable[/err]\n")
+                    console.print("  [err][=^..^=] malpedia client unavailable[/err]\n")
                     continue
                 with console.status(
                     f"[info]fetching YARA rules for {fid}...[/info]", spinner="dots"
                 ):
                     raw = c.get_yara(fid)
             except Exception as exc:
-                console.print(f"  [err][!] API error: {exc}[/err]\n")
+                console.print(f"  [err][=^..^=] API error: {exc}[/err]\n")
                 continue
 
             if not raw or not isinstance(raw, dict):
-                console.print(f"  [warn][!] no YARA rules found for '{fid}'[/warn]\n")
+                console.print(f"  [warn][=^..^=] no YARA rules found for '{fid}'[/warn]\n")
                 continue
 
             # raw = {tlp_level: {rule_name: rule_text, ...}, ...}
@@ -3443,7 +3443,7 @@ def run_malpedia() -> None:
                         all_rules.append((tlp, rname, rtext))
 
             if not all_rules:
-                console.print(f"  [warn][!] no public rules for '{fid}'[/warn]\n")
+                console.print(f"  [warn][=^..^=] no public rules for '{fid}'[/warn]\n")
                 continue
 
             combined = "\n\n".join(f"// {tlp} / {rname}\n{rtext}"
@@ -3474,16 +3474,16 @@ def run_malpedia() -> None:
                 try:
                     save_arg.write_text(combined, encoding="utf-8")
                     console.print(
-                        f"  [ok][+] saved:[/ok] [cmd]{save_arg}[/cmd]  "
+                        f"  [ok][=^..^=] saved:[/ok] [cmd]{save_arg}[/cmd]  "
                         f"[dim]{len(combined)} chars[/dim]\n"
                     )
                 except Exception as exc:
-                    console.print(f"  [err][!] write error: {exc}[/err]\n")
+                    console.print(f"  [err][=^..^=] write error: {exc}[/err]\n")
 
         # -- search <query> ---------------------------------------------------
         elif cmd == "search":
             if not args:
-                console.print("[warn][!] usage: search <query>[/warn]")
+                console.print("[warn][=^..^=] usage: search <query>[/warn]")
                 continue
             q = " ".join(args)
             with console.status(f"[info]searching '{q}'...[/info]", spinner="dots"):
@@ -3506,7 +3506,7 @@ def run_malpedia() -> None:
                 console.print(f"  [dim]no family matches for '{q}'[/dim]")
 
             if not actor_hits and not family_hits:
-                console.print(f"\n  [warn][!] no results for '{q}'[/warn]\n")
+                console.print(f"\n  [warn][=^..^=] no results for '{q}'[/warn]\n")
 
         # -- refresh ----------------------------------------------------------
         elif cmd == "refresh":
@@ -3514,13 +3514,13 @@ def run_malpedia() -> None:
                 actor_list  = _mp.list_actors(force_refresh=True)
                 family_list = _mp.list_families(force_refresh=True)
             console.print(
-                f"  [ok][+] refreshed:[/ok] "
+                f"  [ok][=^..^=] refreshed:[/ok] "
                 f"[dim]{len(actor_list)} actors, {len(family_list)} families[/dim]\n"
             )
 
         else:
             console.print(
-                f"[warn][!] unknown command: {cmd}  "
+                f"[warn][=^..^=] unknown command: {cmd}  "
                 f"(type  help  for commands)[/warn]"
             )
 
@@ -3599,7 +3599,7 @@ def run_yara() -> None:
     try:
         import yaragen as _yg
     except ImportError as exc:
-        console.print(f"[err][!] yaragen module unavailable: {exc}[/err]")
+        console.print(f"[err][=^..^=] yaragen module unavailable: {exc}[/err]")
         return
 
     yr_result: dict | None = None
@@ -3645,11 +3645,11 @@ def run_yara() -> None:
         # -- gen <path> -------------------------------------------------------
         elif cmd == "gen":
             if not args:
-                console.print("[warn][!] usage: gen <path>[/warn]")
+                console.print("[warn][=^..^=] usage: gen <path>[/warn]")
                 continue
             p = Path(" ".join(args)).expanduser().resolve()
             if not p.exists():
-                console.print(f"[err][!] file not found: {p}[/err]")
+                console.print(f"[err][=^..^=] file not found: {p}[/err]")
                 continue
 
             with console.status(
@@ -3659,7 +3659,7 @@ def run_yara() -> None:
                 result = _yg.generate_rule(p)
 
             if not result.get("ok"):
-                console.print(f"  [err][!] {result.get('error','failed')}[/err]\n")
+                console.print(f"  [err][=^..^=] {result.get('error','failed')}[/err]\n")
                 continue
 
             result["_filepath"] = str(p)
@@ -3675,53 +3675,53 @@ def run_yara() -> None:
         # -- show -------------------------------------------------------------
         elif cmd == "show":
             if yr_result is None:
-                console.print("[warn][!] no rule generated yet -- use  gen <path>[/warn]")
+                console.print("[warn][=^..^=] no rule generated yet -- use  gen <path>[/warn]")
                 continue
             _render_yara_rule(yr_result["rule"])
 
         # -- info -------------------------------------------------------------
         elif cmd == "info":
             if yr_result is None:
-                console.print("[warn][!] no rule generated yet -- use  gen <path>[/warn]")
+                console.print("[warn][=^..^=] no rule generated yet -- use  gen <path>[/warn]")
                 continue
             _render_yara_meta(yr_result)
 
         # -- save <path> ------------------------------------------------------
         elif cmd == "save":
             if yr_result is None:
-                console.print("[warn][!] no rule generated yet -- use  gen <path>[/warn]")
+                console.print("[warn][=^..^=] no rule generated yet -- use  gen <path>[/warn]")
                 continue
             if not args:
-                console.print("[warn][!] usage: save <path>[/warn]")
+                console.print("[warn][=^..^=] usage: save <path>[/warn]")
                 continue
             out_p = Path(" ".join(args)).expanduser().resolve()
             try:
                 out_p.write_text(yr_result["rule"], encoding="utf-8")
                 console.print(
-                    f"  [ok][+] saved:[/ok] [cmd]{out_p}[/cmd]  "
+                    f"  [ok][=^..^=] saved:[/ok] [cmd]{out_p}[/cmd]  "
                     f"[dim]{len(yr_result['rule'])} chars[/dim]\n"
                 )
             except Exception as exc:
-                console.print(f"  [err][!] write error: {exc}[/err]\n")
+                console.print(f"  [err][=^..^=] write error: {exc}[/err]\n")
 
         # -- scan <path> ------------------------------------------------------
         elif cmd == "scan":
             if yr_result is None:
-                console.print("[warn][!] no rule generated yet -- use  gen <path>[/warn]")
+                console.print("[warn][=^..^=] no rule generated yet -- use  gen <path>[/warn]")
                 continue
             if not args:
-                console.print("[warn][!] usage: scan <path>[/warn]")
+                console.print("[warn][=^..^=] usage: scan <path>[/warn]")
                 continue
             target = Path(" ".join(args)).expanduser().resolve()
             if not target.exists():
-                console.print(f"[err][!] file not found: {target}[/err]")
+                console.print(f"[err][=^..^=] file not found: {target}[/err]")
                 continue
 
             try:
                 import yara as _yara
             except ImportError:
                 console.print(
-                    "  [err][!] yara-python not installed[/err]\n"
+                    "  [err][=^..^=] yara-python not installed[/err]\n"
                     "  [dim]Install with: pip install yara-python[/dim]\n"
                 )
                 continue
@@ -3734,7 +3734,7 @@ def run_yara() -> None:
                 ):
                     matches = compiled.match(str(target))
             except Exception as exc:
-                console.print(f"  [err][!] yara error: {exc}[/err]\n")
+                console.print(f"  [err][=^..^=] yara error: {exc}[/err]\n")
                 continue
 
             if matches:
@@ -3776,7 +3776,7 @@ def run_yara() -> None:
 
         else:
             console.print(
-                f"[warn][!] unknown command: {cmd}  "
+                f"[warn][=^..^=] unknown command: {cmd}  "
                 f"(type  help  for commands)[/warn]"
             )
 
@@ -3875,7 +3875,7 @@ def run_shellcode() -> None:
     try:
         import shellcode as _sc
     except ImportError as exc:
-        console.print(f"[err][!] shellcode module unavailable: {exc}[/err]")
+        console.print(f"[err][=^..^=] shellcode module unavailable: {exc}[/err]")
         return
 
     sc_raw:   bytes | None = None   # raw loaded bytes
@@ -3929,24 +3929,24 @@ def run_shellcode() -> None:
         # -- load <path> ------------------------------------------------------
         elif cmd == "load":
             if not args:
-                console.print("[warn][!] usage: load <path>[/warn]")
+                console.print("[warn][=^..^=] usage: load <path>[/warn]")
                 continue
             p = Path(" ".join(args)).expanduser().resolve()
             if not p.exists():
-                console.print(f"[err][!] file not found: {p}[/err]")
+                console.print(f"[err][=^..^=] file not found: {p}[/err]")
                 continue
             try:
                 sc_raw   = p.read_bytes()
                 sc_label = p.name
                 console.print(
-                    f"  [ok][+] loaded:[/ok] [cmd]{p.name}[/cmd]  "
+                    f"  [ok][=^..^=] loaded:[/ok] [cmd]{p.name}[/cmd]  "
                     f"[dim]{len(sc_raw):,} bytes[/dim]"
                 )
                 console.print(
                     f"  [dim]run  analyse  to inspect, or  generate  to format[/dim]\n"
                 )
             except Exception as exc:
-                console.print(f"[err][!] read error: {exc}[/err]")
+                console.print(f"[err][=^..^=] read error: {exc}[/err]")
 
         # -- paste ------------------------------------------------------------
         elif cmd == "paste":
@@ -3966,22 +3966,22 @@ def run_shellcode() -> None:
                 lines.append(line)
             raw_text = "\n".join(lines).strip()
             if not raw_text:
-                console.print("  [warn][!] no input received[/warn]\n")
+                console.print("  [warn][=^..^=] no input received[/warn]\n")
                 continue
             try:
                 sc_raw, detected = _sc.parse_input(raw_text)
                 sc_label = "pasted"
                 console.print(
-                    f"  [ok][+] {len(sc_raw):,} bytes loaded[/ok]  "
+                    f"  [ok][=^..^=] {len(sc_raw):,} bytes loaded[/ok]  "
                     f"[dim]detected as: {detected}[/dim]\n"
                 )
             except ValueError as exc:
-                console.print(f"  [err][!] parse error: {exc}[/err]\n")
+                console.print(f"  [err][=^..^=] parse error: {exc}[/err]\n")
 
         # -- analyse ----------------------------------------------------------
         elif cmd == "analyse":
             if sc_raw is None:
-                console.print("[warn][!] no shellcode loaded -- use  load  or  paste[/warn]")
+                console.print("[warn][=^..^=] no shellcode loaded -- use  load  or  paste[/warn]")
                 continue
             stats = _sc.analyse(sc_raw)
             _render_sc_analysis(stats, sc_label or "Analysis")
@@ -4030,12 +4030,12 @@ def run_shellcode() -> None:
             fid = args[0].lower()
             if fid not in all_fmt_ids:
                 console.print(
-                    f"  [err][!] unknown format '{fid}'[/err]\n"
+                    f"  [err][=^..^=] unknown format '{fid}'[/err]\n"
                     f"  [dim]valid: {' '.join(all_fmt_ids)}[/dim]\n"
                 )
                 continue
             sc_fmt = fid
-            console.print(f"  [ok][+] format set to: [cmd]{sc_fmt}[/cmd][/ok]\n")
+            console.print(f"  [ok][=^..^=] format set to: [cmd]{sc_fmt}[/cmd][/ok]\n")
 
         # -- transform <id> [key] ---------------------------------------------
         elif cmd == "transform":
@@ -4048,7 +4048,7 @@ def run_shellcode() -> None:
             xid = args[0].lower()
             if xid not in all_xform_ids:
                 console.print(
-                    f"  [err][!] unknown transform '{xid}'[/err]\n"
+                    f"  [err][=^..^=] unknown transform '{xid}'[/err]\n"
                     f"  [dim]valid: {' '.join(all_xform_ids)}[/dim]\n"
                 )
                 continue
@@ -4056,14 +4056,14 @@ def run_shellcode() -> None:
             sc_xkey  = " ".join(args[1:]) if len(args) > 1 else ""
             if sc_xform == "xor_key" and not sc_xkey:
                 console.print(
-                    "  [warn][!] xor_key requires a key argument\n"
+                    "  [warn][=^..^=] xor_key requires a key argument\n"
                     "  example: transform xor_key 0x41\n"
                     "           transform xor_key 0xde,0xad,0xbe,0xef\n"
                     "           transform xor_key deadbeef[/warn]\n"
                 )
                 sc_xform = "none"
                 continue
-            msg = f"  [ok][+] transform set to: [warn]{sc_xform}[/warn]"
+            msg = f"  [ok][=^..^=] transform set to: [warn]{sc_xform}[/warn]"
             if sc_xkey:
                 msg += f"  [dim]key={sc_xkey}[/dim]"
             console.print(msg + "[/ok]\n")
@@ -4077,17 +4077,17 @@ def run_shellcode() -> None:
                 )
                 continue
             sc_vname = args[0]
-            console.print(f"  [ok][+] variable name set to: [info]{sc_vname}[/info][/ok]\n")
+            console.print(f"  [ok][=^..^=] variable name set to: [info]{sc_vname}[/info][/ok]\n")
 
         # -- generate [format] ------------------------------------------------
         elif cmd == "generate":
             if sc_raw is None:
-                console.print("[warn][!] no shellcode loaded -- use  load  or  paste[/warn]")
+                console.print("[warn][=^..^=] no shellcode loaded -- use  load  or  paste[/warn]")
                 continue
             run_fmt = args[0].lower() if args else sc_fmt
             if run_fmt not in all_fmt_ids:
                 console.print(
-                    f"  [err][!] unknown format '{run_fmt}'[/err]\n"
+                    f"  [err][=^..^=] unknown format '{run_fmt}'[/err]\n"
                     f"  [dim]valid: {' '.join(all_fmt_ids)}[/dim]\n"
                 )
                 continue
@@ -4104,7 +4104,7 @@ def run_shellcode() -> None:
                 )
 
             if not result.get("ok"):
-                console.print(f"  [err][!] {result.get('error','unknown error')}[/err]\n")
+                console.print(f"  [err][=^..^=] {result.get('error','unknown error')}[/err]\n")
                 continue
 
             # settings summary
@@ -4149,10 +4149,10 @@ def run_shellcode() -> None:
         # -- save <path> ------------------------------------------------------
         elif cmd == "save":
             if sc_raw is None:
-                console.print("[warn][!] no shellcode loaded[/warn]")
+                console.print("[warn][=^..^=] no shellcode loaded[/warn]")
                 continue
             if not args:
-                console.print("[warn][!] usage: save <path>[/warn]")
+                console.print("[warn][=^..^=] usage: save <path>[/warn]")
                 continue
             out_p = Path(" ".join(args)).expanduser().resolve()
 
@@ -4162,7 +4162,7 @@ def run_shellcode() -> None:
                     res = _sc.process(raw_hex, output_format="hex_raw",
                                       transform=sc_xform, xor_key_str=sc_xkey)
                 if not res.get("ok"):
-                    console.print(f"  [err][!] transform error: {res.get('error')}[/err]\n")
+                    console.print(f"  [err][=^..^=] transform error: {res.get('error')}[/err]\n")
                     continue
                 save_bytes = bytes.fromhex(res["output"])
             else:
@@ -4171,19 +4171,19 @@ def run_shellcode() -> None:
             try:
                 out_p.write_bytes(save_bytes)
                 console.print(
-                    f"  [ok][+] saved:[/ok] [cmd]{out_p}[/cmd]  "
+                    f"  [ok][=^..^=] saved:[/ok] [cmd]{out_p}[/cmd]  "
                     f"[dim]{len(save_bytes):,} bytes[/dim]\n"
                 )
             except Exception as exc:
-                console.print(f"  [err][!] write error: {exc}[/err]\n")
+                console.print(f"  [err][=^..^=] write error: {exc}[/err]\n")
 
         # -- export <path> ----------------------------------------------------
         elif cmd == "export":
             if sc_raw is None:
-                console.print("[warn][!] no shellcode loaded[/warn]")
+                console.print("[warn][=^..^=] no shellcode loaded[/warn]")
                 continue
             if not args:
-                console.print("[warn][!] usage: export <path>[/warn]")
+                console.print("[warn][=^..^=] usage: export <path>[/warn]")
                 continue
             out_p = Path(" ".join(args)).expanduser().resolve()
 
@@ -4193,21 +4193,21 @@ def run_shellcode() -> None:
                                   transform=sc_xform, xor_key_str=sc_xkey,
                                   var_name=sc_vname)
             if not res.get("ok"):
-                console.print(f"  [err][!] {res.get('error')}[/err]\n")
+                console.print(f"  [err][=^..^=] {res.get('error')}[/err]\n")
                 continue
 
             try:
                 out_p.write_text(res["output"], encoding="utf-8")
                 console.print(
-                    f"  [ok][+] exported:[/ok] [cmd]{out_p}[/cmd]  "
+                    f"  [ok][=^..^=] exported:[/ok] [cmd]{out_p}[/cmd]  "
                     f"[dim]{len(res['output'])} chars[/dim]\n"
                 )
             except Exception as exc:
-                console.print(f"  [err][!] write error: {exc}[/err]\n")
+                console.print(f"  [err][=^..^=] write error: {exc}[/err]\n")
 
         else:
             console.print(
-                f"[warn][!] unknown command: {cmd}  "
+                f"[warn][=^..^=] unknown command: {cmd}  "
                 f"(type  help  for commands)[/warn]"
             )
 
@@ -4267,7 +4267,7 @@ def _render_pe_sections(r: dict) -> None:
         rwx = ("r" if s["readable"] else "-") + ("w" if s["writable"] else "-") + ("x" if s["executable"] else "-")
         ent = s["entropy"]
         ent_style = "err" if ent > 6.8 else ("warn" if ent > 6.0 else "good")
-        note = "[err][!] high entropy[/err]" if ent > 6.8 else ("[warn]writable+exec[/warn]" if s["writable"] and s["executable"] else "")
+        note = "[err][=^..^=] high entropy[/err]" if ent > 6.8 else ("[warn]writable+exec[/warn]" if s["writable"] and s["executable"] else "")
         t.add_row(
             s["name"],
             s["virt_addr"],
@@ -4313,7 +4313,7 @@ def _render_pe_imports(r: dict) -> None:
 def _render_pe_suspicious(r: dict) -> None:
     by_cat = r.get("suspicious_by_category", {})
     if not by_cat:
-        console.print("  [good][+] no suspicious imports detected[/good]\n")
+        console.print("  [good][=^..^=] no suspicious imports detected[/good]\n")
         return
     CAT_STYLE = {
         "injection":    "critical",
@@ -4392,21 +4392,21 @@ def run_pe() -> None:
 
         elif cmd in ("analyse", "open"):
             if not arg:
-                console.print("  [warn][!] usage: analyse <path>[/warn]\n")
+                console.print("  [warn][=^..^=] usage: analyse <path>[/warn]\n")
                 continue
             p = Path(arg).expanduser()
             if not p.exists():
-                console.print(f"  [err][!] file not found: {p}[/err]\n")
+                console.print(f"  [err][=^..^=] file not found: {p}[/err]\n")
                 continue
             with console.status("[info]analysing...[/info]", spinner="dots"):
                 try:
                     from pe_inspector import analyze as _pe_analyze
                     current = _pe_analyze(p)
                 except Exception as e:
-                    console.print(f"  [err][!] {e}[/err]\n")
+                    console.print(f"  [err][=^..^=] {e}[/err]\n")
                     continue
             if not current["ok"]:
-                console.print(f"  [err][!] {current['error']}[/err]\n")
+                console.print(f"  [err][=^..^=] {current['error']}[/err]\n")
                 current = None
                 continue
             _render_pe_header(current)
@@ -4414,25 +4414,25 @@ def run_pe() -> None:
 
         elif cmd == "sections":
             if current is None:
-                console.print("  [warn][!] no file loaded -- use  analyse <path>  first[/warn]\n")
+                console.print("  [warn][=^..^=] no file loaded -- use  analyse <path>  first[/warn]\n")
             else:
                 _render_pe_sections(current)
 
         elif cmd == "imports":
             if current is None:
-                console.print("  [warn][!] no file loaded -- use  analyse <path>  first[/warn]\n")
+                console.print("  [warn][=^..^=] no file loaded -- use  analyse <path>  first[/warn]\n")
             else:
                 _render_pe_imports(current)
 
         elif cmd == "suspicious":
             if current is None:
-                console.print("  [warn][!] no file loaded -- use  analyse <path>  first[/warn]\n")
+                console.print("  [warn][=^..^=] no file loaded -- use  analyse <path>  first[/warn]\n")
             else:
                 _render_pe_suspicious(current)
 
         elif cmd == "score":
             if current is None:
-                console.print("  [warn][!] no file loaded -- use  analyse <path>  first[/warn]\n")
+                console.print("  [warn][=^..^=] no file loaded -- use  analyse <path>  first[/warn]\n")
             else:
                 label, style = _threat_label(current["threat_score"])
                 console.print()
@@ -4450,7 +4450,7 @@ def run_pe() -> None:
 
         else:
             console.print(
-                f"[warn][!] unknown command: {cmd}  "
+                f"[warn][=^..^=] unknown command: {cmd}  "
                 f"(type  help  for commands)[/warn]"
             )
 
@@ -4736,7 +4736,7 @@ def _render_ttp_list(rows: list[dict], title: str) -> None:
 def _render_ttp_show(attack_id: str, rows: list[dict]) -> None:
     """Render the detail view for one attack_id."""
     if not rows:
-        console.print(f"  [err][!] no implementations found for {attack_id}[/err]\n")
+        console.print(f"  [err][=^..^=] no implementations found for {attack_id}[/err]\n")
         return
 
     tech_name = rows[0]["tech_name"] or attack_id
@@ -4797,19 +4797,19 @@ def run_ttp() -> None:
     try:
         import db as _db
     except ImportError as e:
-        console.print(f"[err][!] db module unavailable: {e}[/err]")
+        console.print(f"[err][=^..^=] db module unavailable: {e}[/err]")
         return
     try:
         import discovery as _disc
     except ImportError as e:
-        console.print(f"[err][!] discovery module unavailable: {e}[/err]")
+        console.print(f"[err][=^..^=] discovery module unavailable: {e}[/err]")
         return
 
     # load all rows once; refresh updates this
     all_rows = _db.get_ttp_implementations()
     if not all_rows:
         console.print(
-            "[warn][!] ttp_implementations table is empty -- run  refresh  to seed[/warn]\n"
+            "[warn][=^..^=] ttp_implementations table is empty -- run  refresh  to seed[/warn]\n"
         )
 
     # build completer tokens from attack_ids + tactics
@@ -4875,7 +4875,7 @@ def run_ttp() -> None:
                             if r["attack_id"] == aid
                             or r["attack_id"].startswith(aid + ".")]
                 if not filtered:
-                    console.print(f"  [warn][!] no implementations for {aid}[/warn]\n")
+                    console.print(f"  [warn][=^..^=] no implementations for {aid}[/warn]\n")
                 else:
                     _render_ttp_list(filtered, f"Technique: {aid}")
             else:
@@ -4886,14 +4886,14 @@ def run_ttp() -> None:
                     _render_ttp_list(filtered, f"Tactic: {matches[0]}")
                 else:
                     console.print(
-                        f"  [warn][!] unknown filter '{f}' -- "
+                        f"  [warn][=^..^=] unknown filter '{f}' -- "
                         f"use a tactic, platform, or T-ID[/warn]\n"
                     )
 
         # -- show <attack_id> ----------------------------------------------------
         elif cmd == "show":
             if not args:
-                console.print("[warn][!] usage: show <attack_id>[/warn]")
+                console.print("[warn][=^..^=] usage: show <attack_id>[/warn]")
                 continue
             aid  = args[0].upper()
             rows = _db.get_ttp_by_attack_id(aid)
@@ -4903,19 +4903,19 @@ def run_ttp() -> None:
                 if sub:
                     _render_ttp_list(sub, f"Sub-techniques of {aid}")
                 else:
-                    console.print(f"  [err][!] no implementations for {aid}[/err]\n")
+                    console.print(f"  [err][=^..^=] no implementations for {aid}[/err]\n")
             else:
                 _render_ttp_show(aid, rows)
 
         # -- search <query> ------------------------------------------------------
         elif cmd == "search":
             if not args:
-                console.print("[warn][!] usage: search <query>[/warn]")
+                console.print("[warn][=^..^=] usage: search <query>[/warn]")
                 continue
             q       = " ".join(args)
             results = _db.get_ttp_implementations(q=q)
             if not results:
-                console.print(f"  [warn][!] no results for '{q}'[/warn]\n")
+                console.print(f"  [warn][=^..^=] no results for '{q}'[/warn]\n")
             else:
                 t = Table(box=box.ASCII, show_header=True, header_style="heading",
                           border_style="dim", padding=(0, 1),
@@ -4943,19 +4943,19 @@ def run_ttp() -> None:
         # -- build <attack_id> ---------------------------------------------------
         elif cmd == "build":
             if not args:
-                console.print("[warn][!] usage: build <attack_id>[/warn]")
+                console.print("[warn][=^..^=] usage: build <attack_id>[/warn]")
                 continue
 
             aid  = args[0].upper()
             rows = _db.get_ttp_by_attack_id(aid)
             if not rows:
-                console.print(f"  [err][!] no implementations for {aid}[/err]\n")
+                console.print(f"  [err][=^..^=] no implementations for {aid}[/err]\n")
                 continue
 
             compilable = [r for r in rows if r["meow_slug"]]
             if not compilable:
                 console.print(
-                    f"  [warn][!] {aid} has {len(rows)} implementation(s) "
+                    f"  [warn][=^..^=] {aid} has {len(rows)} implementation(s) "
                     f"but none have a compilable meow module[/warn]"
                 )
                 for r in rows:
@@ -4999,7 +4999,7 @@ def run_ttp() -> None:
                         raise ValueError
                     chosen = compilable[idx]
                 except ValueError:
-                    console.print("  [err][!] invalid selection[/err]\n")
+                    console.print("  [err][=^..^=] invalid selection[/err]\n")
                     continue
 
             # resolve meow module via discovery
@@ -5008,7 +5008,7 @@ def run_ttp() -> None:
             mod        = slug_map.get(meow_slug)
             if not mod:
                 console.print(
-                    f"  [err][!] meow module '{meow_slug}' not found in discovery[/err]\n"
+                    f"  [err][=^..^=] meow module '{meow_slug}' not found in discovery[/err]\n"
                 )
                 continue
 
@@ -5074,15 +5074,15 @@ def run_ttp() -> None:
                 n_techs2 = _db.count_ttp_techniques()
                 n_impls2 = _db.count_ttp_implementations()
                 console.print(
-                    f"  [ok][+] seeded {n} rows  |  "
+                    f"  [ok][=^..^=] seeded {n} rows  |  "
                     f"{n_techs2} techniques  {n_impls2} implementations[/ok]\n"
                 )
             except Exception as ex:
-                console.print(f"  [err][!] refresh failed: {ex}[/err]\n")
+                console.print(f"  [err][=^..^=] refresh failed: {ex}[/err]\n")
 
         else:
             console.print(
-                f"[warn][!] unknown command: {cmd}  "
+                f"[warn][=^..^=] unknown command: {cmd}  "
                 f"(type  help  for commands)[/warn]"
             )
 
@@ -5092,17 +5092,17 @@ def run_builder() -> None:
     try:
         import discovery as _disc
     except ImportError as exc:
-        console.print(f"[err][!] discovery module unavailable: {exc}[/err]")
+        console.print(f"[err][=^..^=] discovery module unavailable: {exc}[/err]")
         return
     try:
         import compiler as _compiler
     except ImportError as exc:
-        console.print(f"[err][!] compiler module unavailable: {exc}[/err]")
+        console.print(f"[err][=^..^=] compiler module unavailable: {exc}[/err]")
         return
     try:
         import db as _db
     except ImportError as exc:
-        console.print(f"[err][!] db module unavailable: {exc}[/err]")
+        console.print(f"[err][=^..^=] db module unavailable: {exc}[/err]")
         return
 
     with console.status("[info]scanning modules...[/info]", spinner="dots"):
@@ -5219,7 +5219,7 @@ def run_builder() -> None:
                     current_title = f"Compilable Modules: category~{f}"
                 if not current_view:
                     console.print(
-                        f"  [warn][!] no compilable modules matching '{f}'[/warn]\n"
+                        f"  [warn][=^..^=] no compilable modules matching '{f}'[/warn]\n"
                     )
                     continue
             else:
@@ -5233,7 +5233,7 @@ def run_builder() -> None:
         # -- search -----------------------------------------------------------
         elif cmd == "search":
             if not args:
-                console.print("[warn][!] usage: search <query>[/warn]")
+                console.print("[warn][=^..^=] usage: search <query>[/warn]")
                 continue
             q = " ".join(args).lower()
 
@@ -5270,12 +5270,12 @@ def run_builder() -> None:
                     current_view, current_title, current_page
                 )
             elif not st_hits:
-                console.print(f"  [warn][!] no results for '{q}'[/warn]\n")
+                console.print(f"  [warn][=^..^=] no results for '{q}'[/warn]\n")
 
         # -- build <slug> -----------------------------------------------------
         elif cmd == "build":
             if not args:
-                console.print("[warn][!] usage: build <slug>  (or: build <stealer-name>)[/warn]")
+                console.print("[warn][=^..^=] usage: build <slug>  (or: build <stealer-name>)[/warn]")
                 continue
             slug = args[0]
 
@@ -5286,7 +5286,7 @@ def run_builder() -> None:
                     slug = st_matches[0]
                 elif len(st_matches) > 1:
                     console.print(
-                        f"  [warn][!] ambiguous stealer '{slug}': "
+                        f"  [warn][=^..^=] ambiguous stealer '{slug}': "
                         f"{', '.join(st_matches)}[/warn]\n"
                     )
                     continue
@@ -5405,7 +5405,7 @@ def run_builder() -> None:
                     })
                     console.print(f"  [dim]build saved: {build_id}[/dim]\n")
                 except Exception as exc:
-                    console.print(f"  [warn][!] db save error: {exc}[/warn]\n")
+                    console.print(f"  [warn][=^..^=] db save error: {exc}[/warn]\n")
                 continue
 
             # -- meow module path ---------------------------------------------
@@ -5417,13 +5417,13 @@ def run_builder() -> None:
                     mod  = slug_map[slug]
                 elif len(matches) > 1:
                     console.print(
-                        f"  [warn][!] ambiguous '{slug}': "
+                        f"  [warn][=^..^=] ambiguous '{slug}': "
                         f"{', '.join(matches[:5])}"
                         f"{'...' if len(matches) > 5 else ''}[/warn]\n"
                     )
                     continue
                 else:
-                    console.print(f"  [err][!] module not found: '{slug}'[/err]\n")
+                    console.print(f"  [err][=^..^=] module not found: '{slug}'[/err]\n")
                     continue
 
             # pre-build summary
@@ -5493,7 +5493,7 @@ def run_builder() -> None:
                 })
                 console.print(f"  [dim]build saved: {build_id}[/dim]\n")
             except Exception as exc:
-                console.print(f"  [warn][!] db save error: {exc}[/warn]\n")
+                console.print(f"  [warn][=^..^=] db save error: {exc}[/warn]\n")
 
         # -- history [N] ------------------------------------------------------
         elif cmd == "history":
@@ -5502,24 +5502,24 @@ def run_builder() -> None:
                 try:
                     limit = max(1, min(int(args[0]), 100))
                 except ValueError:
-                    console.print("[warn][!] usage: history [N]  (N is a number)[/warn]")
+                    console.print("[warn][=^..^=] usage: history [N]  (N is a number)[/warn]")
                     continue
             try:
                 builds = _db.get_builds(limit)
                 _render_history_table(builds)
             except Exception as exc:
-                console.print(f"  [err][!] db error: {exc}[/err]\n")
+                console.print(f"  [err][=^..^=] db error: {exc}[/err]\n")
 
         # -- show <build-id> --------------------------------------------------
         elif cmd == "show":
             if not args:
-                console.print("[warn][!] usage: show <build-id>[/warn]")
+                console.print("[warn][=^..^=] usage: show <build-id>[/warn]")
                 continue
             bid = args[0]
             try:
                 b = _db.get_build(bid)
             except Exception as exc:
-                console.print(f"  [err][!] db error: {exc}[/err]\n")
+                console.print(f"  [err][=^..^=] db error: {exc}[/err]\n")
                 continue
             if not b:
                 # try prefix match from recent builds
@@ -5530,21 +5530,21 @@ def run_builder() -> None:
                         b = matches[0]
                     elif len(matches) > 1:
                         console.print(
-                            f"  [warn][!] ambiguous id prefix '{bid}': "
+                            f"  [warn][=^..^=] ambiguous id prefix '{bid}': "
                             f"{', '.join(x['id'] for x in matches[:4])}[/warn]\n"
                         )
                         continue
                     else:
-                        console.print(f"  [err][!] build not found: '{bid}'[/err]\n")
+                        console.print(f"  [err][=^..^=] build not found: '{bid}'[/err]\n")
                         continue
                 except Exception as exc:
-                    console.print(f"  [err][!] db error: {exc}[/err]\n")
+                    console.print(f"  [err][=^..^=] db error: {exc}[/err]\n")
                     continue
             _render_build_detail(b)
 
         else:
             console.print(
-                f"[warn][!] unknown command: {cmd}  "
+                f"[warn][=^..^=] unknown command: {cmd}  "
                 f"(type  help  for commands)[/warn]"
             )
 
@@ -5591,14 +5591,14 @@ def main() -> None:
             print_top_help(parts[1] if len(parts) > 1 else None)
         elif cmd == "evasion":
             if ev_mod is None:
-                console.print("[err][!] evasion module not available[/err]")
+                console.print("[err][=^..^=] evasion module not available[/err]")
             else:
                 run_evasion(ev_mod)
         elif cmd in _dispatch:
             _dispatch[cmd]()  # type: ignore[operator]
         else:
             console.print(
-                f"[warn][!] unknown command: {cmd}  "
+                f"[warn][=^..^=] unknown command: {cmd}  "
                 f"(type  help  for available modules)[/warn]"
             )
 

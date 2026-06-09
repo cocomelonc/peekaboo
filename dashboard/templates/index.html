@@ -496,6 +496,14 @@ code{font-family:var(--mono);font-size:12px;background:var(--bg4);padding:1px 5p
 .malp-rep-arrow{color:var(--dim);font-size:16px;padding-top:1px;flex-shrink:0}
 .malp-fam-badge{font-size:9px;cursor:pointer}
 
+/* -- C2 panel -- */
+.c2-layout{display:grid;grid-template-columns:1fr 1fr;gap:18px;align-items:stretch;margin-bottom:18px}
+@media(max-width:900px){.c2-layout{grid-template-columns:1fr}}
+.c2-layout > .card{display:flex;flex-direction:column}
+.c2-status-grid{display:grid;grid-template-columns:1fr 1fr;gap:10px}
+.c2-status-item{background:var(--bg3);border:1px solid var(--sep);border-radius:var(--rs);padding:10px 12px}
+.c2-deliver-grid{display:grid;grid-template-columns:1fr 1fr;gap:10px}
+
 /* -- beacons -- */
 .beacon-msg{padding:10px 14px;background:var(--bg3);border-radius:var(--rs);margin-bottom:8px;border-left:3px solid var(--green);animation:slideRight .2s ease}
 .beacon-from{font-size:11px;color:var(--dim)}
@@ -1746,28 +1754,34 @@ code{font-family:var(--mono);font-size:12px;background:var(--bg4);padding:1px 5p
 
 <!-- ════════ C2 PANEL ════════ -->
 <div id="panel-c2" class="panel">
-  <div class="card" style="margin-bottom:18px">
-    <div class="card-header">
-      <span style="font-size:18px">📡</span>
-      <div><div class="card-title">C2 Channel Status</div><div class="card-sub">connectivity check for configured channels</div></div>
-      <button class="btn btn-ghost btn-sm" style="margin-left:auto" onclick="checkC2Status()">Check All</button>
-    </div>
-    <div id="c2-status-row" class="grid-4"></div>
-  </div>
+  <div class="c2-layout">
 
-  <div class="card" style="margin-bottom:18px">
-    <div class="card-header">
-      <span style="font-size:18px">🎯</span>
-      <div><div class="card-title">Binary Delivery</div><div class="card-sub" id="c2-binary-info">no binary loaded</div></div>
-      <button class="btn btn-ghost btn-sm" style="margin-left:auto" onclick="checkBinaryInfo()">Refresh</button>
+    <!-- channel status -->
+    <div class="card">
+      <div class="card-header">
+        <span style="font-size:18px">📡</span>
+        <div><div class="card-title">C2 Channel Status</div><div class="card-sub">connectivity check for configured channels</div></div>
+        <button class="btn btn-ghost btn-sm ms-auto" onclick="checkC2Status()">Check All</button>
+      </div>
+      <div id="c2-status-row" class="c2-status-grid"></div>
     </div>
-    <div class="grid-4">
-      <button class="btn btn-ghost" onclick="deliver('telegram')"><span>📨</span> Telegram</button>
-      <button class="btn btn-ghost" onclick="deliver('github')"><span>🐙</span> GitHub Gist</button>
-      <button class="btn btn-ghost" onclick="deliver('bitbucket')"><span>🪣</span> Bitbucket</button>
-      <button class="btn btn-ghost" onclick="deliver('virustotal')"><span>🦠</span> VirusTotal</button>
+
+    <!-- binary delivery -->
+    <div class="card">
+      <div class="card-header">
+        <span style="font-size:18px">🎯</span>
+        <div><div class="card-title">Binary Delivery</div><div class="card-sub" id="c2-binary-info">no binary loaded</div></div>
+        <button class="btn btn-ghost btn-sm ms-auto" onclick="checkBinaryInfo()">Refresh</button>
+      </div>
+      <div class="c2-deliver-grid">
+        <button class="btn btn-ghost" onclick="deliver('telegram')"><span>📨</span> Telegram</button>
+        <button class="btn btn-ghost" onclick="deliver('github')"><span>🐙</span> GitHub Gist</button>
+        <button class="btn btn-ghost" onclick="deliver('bitbucket')"><span>🪣</span> Bitbucket</button>
+        <button class="btn btn-ghost" onclick="deliver('virustotal')"><span>🦠</span> VirusTotal</button>
+      </div>
+      <div id="deliver-output" class="terminal" style="margin-top:14px;min-height:80px;display:none"></div>
     </div>
-    <div id="deliver-output" class="terminal" style="margin-top:14px;min-height:80px;display:none"></div>
+
   </div>
 </div>
 
@@ -3216,7 +3230,7 @@ function _peRenderSections(d) {
     const rwx = (s.readable?'r':'-') + (s.writable?'w':'-') + (s.executable?'x':'-');
     const ec  = s.entropy > 6.8 ? 'var(--red)' : s.entropy > 6.0 ? 'var(--yellow)' : 'var(--green)';
     const note = s.entropy > 6.8
-      ? '<span style="color:var(--red)">[!] high entropy</span>'
+      ? '<span style="color:var(--red)">[=^..^=] high entropy</span>'
       : (s.writable && s.executable ? '<span style="color:var(--yellow)">writable+exec</span>' : '');
     return `<tr>
       <td><code style="color:var(--cyan)">${escHtml(s.name)}</code></td>
@@ -4205,7 +4219,7 @@ async function checkC2Status() {
     const ok   = info.ok;
     const col  = ok ? 'var(--green)' : 'var(--dim)';
     const icon = {telegram:'📨',github:'🐙',bitbucket:'🪣',virustotal:'🦠'}[ch];
-    return `<div class="card card-sm" style="border-color:${ok?'rgba(48,209,88,.3)':'var(--sep)'}">
+    return `<div class="c2-status-item" style="border-color:${ok?'rgba(48,209,88,.3)':'var(--sep)'}">
       <div style="display:flex;align-items:center;gap:8px;margin-bottom:4px">
         <span>${icon}</span><span class="fw-600 text-sm">${ch}</span>
         <span style="width:7px;height:7px;border-radius:50%;background:${col};margin-left:auto;${ok?'box-shadow:0 0 6px var(--green)':''}"></span>
