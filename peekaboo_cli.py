@@ -10,7 +10,7 @@ from __future__ import annotations
 import os
 import sys
 import uuid
-from collections import Counter
+from collections import Counter, defaultdict
 from datetime import datetime
 from pathlib import Path
 
@@ -87,6 +87,8 @@ def _make_session(words: list[str]) -> PromptSession:
         style=PT_STYLE,
     )
 
+
+PAGE_SIZE = 20  # default page size for all sub-REPL tables
 
 # -- documentation strings (Markdown, rendered by rich) -----------------------
 
@@ -1795,7 +1797,7 @@ def print_top_help(module: str | None = None) -> None:
 
 # -- artifact map --------------------------------------------------------------
 
-ART_PAGE_SIZE = 20
+ART_PAGE_SIZE = PAGE_SIZE
 
 # Sysmon EventID -> short label
 _EID_LABEL = {
@@ -2284,7 +2286,7 @@ _EXT_LANG = {
     ".rs":  "rust",
 }
 
-LIB_PAGE_SIZE = 20
+LIB_PAGE_SIZE = PAGE_SIZE
 
 LIBRARY_COMMANDS = [
     "list", "search", "show", "cats", "help", "back",
@@ -2971,7 +2973,7 @@ def run_evasion(ev_mod) -> None:
 
 # -- malpedia lab -------------------------------------------------------------
 
-MALPEDIA_PAGE_SIZE = 20
+MALPEDIA_PAGE_SIZE = PAGE_SIZE
 
 MALPEDIA_COMMANDS = [
     "status", "reports", "actors", "families", "actor", "family",
@@ -4213,7 +4215,7 @@ def run_shellcode() -> None:
 
 # -- builder -------------------------------------------------------------------
 
-BUILD_PAGE_SIZE = 20
+BUILD_PAGE_SIZE = PAGE_SIZE
 
 BUILDER_COMMANDS = [
     "list", "search", "build", "history", "show", "help", "back",
@@ -4433,7 +4435,6 @@ def _ttp_tactic_style(tactic: str) -> str:
 
 def _render_ttp_list(rows: list[dict], title: str) -> None:
     """Group rows by tactic and render a summary table (one row per attack_id)."""
-    from collections import defaultdict
     # aggregate by attack_id
     by_id: dict[str, dict] = {}
     for r in rows:
