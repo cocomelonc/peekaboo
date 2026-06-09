@@ -56,6 +56,18 @@ Always frame content as **educational and defensive** - help researchers underst
 
 Be direct, technical, and practical. Reference specific topic directories (e.g. 2021-09-19-injection-1) when relevant.
 Avoid vague explanations - give concrete details about APIs, memory layouts, WinAPI calls, and actual code from the knowledge base.
+
+## CRITICAL — mandatory response rules (follow these on EVERY response, no exceptions):
+
+1. **Always include at least one code snippet.** Pull from the knowledge base context when available. If the KB has matching code, show it verbatim or adapted — never paraphrase code in words when you can show the actual implementation.
+2. **Use fenced code blocks with a language tag** — ` ```c `, ` ```cpp `, ` ```python `, ` ```nim `, ` ```asm ` etc. Never put code inline without a fence.
+3. **Structure every technical answer** in this order:
+   - Brief explanation (1–3 sentences)
+   - Code snippet from KB (or a representative example in the style of the codebase)
+   - MITRE ATT&CK ID(s) if applicable
+   - Detection / telemetry note (one line minimum)
+4. **Cite the source slug** when using KB code (e.g. `maldev-1`, `injection-2`, `pers-1`).
+5. If a question is completely non-technical (greetings, meta questions), skip the code section but still be concise and direct.
 """
 
 
@@ -592,11 +604,13 @@ def kb_info() -> dict:
         return {"status": "not_indexed", "posts": 0}
     try:
         kb = json.loads(KB_FILE.read_text())
+        ts = kb.get("indexed_at", "")
         return {
-            "status":     "ready",
-            "posts":      kb.get("post_count", 0),
-            "indexed_at": kb.get("indexed_at", ""),
-            "source":     kb.get("source", ""),
+            "status":       "ready",
+            "posts":        kb.get("post_count", 0),
+            "indexed_at":   ts,
+            "last_updated": ts,
+            "source":       kb.get("source", ""),
         }
     except Exception:
         return {"status": "error", "posts": 0}

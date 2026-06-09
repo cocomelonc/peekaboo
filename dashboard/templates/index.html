@@ -484,7 +484,15 @@ code{font-family:var(--mono);font-size:12px;background:var(--bg4);padding:1px 5p
 .beacon-text{font-size:13px;margin-top:2px;word-break:break-all}
 
 /* -- chat -- */
-.chat-wrap{display:flex;flex-direction:column;height:calc(100vh - var(--hdr) - 48px);max-height:700px}
+.chat-info-grid{display:grid;grid-template-columns:1fr 1fr;gap:14px;align-items:stretch;margin-bottom:14px}
+@media(max-width:680px){.chat-info-grid{grid-template-columns:1fr}}
+.chat-info-grid > .card{display:flex;flex-direction:column}
+.chat-info-label{font-size:12px;color:var(--dim);margin-bottom:6px;font-weight:600;text-transform:uppercase;letter-spacing:.4px}
+#kb-info{font-size:12px;display:flex;flex-wrap:wrap;gap:6px;align-items:center}
+#providers-info{font-size:12px;display:flex;gap:6px;flex-wrap:wrap}
+.kb-date{font-size:11px;color:var(--dim)}
+.chat-card{padding:0}
+.chat-wrap{display:flex;flex-direction:column;height:calc(100vh - var(--hdr) - 48px);max-height:700px;padding:0 16px 16px}
 .chat-msgs{flex:1;overflow-y:auto;padding:16px 0;display:flex;flex-direction:column;gap:10px}
 .chat-msgs::-webkit-scrollbar{width:4px}
 .chat-msgs::-webkit-scrollbar-thumb{background:var(--sep)}
@@ -493,21 +501,28 @@ code{font-family:var(--mono);font-size:12px;background:var(--bg4);padding:1px 5p
 .msg-ai{background:var(--bg3);align-self:flex-start;border-radius:var(--r) var(--r) var(--r) 3px}
 .msg-ai code{background:var(--bg4)}
 .msg-ai pre{margin:8px 0}
-.chat-input-row{display:flex;gap:8px;padding:14px 0 0;border-top:1px solid var(--sep);margin-top:12px}
-.chat-input{flex:1}
-.chat-provider{display:flex;gap:6px}
-.provider-btn{padding:4px 10px;border-radius:var(--rs);border:1px solid var(--sep);background:var(--bg3);color:var(--dim);font-size:11px;cursor:pointer;transition:all .15s}
+.chat-input-row{display:flex;gap:8px;padding:14px 0 0;border-top:1px solid var(--sep);margin-top:12px;flex-wrap:wrap}
+.chat-input{flex:1;min-width:160px}
+.chat-provider{display:flex;gap:6px;flex-wrap:wrap}
+.provider-btn{padding:4px 10px;border-radius:var(--rs);border:1px solid var(--sep);background:var(--bg3);color:var(--dim);font-size:11px;cursor:pointer;transition:all .15s;white-space:nowrap}
 .provider-btn.active{border-color:var(--purple);color:var(--purple);background:rgba(181,123,255,.14)}
 .chat-suggestions{display:flex;flex-wrap:wrap;gap:6px;padding:8px 0 4px}
 .chat-suggestion{padding:5px 11px;border-radius:20px;border:1px solid var(--sep);background:var(--bg3);color:var(--text2);font-size:11px;cursor:pointer;transition:all .15s;white-space:nowrap}
 .chat-suggestion:hover{border-color:var(--purple);color:var(--purple);background:rgba(181,123,255,.1)}
-.chat-status{font-size:11px;color:var(--dim);padding:4px 14px 2px;display:flex;align-items:center;gap:6px;min-height:20px;transition:opacity .2s}
-.chat-status-dot{width:6px;height:6px;border-radius:50%;background:var(--purple);animation:pulse 1s infinite}
+.chat-status{font-size:11px;color:var(--dim);padding:4px 0 2px;display:flex;align-items:center;gap:6px;min-height:20px;transition:opacity .2s}
+.chat-status-dot{width:6px;height:6px;border-radius:50%;background:var(--purple);animation:pulse 1s infinite;flex-shrink:0}
 .chat-status-dot.thinking{background:var(--yellow)}
 .chat-status-dot.rag{background:var(--cyan)}
 @keyframes pulse{0%,100%{opacity:1}50%{opacity:.3}}
 
 /* -- modals -- */
+/* -- settings panel -- */
+.settings-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(280px,1fr));gap:14px;align-items:stretch}
+.settings-grid > .card{display:flex;flex-direction:column}
+.sett-card-head{display:flex;align-items:center;gap:8px;margin-bottom:14px}
+.sett-name-badge{margin-left:auto;flex-shrink:0}
+.sett-fields{display:flex;flex-direction:column;gap:10px;flex:1;margin-bottom:14px}
+.cfg-field{display:flex;flex-direction:column}
 .modal-bg{position:fixed;inset:0;background:rgba(8,6,18,.82);z-index:200;display:flex;align-items:center;justify-content:center;padding:20px;opacity:0;pointer-events:none;transition:opacity .2s}
 .modal-bg.open{opacity:1;pointer-events:all}
 .modal{background:var(--bg2);border:1px solid var(--sep);border-radius:14px;width:100%;max-width:760px;max-height:85vh;display:flex;flex-direction:column;overflow:hidden;transform:scale(.96);transition:transform .2s}
@@ -1717,18 +1732,18 @@ code{font-family:var(--mono);font-size:12px;background:var(--bg4);padding:1px 5p
 
 <!-- ════════ AI ASSISTANT ════════ -->
 <div id="panel-chat" class="panel">
-  <div class="grid-2" style="margin-bottom:14px;align-items:start">
+  <div class="chat-info-grid">
     <div class="card card-sm">
-      <div style="font-size:12px;color:var(--dim);margin-bottom:6px">Knowledge Base</div>
-      <div id="kb-info" style="font-size:12px"></div>
+      <div class="chat-info-label">Knowledge Base</div>
+      <div id="kb-info"></div>
     </div>
     <div class="card card-sm">
-      <div style="font-size:12px;color:var(--dim);margin-bottom:6px">Providers</div>
-      <div id="providers-info" style="font-size:12px;display:flex;gap:6px;flex-wrap:wrap"></div>
+      <div class="chat-info-label">Providers</div>
+      <div id="providers-info"></div>
     </div>
   </div>
-  <div class="card" style="padding:0">
-    <div class="chat-wrap" style="padding:0 16px 16px">
+  <div class="card chat-card">
+    <div class="chat-wrap">
       <div class="chat-msgs" id="chat-msgs">
         <div class="msg msg-ai">Hi! I'm your malware research assistant. Ask me about techniques, TTPs, or the codebase.</div>
       </div>
@@ -1757,7 +1772,7 @@ code{font-family:var(--mono);font-size:12px;background:var(--bg4);padding:1px 5p
 
 <!-- ════════ SETTINGS ════════ -->
 <div id="panel-settings" class="panel">
-  <div class="grid-2" id="settings-grid"></div>
+  <div class="settings-grid" id="settings-grid"></div>
 </div>
 
 </div><!-- content -->
@@ -4152,7 +4167,7 @@ async function loadChatStatus() {
   const kb = await fetch('/api/chat/kb_info').then(r=>r.json()).catch(()=>({}));
   document.getElementById('kb-info').innerHTML = `
     <span class="badge badge-blue">${kb.posts||0} posts</span>
-    <span class="text-xs text-dim" style="margin-left:6px">${kb.last_updated?.slice(0,10)||'never'}</span>`;
+    <span class="kb-date">${kb.last_updated?.slice(0,10)||'never'}</span>`;
   const providers = await fetch('/api/chat/providers').then(r=>r.json()).catch(()=>({}));
   document.getElementById('providers-info').innerHTML = Object.entries(providers).map(([k,v]) =>
     `<span class="badge ${v.available?'badge-green':'badge-dim'}">${k}: ${v.available?'✓':'✗'}</span>`
@@ -4180,8 +4195,6 @@ async function sendChat() {
   input.value = '';
   chatHistory.push({role:'user', content:msg});
   appendChatMsg('user', msg);
-  const sugg = document.getElementById('chat-suggestions');
-  if (sugg) sugg.style.display = 'none';
   const btn = document.getElementById('chat-send-btn');
   btn.disabled = true;
 
@@ -4279,15 +4292,17 @@ async function loadSettings() {
     const card = document.createElement('div');
     card.className = 'card';
     card.innerHTML = `
-      <div class="card-header" style="margin-bottom:12px">
+      <div class="sett-card-head">
         <div class="card-title">${cfg.label}</div>
-        <span class="badge badge-dim text-xs" style="margin-left:auto">${cfg.name}</span>
+        <span class="badge badge-dim text-xs sett-name-badge">${cfg.name}</span>
       </div>
-      ${cfg.fields.map(f => `
-        <div style="margin-bottom:10px">
-          <label>${f.l}</label>
-          <input type="${f.secret?'password':'text'}" id="cfg-${cfg.name}-${f.k}" value="${escAttr(data[f.k]||'')}">
-        </div>`).join('')}
+      <div class="sett-fields">
+        ${cfg.fields.map(f => `
+          <div class="cfg-field">
+            <label>${f.l}</label>
+            <input type="${f.secret?'password':'text'}" id="cfg-${cfg.name}-${f.k}" value="${escAttr(data[f.k]||'')}">
+          </div>`).join('')}
+      </div>
       <button class="btn btn-ghost btn-sm" onclick="saveConfig('${cfg.name}',[${cfg.fields.map(f=>`'${f.k}'`).join(',')}])">💾 Save</button>`;
     grid.appendChild(card);
   }
