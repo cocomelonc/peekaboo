@@ -98,6 +98,10 @@ body{background:var(--bg);color:var(--text);font-family:var(--font);font-size:14
 .btn-ghost{background:var(--bg3);color:var(--text2);border:1px solid var(--sep)}
 .btn-ghost:hover{color:var(--text);background:var(--bg4)}
 .btn-red{background:rgba(255,120,117,.15);color:var(--red);border:1px solid rgba(255,120,117,.3)}
+.btn-del{background:rgba(255,80,80,.1);color:#ff6b6b;border:1px solid rgba(255,80,80,.3)}
+.btn-del:hover{background:rgba(255,80,80,.2);border-color:rgba(255,80,80,.5)}
+.samp-sid{font-family:var(--mono);font-size:11px;max-width:120px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;display:block}
+.samp-file-btns{display:flex;flex-wrap:wrap;gap:4px}
 .btn-sm{padding:4px 10px;font-size:12px}
 .btn-xs{padding:2px 8px;font-size:11px}
 .btn[disabled]{opacity:.4;cursor:default;pointer-events:none}
@@ -217,8 +221,19 @@ code{font-family:var(--mono);font-size:12px;background:var(--bg4);padding:1px 5p
 .vt-engine-card.vt-mal{border-left-color:var(--red);background:rgba(224,108,117,.08)}
 .vt-engine-card.vt-sus{border-left-color:var(--yellow);background:rgba(229,192,123,.08)}
 .vt-engine-card.vt-ok{border-left-color:var(--green);background:rgba(152,195,121,.06)}
+.vt-engine-head{display:flex;justify-content:space-between;align-items:flex-start;gap:6px}
+.vt-engine-name{font-size:13px;font-weight:600;color:var(--fg)}
+.vt-engine-ver{font-size:11px;color:var(--dim);margin-top:2px}
+.vt-engine-detect{font-size:10px;color:var(--red);font-family:var(--mono);margin-top:5px;word-break:break-all}
+.vt-cat-badge{font-size:10px;padding:2px 7px;border-radius:10px;white-space:nowrap;font-weight:600}
 .vt-filter-btn{padding:4px 12px;border-radius:4px;font-size:12px;background:none;border:1px solid var(--sep);color:var(--dim);cursor:pointer;transition:all .15s}
 .vt-filter-btn.active{border-color:var(--green);color:var(--green);background:rgba(152,195,121,.12)}
+.vt-filter-row{display:flex;gap:6px;margin-left:auto;flex-wrap:wrap}
+.vt-pick-row{display:flex;gap:12px;align-items:center;flex-wrap:wrap;margin-top:8px}
+.vt-drop-wide{flex:1.5;min-width:220px}
+.vt-drop-narrow{flex:1;min-width:180px}
+.vt-pick-btn{white-space:nowrap;flex-shrink:0}
+.vt-progress-msg{font-size:12px;color:var(--dim);margin-top:2px}
 .vt-progress-bar{height:6px;background:var(--bg3);border-radius:3px;overflow:hidden;margin:10px 0 6px}
 .vt-progress-fill{height:100%;background:linear-gradient(90deg,var(--green),var(--blue));border-radius:3px;transition:width .4s ease}
 /* custom dropdowns */
@@ -244,6 +259,26 @@ code{font-family:var(--mono);font-size:12px;background:var(--bg4);padding:1px 5p
 .yara-ent-fill{height:100%;border-radius:3px;transition:width .3s}
 .yara-upload-zone{border:2px dashed var(--sep);border-radius:8px;padding:32px;text-align:center;cursor:pointer;transition:border-color .2s,background .2s}
 .yara-upload-zone:hover,.yara-upload-zone.drag-over{border-color:var(--purple);background:rgba(198,120,221,.06)}
+.yara-src-tabs{display:flex;gap:10px;margin-bottom:16px;align-items:center;flex-wrap:wrap}
+.yara-src-hint{margin-left:auto;font-size:12px;color:var(--dim)}
+.yara-drop-icon{font-size:32px;margin-bottom:8px}
+.yara-drop-title{color:var(--fg);font-size:14px;margin-bottom:4px}
+.yara-drop-sub{color:var(--dim);font-size:12px}
+.yara-badges{display:flex;flex-wrap:wrap;gap:8px;margin-bottom:16px}
+.yara-layout{display:grid;grid-template-columns:1fr 1fr;gap:18px;align-items:stretch}
+@media(max-width:900px){.yara-layout{grid-template-columns:1fr}}
+.yara-layout > .card{display:flex;flex-direction:column}
+.yara-right-col{display:flex;flex-direction:column;gap:14px}
+.yara-rule-btns{display:flex;gap:8px;margin-left:auto;flex-shrink:0}
+.yara-hash-list{display:flex;flex-direction:column;gap:6px;margin-top:6px}
+.yara-hash-row{display:flex;gap:8px;align-items:baseline}
+.yara-hash-key{color:var(--dim);width:60px;flex-shrink:0;font-size:12px}
+.yara-hash-md5{font-size:11px;color:var(--yellow);word-break:break-all;font-family:var(--mono)}
+.yara-hash-sha256{font-size:11px;color:var(--green);word-break:break-all;font-family:var(--mono)}
+#yara-sections-list{margin-top:6px}
+.yara-sec-name{width:80px;font-size:11px;color:var(--purple);font-family:var(--mono)}
+.yara-sec-ent{font-size:11px;width:36px;text-align:right}
+.yara-sec-size{color:var(--dim);font-size:11px;width:60px;text-align:right}
 
 /* -- shellcode tool -- */
 .sc-layout{display:grid;grid-template-columns:1fr 1fr;gap:18px;align-items:stretch}
@@ -715,7 +750,7 @@ code{font-family:var(--mono);font-size:12px;background:var(--bg4);padding:1px 5p
     <div class="card-header">
       <span style="font-size:18px">🕐</span>
       <div class="card-title">Build History</div>
-      <button class="btn btn-sm" style="margin-left:auto;background:rgba(255,80,80,.12);border-color:rgba(255,80,80,.35);color:#ff6b6b" onclick="clearBuildHistory()">clear</button>
+      <button class="btn btn-del btn-sm" style="margin-left:auto" onclick="clearBuildHistory()">clear</button>
     </div>
     <div class="tbl-wrap">
       <table class="tbl">
@@ -866,22 +901,22 @@ code{font-family:var(--mono);font-size:12px;background:var(--bg4);padding:1px 5p
         <div><div class="card-title">Evasion Score Analyser</div><div class="card-sub">select a compiled sample to score</div></div>
         <button class="btn btn-ghost btn-sm" style="margin-left:auto" onclick="loadEvasionScanner()">↻ Refresh</button>
       </div>
-      <div style="display:flex;gap:12px;align-items:center;flex-wrap:wrap;margin-top:8px">
-        <div class="vt-select" id="ev-session-drop" style="flex:1.5;min-width:220px">
+      <div class="vt-pick-row">
+        <div class="vt-select vt-drop-wide" id="ev-session-drop">
           <div class="vt-select-val" onclick="vtToggleDrop('ev-session-drop')">
             <span id="ev-session-label" class="vt-ph">- select session -</span>
             <span class="vt-select-arrow">▼</span>
           </div>
           <div class="vt-select-menu" id="ev-session-menu"></div>
         </div>
-        <div class="vt-select" id="ev-file-drop" style="flex:1;min-width:180px">
+        <div class="vt-select vt-drop-narrow" id="ev-file-drop">
           <div class="vt-select-val" onclick="vtToggleDrop('ev-file-drop')">
             <span id="ev-file-label" class="vt-ph">- select file -</span>
             <span class="vt-select-arrow">▼</span>
           </div>
           <div class="vt-select-menu" id="ev-file-menu"></div>
         </div>
-        <button class="btn btn-primary" id="ev-analyse-btn" onclick="evAnalyse()" disabled>⚡ Analyse</button>
+        <button class="btn btn-primary vt-pick-btn" id="ev-analyse-btn" onclick="evAnalyse()" disabled>⚡ Analyse</button>
       </div>
     </div>
   </div>
@@ -1049,23 +1084,25 @@ code{font-family:var(--mono);font-size:12px;background:var(--bg4);padding:1px 5p
 
 <!-- ════════ SAMPLES ════════ -->
 <div id="panel-samples" class="panel">
-  <div id="samples-stats" class="grid-stats" style="margin-bottom:18px"></div>
+  <div id="samples-stats" class="grid-stats"></div>
   <div class="card">
     <div class="card-header">
       <span style="font-size:18px">💾</span>
       <div class="card-title">Compiled Samples</div>
       <button class="btn btn-ghost btn-sm" style="margin-left:auto" onclick="loadSamples()">↻ Refresh</button>
-      <button class="btn btn-sm" style="margin-left:8px;background:rgba(255,80,80,.12);border-color:rgba(255,80,80,.35);color:#ff6b6b" onclick="clearSamples()">clear</button>
+      <button class="btn btn-del btn-sm" style="margin-left:8px" onclick="clearSamples()">clear</button>
     </div>
-    <table class="tbl">
-      <thead><tr>
-        <th>Session</th><th>Actor / Source</th><th>Files</th><th>Size</th><th>Status</th><th>Created</th><th>Actions</th>
-      </tr></thead>
-      <tbody id="samples-tbody"></tbody>
-    </table>
+    <div class="tbl-wrap">
+      <table class="tbl">
+        <thead><tr>
+          <th>Session</th><th>Actor / Source</th><th>Files</th><th>Size</th><th>Status</th><th>Created</th><th>Actions</th>
+        </tr></thead>
+        <tbody id="samples-tbody"></tbody>
+      </table>
+    </div>
     <div id="samples-empty" class="empty" style="display:none">
       <div class="empty-icon">📦</div>
-      <div>No samples compiled yet - use the Builder or run an APT Campaign</div>
+      <div>No samples compiled yet — use the Builder or run an APT Campaign</div>
     </div>
   </div>
 </div>
@@ -1141,9 +1178,9 @@ code{font-family:var(--mono);font-size:12px;background:var(--bg4);padding:1px 5p
       </div>
       <button class="btn btn-ghost btn-sm" style="margin-left:auto" onclick="loadVtScanner()">↻ Refresh</button>
     </div>
-    <div style="display:flex;gap:12px;align-items:center;flex-wrap:wrap;margin-top:8px">
+    <div class="vt-pick-row">
       <!-- session picker -->
-      <div class="vt-select" id="vt-session-drop" style="flex:1.5;min-width:220px">
+      <div class="vt-select vt-drop-wide" id="vt-session-drop">
         <div class="vt-select-val" onclick="vtToggleDrop('vt-session-drop')">
           <span id="vt-session-label" class="vt-ph">- select session -</span>
           <span class="vt-select-arrow">▼</span>
@@ -1151,14 +1188,14 @@ code{font-family:var(--mono);font-size:12px;background:var(--bg4);padding:1px 5p
         <div class="vt-select-menu" id="vt-session-menu"></div>
       </div>
       <!-- file picker -->
-      <div class="vt-select" id="vt-file-drop" style="flex:1;min-width:180px">
+      <div class="vt-select vt-drop-narrow" id="vt-file-drop">
         <div class="vt-select-val" onclick="vtToggleDrop('vt-file-drop')">
           <span id="vt-file-label" class="vt-ph">- select file -</span>
           <span class="vt-select-arrow">▼</span>
         </div>
         <div class="vt-select-menu" id="vt-file-menu"></div>
       </div>
-      <button class="btn btn-primary" onclick="vtStartScan()" id="vt-scan-btn" style="white-space:nowrap;flex-shrink:0">
+      <button class="btn btn-primary vt-pick-btn" onclick="vtStartScan()" id="vt-scan-btn">
         🔬 Scan
       </button>
     </div>
@@ -1171,7 +1208,7 @@ code{font-family:var(--mono);font-size:12px;background:var(--bg4);padding:1px 5p
       <div class="card-title" id="vt-progress-title">Uploading…</div>
     </div>
     <div class="vt-progress-bar"><div class="vt-progress-fill" id="vt-progress-fill" style="width:10%"></div></div>
-    <div id="vt-progress-msg" style="font-size:12px;color:var(--dim)"></div>
+    <div id="vt-progress-msg" class="vt-progress-msg"></div>
   </div>
 
   <!-- Results -->
@@ -1182,11 +1219,11 @@ code{font-family:var(--mono);font-size:12px;background:var(--bg4);padding:1px 5p
       <div class="card-header">
         <span style="font-size:16px">🔍</span>
         <div class="card-title">Engine Results</div>
-        <div style="display:flex;gap:6px;margin-left:auto">
-          <button class="vt-filter-btn active" id="vt-f-all"       onclick="vtFilterResults('all')">All</button>
-          <button class="vt-filter-btn"         id="vt-f-malicious" onclick="vtFilterResults('malicious')">Malicious</button>
+        <div class="vt-filter-row">
+          <button class="vt-filter-btn active" id="vt-f-all"        onclick="vtFilterResults('all')">All</button>
+          <button class="vt-filter-btn"         id="vt-f-malicious"  onclick="vtFilterResults('malicious')">Malicious</button>
           <button class="vt-filter-btn"         id="vt-f-suspicious" onclick="vtFilterResults('suspicious')">Suspicious</button>
-          <button class="vt-filter-btn"         id="vt-f-clean"     onclick="vtFilterResults('clean')">Clean</button>
+          <button class="vt-filter-btn"         id="vt-f-clean"      onclick="vtFilterResults('clean')">Clean</button>
         </div>
       </div>
       <div id="vt-engines-grid" class="grid-3" style="margin-top:10px"></div>
@@ -1204,10 +1241,10 @@ code{font-family:var(--mono);font-size:12px;background:var(--bg4);padding:1px 5p
 <div id="panel-yara" class="panel">
 
   <!-- source selector tabs -->
-  <div style="display:flex;gap:10px;margin-bottom:16px;align-items:center">
+  <div class="yara-src-tabs">
     <button class="btn btn-primary btn-sm" id="yara-tab-sample" onclick="yaraSetTab('sample')">📦 From Sample</button>
     <button class="btn btn-ghost btn-sm"   id="yara-tab-upload" onclick="yaraSetTab('upload')">⬆️ Upload File</button>
-    <span style="margin-left:auto;font-size:12px;color:var(--dim)">generates YARA rules from PE metadata · strings · entry-point bytes · import hash</span>
+    <span class="yara-src-hint">generates YARA rules from PE metadata · strings · entry-point bytes · import hash</span>
   </div>
 
   <!-- -- from sample -- -->
@@ -1218,22 +1255,22 @@ code{font-family:var(--mono);font-size:12px;background:var(--bg4);padding:1px 5p
         <div><div class="card-title">YARA Rule Generator</div><div class="card-sub">select a compiled sample to analyse</div></div>
         <button class="btn btn-ghost btn-sm" style="margin-left:auto" onclick="loadYaraScanner()">↻ Refresh</button>
       </div>
-      <div style="display:flex;gap:12px;align-items:center;flex-wrap:wrap;margin-top:8px">
-        <div class="vt-select" id="yara-session-drop" style="flex:1.5;min-width:220px">
+      <div class="vt-pick-row">
+        <div class="vt-select vt-drop-wide" id="yara-session-drop">
           <div class="vt-select-val" onclick="vtToggleDrop('yara-session-drop')">
             <span id="yara-session-label" class="vt-ph">- select session -</span>
             <span class="vt-select-arrow">▼</span>
           </div>
           <div class="vt-select-menu" id="yara-session-menu"></div>
         </div>
-        <div class="vt-select" id="yara-file-drop" style="flex:1;min-width:180px">
+        <div class="vt-select vt-drop-narrow" id="yara-file-drop">
           <div class="vt-select-val" onclick="vtToggleDrop('yara-file-drop')">
             <span id="yara-file-label" class="vt-ph">- select file -</span>
             <span class="vt-select-arrow">▼</span>
           </div>
           <div class="vt-select-menu" id="yara-file-menu"></div>
         </div>
-        <button class="btn btn-primary" onclick="yaraGenerate()" id="yara-gen-btn" style="white-space:nowrap;flex-shrink:0">
+        <button class="btn btn-primary vt-pick-btn" onclick="yaraGenerate()" id="yara-gen-btn">
           ⚙️ Generate
         </button>
       </div>
@@ -1251,9 +1288,9 @@ code{font-family:var(--mono);font-size:12px;background:var(--bg4);padding:1px 5p
            ondragover="event.preventDefault();this.classList.add('drag-over')"
            ondragleave="this.classList.remove('drag-over')"
            ondrop="yaraHandleDrop(event)">
-        <div style="font-size:32px;margin-bottom:8px">📂</div>
-        <div style="color:var(--fg);font-size:14px;margin-bottom:4px">Drop a PE file here or click to browse</div>
-        <div style="color:var(--dim);font-size:12px">.exe · .dll · .sys · .bin</div>
+        <div class="yara-drop-icon">📂</div>
+        <div class="yara-drop-title">Drop a PE file here or click to browse</div>
+        <div class="yara-drop-sub">.exe · .dll · .sys · .bin</div>
         <input type="file" id="yara-file-input" style="display:none" onchange="yaraHandleFile(this.files[0])">
       </div>
     </div>
@@ -1272,16 +1309,16 @@ code{font-family:var(--mono);font-size:12px;background:var(--bg4);padding:1px 5p
   <div id="yara-results" style="display:none">
 
     <!-- stat badges row -->
-    <div style="display:flex;flex-wrap:wrap;gap:8px;margin-bottom:16px" id="yara-badges"></div>
+    <div class="yara-badges" id="yara-badges"></div>
 
-    <div class="grid-2" style="align-items:start;gap:18px">
+    <div class="yara-layout">
 
       <!-- left: rule code -->
       <div class="card">
         <div class="card-header">
           <span style="font-size:16px">📄</span>
           <div class="card-title">Generated Rule</div>
-          <div style="display:flex;gap:8px;margin-left:auto">
+          <div class="yara-rule-btns">
             <button class="btn btn-ghost btn-sm" onclick="yaraCopy()">📋 Copy</button>
             <button class="btn btn-ghost btn-sm" onclick="yaraDownload()">⬇️ Download</button>
           </div>
@@ -1290,19 +1327,19 @@ code{font-family:var(--mono);font-size:12px;background:var(--bg4);padding:1px 5p
       </div>
 
       <!-- right: PE section table + hashes -->
-      <div style="display:flex;flex-direction:column;gap:14px">
+      <div class="yara-right-col">
 
         <div class="card">
           <div class="card-header"><span style="font-size:16px">🔍</span><div class="card-title">File Hashes</div></div>
-          <div style="font-size:12px;display:flex;flex-direction:column;gap:6px;margin-top:6px">
-            <div style="display:flex;gap:8px"><span style="color:var(--dim);width:60px">MD5</span><code id="yara-hash-md5" style="font-size:11px;color:var(--yellow);word-break:break-all"></code></div>
-            <div style="display:flex;gap:8px"><span style="color:var(--dim);width:60px">SHA256</span><code id="yara-hash-sha256" style="font-size:11px;color:var(--green);word-break:break-all"></code></div>
+          <div class="yara-hash-list">
+            <div class="yara-hash-row"><span class="yara-hash-key">MD5</span><code id="yara-hash-md5" class="yara-hash-md5"></code></div>
+            <div class="yara-hash-row"><span class="yara-hash-key">SHA256</span><code id="yara-hash-sha256" class="yara-hash-sha256"></code></div>
           </div>
         </div>
 
         <div class="card" id="yara-sections-card" style="display:none">
           <div class="card-header"><span style="font-size:16px">📦</span><div class="card-title">PE Sections</div></div>
-          <div id="yara-sections-list" style="margin-top:6px"></div>
+          <div id="yara-sections-list"></div>
         </div>
 
       </div>
@@ -2417,8 +2454,22 @@ async function clearSamples() {
 async function loadSamples() {
   const tbody = document.getElementById('samples-tbody');
   const empty = document.getElementById('samples-empty');
-  tbody.innerHTML = '<tr><td colspan="7"><div class="loading-full" style="padding:14px"><div class="spinner"></div></div></td></tr>';
+  tbody.innerHTML = '<tr><td colspan="7" style="padding:20px;text-align:center"><div class="spinner" style="display:inline-block"></div></td></tr>';
   const samples = await fetch('/api/samples').then(r=>r.json()).catch(()=>[]);
+
+  // stats row
+  const statsEl = document.getElementById('samples-stats');
+  if (statsEl) {
+    const totalSize  = samples.reduce((a, s) => a + (s.total_size||0), 0);
+    const actors     = new Set(samples.map(s => s.actor).filter(Boolean)).size;
+    const succeeded  = samples.filter(s => s.status === 'success' || s.status === 'built').length;
+    statsEl.innerHTML = `
+      <div class="stat"><div class="stat-val text-purple">${samples.length}</div><div class="stat-label">Total samples</div></div>
+      <div class="stat"><div class="stat-val text-green">${succeeded}</div><div class="stat-label">Compiled ok</div></div>
+      <div class="stat"><div class="stat-val text-blue">${actors}</div><div class="stat-label">Unique actors</div></div>
+      <div class="stat"><div class="stat-val text-cyan">${formatBytes(totalSize)}</div><div class="stat-label">Total size</div></div>`;
+  }
+
   if (!samples.length) {
     tbody.innerHTML = '';
     empty.style.display = 'block';
@@ -2426,14 +2477,16 @@ async function loadSamples() {
   }
   empty.style.display = 'none';
   tbody.innerHTML = samples.map(s => {
-    const files = (s.files||[]).map(f =>
-      `<a href="/api/samples/${s.session_id}/download/${f.name}" class="btn btn-ghost btn-xs" style="margin-bottom:2px">⬇ ${f.name}</a>`
-    ).join(' ');
+    const files = (s.files||[]).length
+      ? `<div class="samp-file-btns">${(s.files||[]).map(f =>
+          `<a href="/api/samples/${s.session_id}/download/${f.name}" class="btn btn-ghost btn-xs">⬇ ${escHtml(f.name)}</a>`
+        ).join('')}</div>`
+      : '<span class="text-dim text-xs">—</span>';
     const st = s.status === 'success' ? 'badge-green' : (s.status === 'built' ? 'badge-blue' : 'badge-dim');
     return `<tr>
-      <td class="mono text-xs">${s.session_id}</td>
-      <td>${s.actor || '<span class="text-dim">manual build</span>'}</td>
-      <td>${(s.files||[]).length}</td>
+      <td><span class="samp-sid" title="${escHtml(s.session_id)}">${escHtml(s.session_id)}</span></td>
+      <td>${s.actor ? escHtml(s.actor) : '<span class="text-dim text-xs">manual build</span>'}</td>
+      <td class="text-xs">${(s.files||[]).length}</td>
       <td class="text-xs">${formatBytes(s.total_size||0)}</td>
       <td><span class="badge ${st}">${s.status}</span></td>
       <td class="text-xs text-dim">${s.created?.slice(0,16)||''}</td>
@@ -3280,12 +3333,12 @@ function _vtShowResults(data) {
   const rateColor  = rate > 50 ? 'var(--red)' : rate > 15 ? 'var(--yellow)' : 'var(--green)';
 
   document.getElementById('vt-result-stats').innerHTML = `
-    <div class="stat-card"><div class="stat-num" style="color:var(--red)">${malicious}</div><div class="stat-label">Malicious</div></div>
-    <div class="stat-card"><div class="stat-num" style="color:var(--yellow)">${suspicious}</div><div class="stat-label">Suspicious</div></div>
-    <div class="stat-card"><div class="stat-num" style="color:var(--green)">${harmless}</div><div class="stat-label">Clean / Harmless</div></div>
-    <div class="stat-card"><div class="stat-num" style="color:var(--dim)">${undetected}</div><div class="stat-label">Undetected</div></div>
-    <div class="stat-card"><div class="stat-num" style="color:${rateColor}">${rate}%</div><div class="stat-label">Detection Rate</div></div>
-    <div class="stat-card"><div class="stat-num">${total}</div><div class="stat-label">Total Engines</div></div>
+    <div class="stat"><div class="stat-val" style="color:var(--red)">${malicious}</div><div class="stat-label">Malicious</div></div>
+    <div class="stat"><div class="stat-val" style="color:var(--yellow)">${suspicious}</div><div class="stat-label">Suspicious</div></div>
+    <div class="stat"><div class="stat-val" style="color:var(--green)">${harmless}</div><div class="stat-label">Clean / Harmless</div></div>
+    <div class="stat"><div class="stat-val" style="color:var(--dim)">${undetected}</div><div class="stat-label">Undetected</div></div>
+    <div class="stat"><div class="stat-val" style="color:${rateColor}">${rate}%</div><div class="stat-label">Detection Rate</div></div>
+    <div class="stat"><div class="stat-val">${total}</div><div class="stat-label">Total Engines</div></div>
   `;
 
   document.getElementById('vt-results').style.display = '';
@@ -3311,19 +3364,19 @@ function vtFilterResults(filter) {
 
     const isMal = cat === 'malicious';
     const isSus = cat === 'suspicious';
-    const cardCls = isMal ? 'vt-mal' : isSus ? 'vt-sus' : 'vt-ok';
+    const cardCls  = isMal ? 'vt-mal' : isSus ? 'vt-sus' : 'vt-ok';
     const catColor = isMal ? 'var(--red)' : isSus ? 'var(--yellow)' : 'var(--green)';
     const detection = info.result
-      ? `<div style="font-size:10px;color:var(--red);font-family:monospace;margin-top:5px;word-break:break-all">${escHtml(info.result)}</div>`
+      ? `<div class="vt-engine-detect">${escHtml(info.result)}</div>`
       : '';
     const ver = [info.engine_version, info.engine_update].filter(Boolean).join(' · ');
 
     cards += `<div class="vt-engine-card ${cardCls}">
-      <div style="display:flex;justify-content:space-between;align-items:flex-start;gap:6px">
-        <div style="font-size:13px;font-weight:600;color:var(--fg)">${escHtml(engine)}</div>
-        <span style="background:${catColor}20;color:${catColor};font-size:10px;padding:2px 7px;border-radius:10px;white-space:nowrap;font-weight:600">${cat}</span>
+      <div class="vt-engine-head">
+        <div class="vt-engine-name">${escHtml(engine)}</div>
+        <span class="vt-cat-badge" style="background:${catColor}20;color:${catColor}">${cat}</span>
       </div>
-      ${ver ? `<div style="font-size:11px;color:var(--dim);margin-top:2px">${escHtml(ver)}</div>` : ''}
+      ${ver ? `<div class="vt-engine-ver">${escHtml(ver)}</div>` : ''}
       ${detection}
     </div>`;
   }
@@ -3432,7 +3485,7 @@ async function yaraGenerate() {
 
 function yaraHandleFile(file) {
   if (!file) return;
-  document.getElementById('yara-drop-zone').querySelector('div:nth-child(2)').textContent = file.name;
+  document.getElementById('yara-drop-zone').querySelector('.yara-drop-title').textContent = file.name;
   yaraGenerateFromUpload(file);
 }
 
@@ -3491,10 +3544,10 @@ function _yaraRenderResults(r, filename) {
       const color = s.entropy > 7 ? 'var(--red)' : s.entropy > 6 ? 'var(--yellow)' : 'var(--green)';
       const kb2   = s.size > 1024 ? (s.size/1024).toFixed(1)+' KB' : s.size+' B';
       return `<div class="yara-section-row">
-        <code style="width:80px;font-size:11px;color:var(--purple)">${escHtml(s.name)}</code>
+        <code class="yara-sec-name">${escHtml(s.name)}</code>
         <div class="yara-ent-bar"><div class="yara-ent-fill" style="width:${pct}%;background:${color}"></div></div>
-        <span style="color:${color};font-size:11px;width:36px;text-align:right">${s.entropy}</span>
-        <span style="color:var(--dim);font-size:11px;width:60px;text-align:right">${kb2}</span>
+        <span class="yara-sec-ent" style="color:${color}">${s.entropy}</span>
+        <span class="yara-sec-size">${kb2}</span>
       </div>`;
     }).join('');
   } else {
