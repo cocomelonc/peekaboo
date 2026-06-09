@@ -80,7 +80,7 @@ PT_STYLE = PtStyle.from_dict({
 
 _DOCS: dict[str, dict[str, str]] = {
 
-    # ── top-level ─────────────────────────────────────────────────────────────
+    # -- top-level -------------------------------------------------------------
     "_top": {
         "_overview": """\
 # peekaboo-cli
@@ -90,15 +90,16 @@ DEFCON Demo Labs Singapore 2026 | by @cocomelonc
 
 ## Modules
 
-| module      | description                                              |
-|-------------|----------------------------------------------------------|
-| `evasion`   | PE evasion scorer and surgical patch transforms          |
-| `library`   | MITRE ATT&CK module library -- browse, search, view code |
-| `artifacts` | Artifact map: 410 techniques mapped to 4799 Sigma rules  |
-| `builder`   | Compile malware research modules; browse build history   |
-| `shellcode` | Parse, analyse, transform and reformat shellcode         |
-| `yara`      | Generate YARA rules from binaries; scan with yara-python |
-| `malpedia`  | APT actors, malware families, reports, YARA from Malpedia|
+| module      | description                                                 |
+|-------------|-------------------------------------------------------------|
+| `evasion`   | PE evasion scorer and surgical patch transforms             |
+| `library`   | MITRE ATT&CK module library -- browse, search, view code    |
+| `artifacts` | Artifact map: 410 techniques mapped to 4799 Sigma rules     |
+| `builder`   | Compile malware research modules; browse build history      |
+| `shellcode` | Parse, analyse, transform and reformat shellcode            |
+| `yara`      | Generate YARA rules from binaries; scan with yara-python    |
+| `malpedia`  | APT actors, malware families, reports, YARA from Malpedia   |
+| `ttp`       | TTPs, unique ATT&CK sub-techniques implementations from lib |
 
 ## Global commands
 
@@ -146,10 +147,17 @@ DEFCON Demo Labs Singapore 2026 | by @cocomelonc
     peekaboo [malpedia] > actors lazarus
     peekaboo [malpedia] > actor lazarus_group
     peekaboo [malpedia] > search apt28
+
+    peekaboo > ttp
+    peekaboo [ttp] > list persistence
+    peekaboo [ttp] > show T1547.001
+    peekaboo [ttp] > search APC injection
+    peekaboo [ttp] > build T1055.004
+    peekaboo [ttp] > refresh
 """,
     },
 
-    # ── evasion ───────────────────────────────────────────────────────────────
+    # -- evasion ---------------------------------------------------------------
     "evasion": {
         "_overview": """\
 # Evasion Lab
@@ -335,7 +343,7 @@ Show metadata for the currently loaded file.
 """,
     },
 
-    # ── library ───────────────────────────────────────────────────────────────
+    # -- library ---------------------------------------------------------------
     "library": {
         "_overview": """\
 # Module Library
@@ -457,7 +465,7 @@ List all categories with entry counts and a proportional bar chart.
 """,
     },
 
-    # ── artifacts ─────────────────────────────────────────────────────────────
+    # -- artifacts -------------------------------------------------------------
     "artifacts": {
         "_overview": """\
 # Artifact Map
@@ -614,7 +622,7 @@ Show global artifact map statistics.
 """,
     },
 
-    # ── shellcode ─────────────────────────────────────────────────────────────
+    # -- shellcode -------------------------------------------------------------
     "shellcode": {
         "_overview": """\
 # Shellcode Lab
@@ -748,15 +756,15 @@ Set the output format used by `generate` and `export`.
 |-------------|-------------------------------------|
 | `c`         | C `unsigned char buf[] = {...};`    |
 | `c_str`     | C `\\x` string literal              |
-| `python`    | Python `b"\\x90..."`               |
-| `powershell`| PowerShell `[Byte[]] $buf = @(...)`  |
+| `python`    | Python `b"\\x90..."`                |
+| `powershell`| PowerShell `[Byte[]] $buf = @(...)` |
 | `csharp`    | C# `byte[] buf = new byte[]{...};`  |
 | `vba`       | VBA function with hex-decode loop   |
 | `rust`      | Rust `let buf: &[u8] = &[...];`     |
 | `base64`    | Base64 encoded string               |
 | `hex_0x`    | Space-separated `0xNN` values       |
 | `hex_raw`   | Continuous hex string               |
-| `escaped`   | `\\xNN` escaped hex string         |
+| `escaped`   | `\\xNN` escaped hex string          |
 
 **Examples:**
 
@@ -928,7 +936,7 @@ List all available transform IDs with descriptions.
 """,
     },
 
-    # ── malpedia ──────────────────────────────────────────────────────────────
+    # -- malpedia --------------------------------------------------------------
     "malpedia": {
         "_overview": """\
 # Malpedia
@@ -1176,7 +1184,7 @@ Force-refresh the local actor and family ID caches from the Malpedia API.
 """,
     },
 
-    # ── yara ──────────────────────────────────────────────────────────────────
+    # -- yara ------------------------------------------------------------------
     "yara": {
         "_overview": """\
 # YARA Lab
@@ -1324,7 +1332,152 @@ Scan a file against the last generated YARA rule.
 """,
     },
 
-    # ── builder ───────────────────────────────────────────────────────────────
+    # -- ttp -------------------------------------------------------------------
+    "ttp": {
+        "_overview": """\
+# TTP
+
+Map MITRE ATT&CK technique IDs to real implementations from the blog
+and compile them directly.
+
+Data is stored in the peekaboo database (ttp_implementations table).
+Each row is one (attack_id, blog_post) pair with the compilable meow slug.
+
+**Commands:**
+
+| command                | description                                          |
+|------------------------|------------------------------------------------------|
+| `list [filter]`        | list all techniques with implementations             |
+| `show <id>`            | show all implementations for a specific TTP          |
+| `search <query>`       | search by keyword, tactic, technique name or notes   |
+| `build <id>`           | compile the implementation for a given technique     |
+| `refresh`              | re-seed implementations from source data             |
+| `help [cmd]`           | show this help or detailed help for a command        |
+| `back`                 | return to main menu                                  |
+
+**Quick start:**
+
+    ttp> list persistence          list all persistence technique implementations
+    ttp> show T1547.001            show all registry run key implementations
+    ttp> search APC injection      search by technique description keyword
+    ttp> build T1055.004           compile APC injection implementation
+    ttp> refresh                   rebuild the implementations table
+""",
+        "list": """\
+## list
+
+List techniques with implementations, optionally filtered.
+
+**Usage:**
+
+    list [filter]
+
+**Filter options:**
+
+- tactic name: `persistence`, `defense-evasion`, `execution`, `privilege-escalation`, ...
+- platform:    `windows`, `linux`, `macos`
+- attack ID:   `T1055`, `T1547`  (shows all sub-techniques)
+- (no filter)  shows all techniques grouped by tactic
+
+**Examples:**
+
+    list
+    list persistence
+    list defense-evasion
+    list windows
+    list macos
+    list T1055
+
+**Columns:** attack_id | technique name | tactic | impls | compile
+
+- `impls`   -- number of blog post implementations for this technique
+- `compile` -- YES if at least one has a compilable meow module
+""",
+        "show": """\
+## show
+
+Show all implementations for a specific ATT&CK technique.
+
+**Usage:**
+
+    show <attack_id>
+
+**Examples:**
+
+    show T1547.001
+    show T1055.004
+    show T1546.002
+
+**Output:**
+
+1. Technique panel: name, tactic, ATT&CK description
+2. Implementations table: blog post | platform | notes | meow slug | blog URL
+3. Hint for  build  command if compilable implementations exist
+""",
+        "search": """\
+## search
+
+Full-text search across technique names, tactics, notes and blog slugs.
+
+**Usage:**
+
+    search <query>
+
+**Examples:**
+
+    search APC
+    search registry run
+    search screensaver
+    search NtCreateSection
+    search macos launchagent
+
+**Output:** table of matching (attack_id, blog_slug) pairs with notes.
+""",
+        "build": """\
+## build
+
+Compile the implementation for a given ATT&CK technique.
+
+**Usage:**
+
+    build <attack_id>
+
+**Examples:**
+
+    build T1547.001
+    build T1055.004
+    build T1546.002
+
+**Flow:**
+
+1. All compilable implementations for the technique are listed
+2. If more than one, enter the number to select which to compile
+3. Module is compiled via the meow backend
+4. Output: `samples/<session-id>/<slug>.exe`
+5. Build result saved to the peekaboo database
+
+**Notes:**
+
+- Only implementations with a meow_slug in the database are compilable
+- Entries without a meow_slug show blog_url only (no binary output)
+""",
+        "refresh": """\
+## refresh
+
+Re-seed the ttp_implementations table from source data.
+Resolves tech_name and tactic from the STIX bundle.
+Resolves blog_url from the mitre_library table.
+
+**Usage:**
+
+    refresh
+
+Use this after adding new TTP_IMPLEMENTATIONS entries in mitre.py
+or after updating the STIX bundle.
+""",
+    },
+
+    # -- builder ---------------------------------------------------------------
     "builder": {
         "_overview": """\
 # Builder
@@ -1604,7 +1757,7 @@ def print_banner() -> None:
 # -- top-level commands --------------------------------------------------------
 TOP_COMMANDS = [
     "evasion", "library", "artifacts", "builder", "shellcode", "yara",
-    "malpedia", "help", "exit", "quit",
+    "malpedia", "ttp", "help", "exit", "quit",
 ]
 
 TOP_HELP = [
@@ -1615,6 +1768,7 @@ TOP_HELP = [
     ("shellcode", "Parse, analyse, transform and reformat shellcode"),
     ("yara",      "Generate YARA rules from binaries; scan with yara-python"),
     ("malpedia",  "APT actors, malware families, reports, YARA from Malpedia"),
+    ("ttp",       "TTP -> implementation map: browse ATT&CK techniques and compile"),
     ("help",      "show this help"),
     ("exit",      "quit peekaboo-cli"),
 ]
@@ -1758,7 +1912,7 @@ def _render_artifact_detail(e: dict) -> None:
     rules   = sorted(e["rules"],
                      key=lambda r: _RULE_LEVEL_ORDER.get(r.get("level",""), 5))
 
-    # ── header panel ─────────────────────────────────────────────────────────
+    # -- header panel ---------------------------------------------------------
     eid_lines = ""
     if eids:
         eid_parts = [f"{eid}:{_EID_LABEL.get(int(eid), '?')}" for eid in eids]
@@ -1781,7 +1935,7 @@ def _render_artifact_detail(e: dict) -> None:
                         title=f"[heading] {e['tid']} - {e['name'] or ''} [/heading]",
                         border_style="cyan", box=box.ASCII))
 
-    # ── top sigma rules ───────────────────────────────────────────────────────
+    # -- top sigma rules -------------------------------------------------------
     top_rules = rules[:20]
     if top_rules:
         rt = Table(box=box.ASCII, show_header=True, header_style="heading",
@@ -1811,7 +1965,7 @@ def _render_artifact_detail(e: dict) -> None:
                 f"use  rules {e['tid']}  for full list[/dim]"
             )
 
-    # ── registry keys ─────────────────────────────────────────────────────────
+    # -- registry keys ---------------------------------------------------------
     reg_keys = e.get("reg_keys", [])
     if reg_keys:
         rkt = Table(box=box.ASCII, show_header=True, header_style="heading",
@@ -1823,7 +1977,7 @@ def _render_artifact_detail(e: dict) -> None:
             console.print(f"  [dim]... +{len(reg_keys)-15} more[/dim]")
         console.print(rkt)
 
-    # ── processes ─────────────────────────────────────────────────────────────
+    # -- processes -------------------------------------------------------------
     procs = e.get("processes", [])
     if procs:
         pt = Table(box=box.ASCII, show_header=True, header_style="heading",
@@ -1835,7 +1989,7 @@ def _render_artifact_detail(e: dict) -> None:
             console.print(f"  [dim]... +{len(procs)-12} more[/dim]")
         console.print(pt)
 
-    # ── command line patterns ─────────────────────────────────────────────────
+    # -- command line patterns -------------------------------------------------
     cmdlines = e.get("cmdlines", [])
     if cmdlines:
         ct = Table(box=box.ASCII, show_header=True, header_style="heading",
@@ -1976,15 +2130,15 @@ def run_artifacts() -> None:
         cmd   = parts[0].lower()
         args  = parts[1:]
 
-        # ── back ─────────────────────────────────────────────────────────────
+        # -- back -------------------------------------------------------------
         if cmd in ("back", "exit", "quit"):
             break
 
-        # ── help ─────────────────────────────────────────────────────────────
+        # -- help -------------------------------------------------------------
         elif cmd == "help":
             show_help("artifacts", args[0] if args else None)
 
-        # ── stats ─────────────────────────────────────────────────────────────
+        # -- stats -------------------------------------------------------------
         elif cmd == "stats":
             t = Table(box=box.ASCII, show_header=False, border_style="dim",
                       padding=(0, 2), title="Artifact Map Statistics")
@@ -1999,7 +2153,7 @@ def run_artifacts() -> None:
             console.print(t)
             console.print()
 
-        # ── tactics ──────────────────────────────────────────────────────────
+        # -- tactics ----------------------------------------------------------
         elif cmd == "tactics":
             max_n = max(tactic_counts.values())
             t = Table(box=box.ASCII, show_header=True, header_style="heading",
@@ -2016,7 +2170,7 @@ def run_artifacts() -> None:
             console.print(t)
             console.print()
 
-        # ── list [tactic] ─────────────────────────────────────────────────────
+        # -- list [tactic] -----------------------------------------------------
         elif cmd == "list":
             if args:
                 tac = args[0].lower()
@@ -2039,7 +2193,7 @@ def run_artifacts() -> None:
                 current_view, current_title, current_page
             )
 
-        # ── search ────────────────────────────────────────────────────────────
+        # -- search ------------------------------------------------------------
         elif cmd == "search":
             if not args:
                 console.print("[warn][!] usage: search <query>[/warn]")
@@ -2062,7 +2216,7 @@ def run_artifacts() -> None:
                 current_view, current_title, current_page
             )
 
-        # ── show <T-ID> ───────────────────────────────────────────────────────
+        # -- show <T-ID> -------------------------------------------------------
         elif cmd == "show":
             if not args:
                 console.print("[warn][!] usage: show <T-ID>  e.g.  show T1055[/warn]")
@@ -2086,7 +2240,7 @@ def run_artifacts() -> None:
                     continue
             _render_artifact_detail(entry)
 
-        # ── rules <T-ID> [level] ──────────────────────────────────────────────
+        # -- rules <T-ID> [level] ----------------------------------------------
         elif cmd == "rules":
             if not args:
                 console.print(
@@ -4285,6 +4439,456 @@ def _render_build_detail(b: dict) -> None:
             _render_build_log(log, status == "success")
 
 
+# -- ttp module ----------------------------------------------------------------
+
+TTP_COMMANDS = [
+    "list", "show", "search", "build", "refresh", "help", "back", "exit",
+]
+
+_TTP_TACTICS_ORDER = [
+    "persistence", "defense-evasion", "privilege-escalation", "execution",
+    "exfiltration", "command-and-control", "collection", "discovery",
+    "credential-access", "lateral-movement", "impact", "initial-access",
+]
+
+
+def _ttp_tactic_style(tactic: str) -> str:
+    return {
+        "persistence":          "cyan",
+        "defense-evasion":      "yellow",
+        "privilege-escalation": "magenta",
+        "execution":            "green",
+        "exfiltration":         "red",
+        "command-and-control":  "red",
+        "collection":           "blue",
+        "discovery":            "dim",
+        "credential-access":    "magenta",
+    }.get(tactic, "dim")
+
+
+def _render_ttp_list(rows: list[dict], title: str) -> None:
+    """Group rows by tactic and render a summary table (one row per attack_id)."""
+    from collections import defaultdict
+    # aggregate by attack_id
+    by_id: dict[str, dict] = {}
+    for r in rows:
+        aid = r["attack_id"]
+        if aid not in by_id:
+            by_id[aid] = {
+                "attack_id": aid,
+                "tech_name": r["tech_name"] or aid,
+                "tactic":    r["tactic"],
+                "impls":     0,
+                "compilable": False,
+            }
+        by_id[aid]["impls"] += 1
+        if r["meow_slug"]:
+            by_id[aid]["compilable"] = True
+
+    # sort: by tactic order then attack_id
+    def _sort_key(e):
+        t = e["tactic"]
+        try:
+            ti = _TTP_TACTICS_ORDER.index(t)
+        except ValueError:
+            ti = 99
+        return (ti, e["attack_id"])
+
+    entries = sorted(by_id.values(), key=_sort_key)
+
+    t = Table(box=box.ASCII, show_header=True, header_style="heading",
+              border_style="dim", padding=(0, 1),
+              title=f"{title}  ({len(entries)} techniques / {len(rows)} impls)")
+    t.add_column("attack_id",  style="cmd",    min_width=12, no_wrap=True)
+    t.add_column("technique",  style="info",   min_width=42)
+    t.add_column("tactic",     min_width=22,   no_wrap=True)
+    t.add_column("impls",      style="dim",    min_width=5,  justify="right")
+    t.add_column("compile",    min_width=7,    justify="center")
+
+    for e in entries:
+        tac   = e["tactic"]
+        ts    = _ttp_tactic_style(tac)
+        comp  = Text("YES", style="ok") if e["compilable"] else Text("-", style="dim")
+        t.add_row(
+            e["attack_id"],
+            e["tech_name"][:42],
+            Text(tac, style=ts),
+            str(e["impls"]),
+            comp,
+        )
+
+    console.print()
+    console.print(t)
+    console.print(
+        f"  [dim]use  show <attack_id>  to see implementations"
+        f"  |  build <attack_id>  to compile[/dim]\n"
+    )
+
+
+def _render_ttp_show(attack_id: str, rows: list[dict]) -> None:
+    """Render the detail view for one attack_id."""
+    if not rows:
+        console.print(f"  [err][!] no implementations found for {attack_id}[/err]\n")
+        return
+
+    tech_name = rows[0]["tech_name"] or attack_id
+    tactic    = rows[0]["tactic"]
+
+    # technique header panel
+    ts = _ttp_tactic_style(tactic)
+    console.print()
+    console.print(Panel(
+        f"  [{ts}]{tech_name}[/{ts}]\n"
+        f"  Tactic : [dim]{tactic}[/dim]\n"
+        f"  Impls  : {len(rows)}  |  "
+        f"Compilable: {sum(1 for r in rows if r['meow_slug'])}",
+        title=f"[heading] {attack_id} [/heading]",
+        border_style=ts,
+        box=box.ASCII,
+    ))
+
+    # implementations table
+    t = Table(box=box.ASCII, show_header=True, header_style="heading",
+              border_style="dim", padding=(0, 1),
+              title=f"Implementations  ({len(rows)})")
+    t.add_column("#",          style="dim",   min_width=3,  justify="right")
+    t.add_column("blog_slug",  style="cmd",   min_width=28, no_wrap=True)
+    t.add_column("platform",   min_width=8,   no_wrap=True)
+    t.add_column("notes",      style="info",  min_width=46)
+    t.add_column("compile",    min_width=7,   justify="center")
+
+    for i, r in enumerate(rows, 1):
+        comp = Text("YES", style="ok") if r["meow_slug"] else Text("-", style="dim")
+        t.add_row(
+            str(i),
+            r["blog_slug"],
+            r["platform"],
+            r["notes"][:46],
+            comp,
+        )
+
+    console.print(t)
+
+    # show blog URLs
+    console.print()
+    for r in rows:
+        if r["blog_url"]:
+            console.print(f"  [dim]{r['blog_slug']}[/dim]  ->  [link]{r['blog_url']}[/link]")
+
+    compilable = [r for r in rows if r["meow_slug"]]
+    if compilable:
+        console.print(
+            f"\n  [dim]use  build {attack_id}  to compile one of the "
+            f"{len(compilable)} compilable implementations[/dim]"
+        )
+    console.print()
+
+
+def run_ttp() -> None:
+    """Interactive TTP sub-REPL."""
+    try:
+        import db as _db
+    except ImportError as e:
+        console.print(f"[err][!] db module unavailable: {e}[/err]")
+        return
+    try:
+        import discovery as _disc
+    except ImportError as e:
+        console.print(f"[err][!] discovery module unavailable: {e}[/err]")
+        return
+
+    # load all rows once; refresh updates this
+    all_rows = _db.get_ttp_implementations()
+    if not all_rows:
+        console.print(
+            "[warn][!] ttp_implementations table is empty -- run  refresh  to seed[/warn]\n"
+        )
+
+    # build completer tokens from attack_ids + tactics
+    attack_ids = sorted({r["attack_id"] for r in all_rows})
+    tactics    = sorted({r["tactic"] for r in all_rows if r["tactic"]})
+    platforms  = ["windows", "linux", "macos"]
+
+    completer = WordCompleter(
+        TTP_COMMANDS + attack_ids + tactics + platforms,
+        ignore_case=True,
+    )
+    session: PromptSession = PromptSession(
+        history=InMemoryHistory(),
+        completer=completer,
+        style=PT_STYLE,
+    )
+
+    n_techs = _db.count_ttp_techniques()
+    n_impls = _db.count_ttp_implementations()
+
+    console.print()
+    console.print(Panel(
+        f"  {n_techs} ATT&CK techniques  |  {n_impls} implementations\n"
+        f"  type  help  for commands,  list  to browse,  back  to return",
+        title="[heading] TTP -> Implementation Map [/heading]",
+        border_style="cyan",
+        box=box.ASCII,
+    ))
+    console.print()
+
+    while True:
+        try:
+            raw = session.prompt("peekaboo [ttp] > ", style=PT_STYLE).strip()
+        except (KeyboardInterrupt, EOFError):
+            console.print("\n[dim]use  back  to return[/dim]")
+            continue
+
+        if not raw:
+            continue
+
+        parts = raw.split()
+        cmd   = parts[0].upper() if parts[0].upper().startswith("T1") else parts[0].lower()
+        args  = parts[1:]
+
+        # bare attack_id typed directly -> treat as show
+        if cmd.startswith("T1") and len(cmd) >= 5:
+            rows = _db.get_ttp_by_attack_id(cmd)
+            _render_ttp_show(cmd, rows)
+            continue
+
+        if cmd in ("back", "exit", "quit"):
+            break
+
+        elif cmd == "help":
+            show_help("ttp", args[0] if args else None)
+
+        # -- list [filter] -------------------------------------------------------
+        elif cmd == "list":
+            f = args[0].lower() if args else ""
+            if not f:
+                _render_ttp_list(all_rows, "All TTP Implementations")
+            elif f in tactics:
+                filtered = [r for r in all_rows if r["tactic"] == f]
+                _render_ttp_list(filtered, f"Tactic: {f}")
+            elif f in platforms:
+                filtered = [r for r in all_rows if r["platform"] == f]
+                _render_ttp_list(filtered, f"Platform: {f}")
+            elif f.upper().startswith("T1"):
+                aid = f.upper()
+                filtered = [r for r in all_rows
+                            if r["attack_id"] == aid
+                            or r["attack_id"].startswith(aid + ".")]
+                if not filtered:
+                    console.print(f"  [warn][!] no implementations for {aid}[/warn]\n")
+                else:
+                    _render_ttp_list(filtered, f"Technique: {aid}")
+            else:
+                # try as tactic partial match
+                matches = [t for t in tactics if f in t]
+                if len(matches) == 1:
+                    filtered = [r for r in all_rows if r["tactic"] == matches[0]]
+                    _render_ttp_list(filtered, f"Tactic: {matches[0]}")
+                else:
+                    console.print(
+                        f"  [warn][!] unknown filter '{f}' -- "
+                        f"use a tactic, platform, or T-ID[/warn]\n"
+                    )
+
+        # -- show <attack_id> ----------------------------------------------------
+        elif cmd == "show":
+            if not args:
+                console.print("[warn][!] usage: show <attack_id>[/warn]")
+                continue
+            aid  = args[0].upper()
+            rows = _db.get_ttp_by_attack_id(aid)
+            if not rows:
+                # try partial: show all sub-techniques
+                sub = [r for r in all_rows if r["attack_id"].startswith(aid + ".")]
+                if sub:
+                    _render_ttp_list(sub, f"Sub-techniques of {aid}")
+                else:
+                    console.print(f"  [err][!] no implementations for {aid}[/err]\n")
+            else:
+                _render_ttp_show(aid, rows)
+
+        # -- search <query> ------------------------------------------------------
+        elif cmd == "search":
+            if not args:
+                console.print("[warn][!] usage: search <query>[/warn]")
+                continue
+            q       = " ".join(args)
+            results = _db.get_ttp_implementations(q=q)
+            if not results:
+                console.print(f"  [warn][!] no results for '{q}'[/warn]\n")
+            else:
+                t = Table(box=box.ASCII, show_header=True, header_style="heading",
+                          border_style="dim", padding=(0, 1),
+                          title=f"Search: '{q}'  ({len(results)} results)")
+                t.add_column("attack_id", style="cmd",  min_width=12, no_wrap=True)
+                t.add_column("tactic",    min_width=20, no_wrap=True)
+                t.add_column("blog_slug", style="info", min_width=28, no_wrap=True)
+                t.add_column("platform",  min_width=8,  no_wrap=True)
+                t.add_column("notes",     style="dim",  min_width=40)
+                for r in results:
+                    ts = _ttp_tactic_style(r["tactic"])
+                    t.add_row(
+                        r["attack_id"],
+                        Text(r["tactic"], style=ts),
+                        r["blog_slug"],
+                        r["platform"],
+                        r["notes"][:40],
+                    )
+                console.print()
+                console.print(t)
+                console.print(
+                    f"  [dim]use  show <attack_id>  for full detail[/dim]\n"
+                )
+
+        # -- build <attack_id> ---------------------------------------------------
+        elif cmd == "build":
+            if not args:
+                console.print("[warn][!] usage: build <attack_id>[/warn]")
+                continue
+
+            aid  = args[0].upper()
+            rows = _db.get_ttp_by_attack_id(aid)
+            if not rows:
+                console.print(f"  [err][!] no implementations for {aid}[/err]\n")
+                continue
+
+            compilable = [r for r in rows if r["meow_slug"]]
+            if not compilable:
+                console.print(
+                    f"  [warn][!] {aid} has {len(rows)} implementation(s) "
+                    f"but none have a compilable meow module[/warn]"
+                )
+                for r in rows:
+                    if r["blog_url"]:
+                        console.print(f"  [dim]-> {r['blog_url']}[/dim]")
+                console.print()
+                continue
+
+            # pick which implementation to compile
+            chosen = None
+            if len(compilable) == 1:
+                chosen = compilable[0]
+                console.print(
+                    f"  [dim]one compilable implementation: {chosen['blog_slug']}[/dim]"
+                )
+            else:
+                t = Table(box=box.ASCII, show_header=True, header_style="heading",
+                          border_style="dim", padding=(0, 1),
+                          title=f"Compilable implementations of {aid}")
+                t.add_column("#",          style="dim",  min_width=3,  justify="right")
+                t.add_column("blog_slug",  style="cmd",  min_width=28)
+                t.add_column("platform",   min_width=8,  no_wrap=True)
+                t.add_column("notes",      style="info", min_width=46)
+                for i, r in enumerate(compilable, 1):
+                    t.add_row(str(i), r["blog_slug"], r["platform"], r["notes"][:46])
+                console.print()
+                console.print(t)
+                try:
+                    raw_pick = session.prompt(
+                        "  select # to compile (Enter to cancel): ",
+                        style=PT_STYLE,
+                    ).strip()
+                except (KeyboardInterrupt, EOFError):
+                    console.print()
+                    continue
+                if not raw_pick:
+                    continue
+                try:
+                    idx = int(raw_pick) - 1
+                    if not (0 <= idx < len(compilable)):
+                        raise ValueError
+                    chosen = compilable[idx]
+                except ValueError:
+                    console.print("  [err][!] invalid selection[/err]\n")
+                    continue
+
+            # resolve meow module via discovery
+            meow_slug  = chosen["meow_slug"]
+            slug_map   = {m["slug"]: m for m in _disc.scan_all()}
+            mod        = slug_map.get(meow_slug)
+            if not mod:
+                console.print(
+                    f"  [err][!] meow module '{meow_slug}' not found in discovery[/err]\n"
+                )
+                continue
+
+            import uuid
+            from datetime import datetime
+            session_id = uuid.uuid4().hex[:12]
+
+            console.print()
+            console.print(Panel(
+                f"  TTP      : [cmd]{aid}[/cmd]  {chosen['tech_name']}\n"
+                f"  module   : [dim]{meow_slug}[/dim]\n"
+                f"  platform : {chosen['platform']}\n"
+                f"  session  : [dim]{session_id}[/dim]",
+                title="[heading] Build [/heading]",
+                border_style="cyan",
+                box=box.ASCII,
+            ))
+            console.print()
+
+            t0 = datetime.now()
+            ok, log, out_path = _compiler.compile_module(mod["id"], session_id)
+            elapsed = (datetime.now() - t0).total_seconds()
+
+            _render_build_log(log, ok)
+
+            status = "success" if ok else "failed"
+            if ok and out_path:
+                size_kb = out_path.stat().st_size // 1024
+                console.print(Panel(
+                    f"  [ok]BUILD OK[/ok]  {out_path.name}  {size_kb} KB  ({elapsed:.1f}s)\n"
+                    f"  path: [dim]{out_path}[/dim]",
+                    title="[heading] Result [/heading]",
+                    border_style="ok",
+                    box=box.ASCII,
+                ))
+            else:
+                console.print(Panel(
+                    f"  [err]BUILD FAILED[/err]  ({elapsed:.1f}s)",
+                    title="[heading] Result [/heading]",
+                    border_style="err",
+                    box=box.ASCII,
+                ))
+
+            _db.save_build({
+                "id":         session_id,
+                "params":     {"malware": "ttp", "attack_id": aid, "meow_slug": meow_slug},
+                "status":     status,
+                "output":     log,
+                "returncode": 0 if ok else 1,
+                "created":    t0.isoformat(),
+                "start_time": t0.isoformat(),
+                "end_time":   datetime.now().isoformat(),
+            })
+            console.print()
+
+        # -- refresh -------------------------------------------------------------
+        elif cmd == "refresh":
+            console.print("  [dim]seeding ttp_implementations...[/dim]")
+            try:
+                import mitre as _mitre
+                n = _mitre.seed_ttp_implementations()
+                all_rows[:] = _db.get_ttp_implementations()
+                attack_ids[:] = sorted({r["attack_id"] for r in all_rows})
+                tactics[:] = sorted({r["tactic"] for r in all_rows if r["tactic"]})
+                n_techs2 = _db.count_ttp_techniques()
+                n_impls2 = _db.count_ttp_implementations()
+                console.print(
+                    f"  [ok][+] seeded {n} rows  |  "
+                    f"{n_techs2} techniques  {n_impls2} implementations[/ok]\n"
+                )
+            except Exception as ex:
+                console.print(f"  [err][!] refresh failed: {ex}[/err]\n")
+
+        else:
+            console.print(
+                f"[warn][!] unknown command: {cmd}  "
+                f"(type  help  for commands)[/warn]"
+            )
+
+
 def run_builder() -> None:
     """Interactive builder sub-REPL."""
     try:
@@ -4814,6 +5418,9 @@ def main() -> None:
 
         elif cmd == "malpedia":
             run_malpedia()
+
+        elif cmd == "ttp":
+            run_ttp()
 
         else:
             console.print(

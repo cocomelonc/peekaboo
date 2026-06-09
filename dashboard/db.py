@@ -115,6 +115,25 @@ def init() -> None:
         db.execute("CREATE INDEX IF NOT EXISTS idx_artifact_tactic ON artifact_map(tactic)")
 
         db.execute("""
+            CREATE TABLE IF NOT EXISTS ttp_implementations (
+                id          INTEGER PRIMARY KEY AUTOINCREMENT,
+                attack_id   TEXT NOT NULL,
+                tactic      TEXT NOT NULL DEFAULT '',
+                tech_name   TEXT NOT NULL DEFAULT '',
+                blog_slug   TEXT NOT NULL,
+                blog_url    TEXT NOT NULL DEFAULT '',
+                meow_slug   TEXT NOT NULL DEFAULT '',
+                platform    TEXT NOT NULL DEFAULT 'windows',
+                notes       TEXT NOT NULL DEFAULT '',
+                added_at    TEXT DEFAULT (datetime('now')),
+                UNIQUE(attack_id, blog_slug)
+            )
+        """)
+        db.execute("CREATE INDEX IF NOT EXISTS idx_ttp_impl_attack_id ON ttp_implementations(attack_id)")
+        db.execute("CREATE INDEX IF NOT EXISTS idx_ttp_impl_blog_slug  ON ttp_implementations(blog_slug)")
+        db.execute("CREATE INDEX IF NOT EXISTS idx_ttp_impl_platform   ON ttp_implementations(platform)")
+
+        db.execute("""
             CREATE TABLE IF NOT EXISTS patch_history (
                 id          INTEGER PRIMARY KEY AUTOINCREMENT,
                 filename    TEXT NOT NULL DEFAULT '',
@@ -479,6 +498,60 @@ def _mitre_row(row: sqlite3.Row) -> dict:
     return d
 
 
+def get_mitre_entries_paged(
+    q: str = "",
+    category: str = "",
+    offset: int = 0,
+    limit: int = 10,
+) -> list[dict]:
+    with _conn() as db:
+        conds: list[str] = []
+        args:  list      = []
+        if category:
+            conds.append("category = ?")
+            args.append(category)
+        if q:
+            pat = f"%{q}%"
+            conds.append(
+                "(title LIKE ? OR attack_ids LIKE ? OR category LIKE ? OR slug LIKE ?)"
+            )
+            args += [pat, pat, pat, pat]
+        sql = "SELECT * FROM mitre_library"
+        if conds:
+            sql += " WHERE " + " AND ".join(conds)
+        sql += " ORDER BY date DESC LIMIT ? OFFSET ?"
+        args += [limit, offset]
+        rows = db.execute(sql, args).fetchall()
+    return [_mitre_row(r) for r in rows]
+
+
+def count_mitre_entries_filtered(q: str = "", category: str = "") -> int:
+    with _conn() as db:
+        conds: list[str] = []
+        args:  list      = []
+        if category:
+            conds.append("category = ?")
+            args.append(category)
+        if q:
+            pat = f"%{q}%"
+            conds.append(
+                "(title LIKE ? OR attack_ids LIKE ? OR category LIKE ? OR slug LIKE ?)"
+            )
+            args += [pat, pat, pat, pat]
+        sql = "SELECT COUNT(*) FROM mitre_library"
+        if conds:
+            sql += " WHERE " + " AND ".join(conds)
+        return db.execute(sql, args).fetchone()[0]
+
+
+def get_mitre_categories() -> list[tuple[str, int]]:
+    with _conn() as db:
+        rows = db.execute(
+            "SELECT category, COUNT(*) n FROM mitre_library GROUP BY category ORDER BY n DESC"
+        ).fetchall()
+    return [(r[0], r[1]) for r in rows]
+
+
 def get_mitre_entries(category: str = "all") -> list[dict]:
     with _conn() as db:
         if category == "all":
@@ -653,3 +726,116 @@ def get_patch_history(limit: int = 10) -> list[dict]:
                 d[k] = []
         result.append(d)
     return result
+
+
+# --------------------------------------------------------------------------- #
+#  TTP Implementations                                                         #
+# --------------------------------------------------------------------------- #
+
+def upsert_ttp_implementations(entries: list[dict]) -> int:
+    now = datetime.now().isoformat()
+    inserted = 0
+    with _conn() as db:
+        for e in entries:
+            db.execute(
+                """
+                INSERT INTO ttp_implementations
+                  (attack_id, tactic, tech_name, blog_slug, blog_url,
+                   meow_slug, platform, notes, added_at)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+                ON CONFLICT(attack_id, blog_slug) DO UPDATE SET
+                  tactic    = excluded.tactic,
+                  tech_name = excluded.tech_name,
+                  blog_url  = excluded.blog_url,
+                  meow_slug = excluded.meow_slug,
+                  platform  = excluded.platform,
+                  notes     = excluded.notes
+                """,
+                (
+                    e["attack_id"],
+                    e.get("tactic", ""),
+                    e.get("tech_name", ""),
+                    e["blog_slug"],
+                    e.get("blog_url", ""),
+                    e.get("meow_slug", ""),
+                    e.get("platform", "windows"),
+                    e.get("notes", ""),
+                    now,
+                ),
+            )
+            inserted += 1
+    return inserted
+
+
+def _ttp_impl_row(row: sqlite3.Row) -> dict:
+    return dict(row)
+
+
+def get_ttp_implementations(
+    attack_id: str | None = None,
+    platform:  str | None = None,
+    q:         str | None = None,
+) -> list[dict]:
+    with _conn() as db:
+        sql  = "SELECT * FROM ttp_implementations"
+        args: list = []
+        conds: list[str] = []
+        if attack_id:
+            conds.append("(attack_id = ? OR attack_id LIKE ?)")
+            args += [attack_id, attack_id + ".%"]
+        if platform:
+            conds.append("platform = ?")
+            args.append(platform)
+        if conds:
+            sql += " WHERE " + " AND ".join(conds)
+        sql += " ORDER BY attack_id, blog_slug"
+        rows = db.execute(sql, args).fetchall()
+
+    results = [_ttp_impl_row(r) for r in rows]
+
+    if q:
+        ql = q.lower()
+        results = [
+            r for r in results
+            if ql in r["attack_id"].lower()
+            or ql in r["tech_name"].lower()
+            or ql in r["tactic"].lower()
+            or ql in r["blog_slug"].lower()
+            or ql in r["notes"].lower()
+        ]
+    return results
+
+
+def get_ttp_by_attack_id(attack_id: str) -> list[dict]:
+    with _conn() as db:
+        rows = db.execute(
+            "SELECT * FROM ttp_implementations WHERE attack_id = ? ORDER BY blog_slug",
+            (attack_id,),
+        ).fetchall()
+    return [_ttp_impl_row(r) for r in rows]
+
+
+def get_ttp_attack_ids() -> list[str]:
+    """Distinct attack_ids with at least one implementation, sorted."""
+    with _conn() as db:
+        rows = db.execute(
+            "SELECT DISTINCT attack_id FROM ttp_implementations ORDER BY attack_id"
+        ).fetchall()
+    return [r[0] for r in rows]
+
+
+def count_ttp_implementations() -> int:
+    with _conn() as db:
+        return db.execute("SELECT COUNT(*) FROM ttp_implementations").fetchone()[0]
+
+
+def count_ttp_techniques() -> int:
+    with _conn() as db:
+        return db.execute(
+            "SELECT COUNT(DISTINCT attack_id) FROM ttp_implementations"
+        ).fetchone()[0]
+
+
+def clear_ttp_implementations() -> None:
+    with _conn() as db:
+        db.execute("DELETE FROM ttp_implementations")

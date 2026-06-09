@@ -784,7 +784,28 @@ def api_mitre_groups():
         return jsonify({"error": "mitre module not available"}), 503
     if not mitre_available():
         return jsonify({"error": "STIX bundle not found"}), 503
-    return jsonify(get_groups())
+
+    q     = request.args.get("q", "").lower().strip()
+    page  = max(0, int(request.args.get("page",  0)))
+    limit = max(1, int(request.args.get("limit", 10)))
+
+    groups = get_groups()
+    if q:
+        groups = [
+            g for g in groups
+            if q in g["name"].lower()
+            or any(q in a.lower() for a in g.get("aliases", []))
+        ]
+
+    total = len(groups)
+    start = page * limit
+    items = groups[start:start + limit]
+    return jsonify({
+        "items": items,
+        "total": total,
+        "page":  page,
+        "pages": max(1, (total + limit - 1) // limit),
+    })
 
 
 @app.route("/api/mitre/techniques")
@@ -798,16 +819,52 @@ def api_mitre_all_techniques():
 def api_mitre_library():
     if not HAS_MITRE:
         return jsonify({"error": "mitre module not available"}), 503
-    category = request.args.get("category", "all")
-    # fast path: serve from SQLite
-    if _db.count_mitre_entries() > 0:
-        return jsonify(_db.get_mitre_entries(category))
-    # cold start: build, save to DB, then return
-    entries = get_library("all")
-    _db.save_mitre_entries(entries)
-    if category != "all":
-        entries = [e for e in entries if e["category"] == category]
-    return jsonify(entries)
+
+    # ensure DB is populated
+    if _db.count_mitre_entries() == 0:
+        entries = get_library("all")
+        _db.save_mitre_entries(entries)
+
+    q        = request.args.get("q", "").strip()
+    category = request.args.get("category", "")
+    page     = max(0, int(request.args.get("page",  0)))
+    limit    = max(1, int(request.args.get("limit", 10)))
+    offset   = page * limit
+
+    items = _db.get_mitre_entries_paged(q, category, offset, limit)
+    total = _db.count_mitre_entries_filtered(q, category)
+    return jsonify({
+        "items": items,
+        "total": total,
+        "page":  page,
+        "pages": max(1, (total + limit - 1) // limit),
+    })
+
+
+@app.route("/api/mitre/ttp_implementations")
+def api_mitre_ttp_implementations():
+    q        = request.args.get("q",        "").strip()
+    tactic   = request.args.get("tactic",   "").strip()
+    platform = request.args.get("platform", "").strip()
+    page     = max(0, int(request.args.get("page",  0)))
+    limit    = max(1, int(request.args.get("limit", 10)))
+
+    rows = _db.get_ttp_implementations(
+        platform=platform or None,
+        q=q       or None,
+    )
+    if tactic:
+        rows = [r for r in rows if r["tactic"] == tactic]
+
+    total  = len(rows)
+    offset = page * limit
+    items  = rows[offset:offset + limit]
+    return jsonify({
+        "items": items,
+        "total": total,
+        "page":  page,
+        "pages": max(1, (total + limit - 1) // limit),
+    })
 
 
 @app.route("/api/mitre/library/entry/<path:slug>")
@@ -910,13 +967,9 @@ def api_reindex():
 
 @app.route("/api/mitre/library/categories")
 def api_mitre_library_cats():
-    if not HAS_MITRE:
-        return jsonify([])
-    entries = _db.get_mitre_entries() if _db.count_mitre_entries() > 0 else get_library()
-    cats: dict[str, int] = {}
-    for e in entries:
-        cats[e["category"]] = cats.get(e["category"], 0) + 1
-    return jsonify(sorted(cats.items(), key=lambda x: -x[1]))
+    if _db.count_mitre_entries() == 0 and HAS_MITRE:
+        _db.save_mitre_entries(get_library("all"))
+    return jsonify(_db.get_mitre_categories())
 
 
 @app.route("/api/mitre/group/<stix_id>/techniques")
