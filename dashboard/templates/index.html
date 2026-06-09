@@ -141,6 +141,7 @@ textarea{resize:vertical;font-family:var(--mono);font-size:12px}
 .tbl td{padding:9px 12px;border-bottom:1px solid rgba(61,56,96,.6);vertical-align:middle}
 .tbl tr:last-child td{border-bottom:none}
 .tbl tr:hover td{background:rgba(181,123,255,.05)}
+.tbl-empty-cell{padding:14px !important;text-align:center}
 
 /* -- grid -- */
 .grid-3{display:grid;grid-template-columns:repeat(auto-fill,minmax(300px,1fr));gap:14px}
@@ -425,21 +426,38 @@ code{font-family:var(--mono);font-size:12px;background:var(--bg4);padding:1px 5p
 .ev-hist-tag{font-size:10px;padding:1px 6px;border-radius:3px;background:rgba(97,175,239,.12);color:var(--blue);border:1px solid rgba(97,175,239,.25)}
 
 /* -- APT campaign -- */
-.apt-layout{display:grid;grid-template-columns:320px 1fr;gap:18px;align-items:start}
+.apt-layout{display:grid;grid-template-columns:320px 1fr;gap:18px;align-items:stretch}
 @media(max-width:920px){.apt-layout{grid-template-columns:1fr}}
 .apt-panel{background:var(--bg2);border:1px solid var(--sep);border-radius:var(--r);padding:18px}
 .apt-sidebar{display:flex;flex-direction:column;gap:14px;position:sticky;top:24px}
+.apt-right-col{display:flex;flex-direction:column}
+#apt-results{flex:1;min-height:420px}
+.apt-run-btn{width:100%;margin-top:10px}
+.apt-actor-heading{font-size:14px}
+.apt-sessions-card{margin-top:18px}
 .apt-suggestions-drop{position:absolute;top:calc(100% + 4px);left:0;right:0;background:var(--bg3);border:1px solid var(--sep);border-radius:var(--rs);z-index:20;display:none;max-height:180px;overflow-y:auto;box-shadow:0 8px 24px rgba(0,0,0,.4)}
 .apt-suggest-row{padding:8px 12px;cursor:pointer;display:flex;align-items:center;gap:8px;border-bottom:1px solid var(--sep);transition:background .1s}
 .apt-suggest-row:last-child{border-bottom:none}
 .apt-suggest-row:hover{background:var(--bg4)}
 .apt-result-card{margin-bottom:12px}
 .apt-sec-label{font-size:10px;font-weight:600;color:var(--dim);letter-spacing:.6px;text-transform:uppercase;margin-bottom:6px}
+.apt-actor-name{font-size:14px;font-weight:600}
+.apt-actor-meta{font-size:11px;color:var(--dim);margin-top:3px}
+.apt-idx-badge{font-size:9px;flex-shrink:0}
+.apt-rep-url{flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;color:var(--blue);font-family:var(--mono);font-size:11px}
+.apt-rep-chars{font-size:10px;color:var(--dim);flex-shrink:0}
+.apt-ttp-id{font-family:var(--mono)}
+.apt-ttp-name{font-size:13px;flex:1}
+.apt-ttp-evidence{font-size:11px;color:var(--dim);max-width:160px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.apt-inner-list{border:1px solid var(--sep);border-radius:var(--rs);overflow:hidden;margin-top:8px}
+.apt-err-badge{margin-bottom:8px}
+.apt-err-terminal{min-height:60px}
 .apt-mod-row{display:flex;align-items:center;gap:8px;padding:6px 0;border-bottom:1px solid var(--sep)}
 .apt-mod-row:last-child{border-bottom:none}
 .apt-dl-row{display:flex;align-items:center;gap:10px;flex-wrap:wrap}
 .apt-dl-btns{display:flex;gap:8px;flex-wrap:wrap;margin-top:10px}
 .apt-panel-label{font-size:13px;font-weight:600;color:var(--dim);text-transform:uppercase;letter-spacing:.5px}
+.ms-auto{margin-left:auto}
 .ttp-row{display:flex;align-items:center;gap:8px;padding:8px 12px;border-bottom:1px solid rgba(61,56,96,.5)}
 .ttp-row:last-child{border-bottom:none}
 
@@ -1163,12 +1181,12 @@ code{font-family:var(--mono);font-size:12px;background:var(--bg4);padding:1px 5p
     <!-- LEFT: actor input + pipeline steps (sticky) -->
     <div class="apt-sidebar">
       <div class="apt-panel">
-        <div class="fw-600 mb-8" style="font-size:14px">🎯 APT Actor / Family</div>
+        <div class="fw-600 mb-8 apt-actor-heading">🎯 APT Actor / Family</div>
         <div style="position:relative">
           <input type="text" id="apt-actor" placeholder="e.g. ta505, apt28, win.emotet…" oninput="aptActorSearch(this.value)">
           <div id="apt-suggestions" class="apt-suggestions-drop"></div>
         </div>
-        <button class="btn btn-primary" style="width:100%;margin-top:10px" onclick="runPipeline()" id="apt-run-btn">
+        <button class="btn btn-primary apt-run-btn" onclick="runPipeline()" id="apt-run-btn">
           <span>▶</span> Run Pipeline
         </button>
       </div>
@@ -1185,8 +1203,8 @@ code{font-family:var(--mono);font-size:12px;background:var(--bg4);padding:1px 5p
     </div>
 
     <!-- RIGHT: live results -->
-    <div>
-      <div class="apt-panel" id="apt-results" style="min-height:420px">
+    <div class="apt-right-col">
+      <div class="apt-panel" id="apt-results">
         <div class="empty" style="padding:60px 20px">
           <div class="empty-icon">🎯</div>
           <div>Select an APT actor and run the pipeline to extract TTPs and auto-compile a sample</div>
@@ -1197,12 +1215,12 @@ code{font-family:var(--mono);font-size:12px;background:var(--bg4);padding:1px 5p
   </div>
 
   <!-- past sessions -->
-  <div class="card" style="margin-top:18px">
+  <div class="card apt-sessions-card">
     <div class="card-header">
       <span style="font-size:16px">🕐</span>
       <div class="card-title">Past Sessions</div>
-      <span class="text-xs text-dim" style="margin-left:8px">click a row to inspect</span>
-      <button class="btn btn-ghost btn-sm" style="margin-left:auto" onclick="loadPipelineSessions()">↻ Refresh</button>
+      <span class="text-xs text-dim">click a row to inspect</span>
+      <button class="btn btn-ghost btn-sm ms-auto" onclick="loadPipelineSessions()">↻ Refresh</button>
     </div>
     <div class="tbl-wrap">
       <table class="tbl">
@@ -1217,42 +1235,72 @@ code{font-family:var(--mono);font-size:12px;background:var(--bg4);padding:1px 5p
 <!-- ════════ COVERAGE MAP ════════ -->
 <div id="panel-coverage" class="panel">
 
-  <!-- Controls card -->
-  <div class="card mb-16">
-    <div class="card-header">
-      <span style="font-size:20px">🦠</span>
-      <div>
-        <div class="card-title">VirusTotal Scanner</div>
-        <div class="card-sub">upload compiled samples for AV/EDR detection analysis</div>
+  <!-- source selector tabs -->
+  <div class="yara-src-tabs">
+    <button class="btn btn-primary btn-sm" id="vt-tab-sample" onclick="vtSetTab('sample')">📦 From Sample</button>
+    <button class="btn btn-ghost btn-sm"   id="vt-tab-upload" onclick="vtSetTab('upload')">⬆️ Upload File</button>
+    <span class="yara-src-hint">scan any PE binary with 70+ AV/EDR engines via VirusTotal</span>
+  </div>
+
+  <!-- from sample -->
+  <div id="vt-src-sample">
+    <div class="card mb-16">
+      <div class="card-header">
+        <span style="font-size:20px">🦠</span>
+        <div>
+          <div class="card-title">VirusTotal Scanner</div>
+          <div class="card-sub">select a compiled sample to scan</div>
+        </div>
+        <button class="btn btn-ghost btn-sm ms-auto" onclick="loadVtScanner()">↻ Refresh</button>
       </div>
-      <button class="btn btn-ghost btn-sm" style="margin-left:auto" onclick="loadVtScanner()">↻ Refresh</button>
+      <div class="vt-pick-row">
+        <div class="vt-select vt-drop-wide" id="vt-session-drop">
+          <div class="vt-select-val" onclick="vtToggleDrop('vt-session-drop')">
+            <span id="vt-session-label" class="vt-ph">- select session -</span>
+            <span class="vt-select-arrow">▼</span>
+          </div>
+          <div class="vt-select-menu" id="vt-session-menu"></div>
+        </div>
+        <div class="vt-select vt-drop-narrow" id="vt-file-drop">
+          <div class="vt-select-val" onclick="vtToggleDrop('vt-file-drop')">
+            <span id="vt-file-label" class="vt-ph">- select file -</span>
+            <span class="vt-select-arrow">▼</span>
+          </div>
+          <div class="vt-select-menu" id="vt-file-menu"></div>
+        </div>
+        <button class="btn btn-primary vt-pick-btn" onclick="vtStartScan()" id="vt-scan-btn">
+          🔬 Scan
+        </button>
+      </div>
     </div>
-    <div class="vt-pick-row">
-      <!-- session picker -->
-      <div class="vt-select vt-drop-wide" id="vt-session-drop">
-        <div class="vt-select-val" onclick="vtToggleDrop('vt-session-drop')">
-          <span id="vt-session-label" class="vt-ph">- select session -</span>
-          <span class="vt-select-arrow">▼</span>
+  </div>
+
+  <!-- upload file -->
+  <div id="vt-src-upload" style="display:none">
+    <div class="card mb-16">
+      <div class="card-header">
+        <span style="font-size:20px">⬆️</span>
+        <div>
+          <div class="card-title">Upload File for Scanning</div>
+          <div class="card-sub">scan any PE binary directly — no session required</div>
         </div>
-        <div class="vt-select-menu" id="vt-session-menu"></div>
       </div>
-      <!-- file picker -->
-      <div class="vt-select vt-drop-narrow" id="vt-file-drop">
-        <div class="vt-select-val" onclick="vtToggleDrop('vt-file-drop')">
-          <span id="vt-file-label" class="vt-ph">- select file -</span>
-          <span class="vt-select-arrow">▼</span>
-        </div>
-        <div class="vt-select-menu" id="vt-file-menu"></div>
+      <div class="yara-upload-zone" id="vt-drop-zone"
+           onclick="document.getElementById('vt-file-input').click()"
+           ondragover="event.preventDefault();this.classList.add('drag-over')"
+           ondragleave="this.classList.remove('drag-over')"
+           ondrop="vtHandleDrop(event)">
+        <div class="yara-drop-icon">📂</div>
+        <div class="yara-drop-title">Drop a PE file here or click to browse</div>
+        <div class="yara-drop-sub">.exe · .dll · .sys · .bin</div>
+        <input type="file" id="vt-file-input" style="display:none" onchange="vtHandleFile(this.files[0])">
       </div>
-      <button class="btn btn-primary vt-pick-btn" onclick="vtStartScan()" id="vt-scan-btn">
-        🔬 Scan
-      </button>
     </div>
   </div>
 
   <!-- Progress bar -->
   <div id="vt-progress" class="card mb-16" style="display:none">
-    <div class="card-header" style="padding-bottom:6px">
+    <div class="card-header">
       <span id="vt-progress-icon" style="font-size:16px">⏳</span>
       <div class="card-title" id="vt-progress-title">Uploading…</div>
     </div>
@@ -1263,7 +1311,6 @@ code{font-family:var(--mono);font-size:12px;background:var(--bg4);padding:1px 5p
   <!-- Results -->
   <div id="vt-results" style="display:none">
     <div class="grid-stats mb-16" id="vt-result-stats"></div>
-
     <div class="card">
       <div class="card-header">
         <span style="font-size:16px">🔍</span>
@@ -1281,7 +1328,7 @@ code{font-family:var(--mono);font-size:12px;background:var(--bg4);padding:1px 5p
 
   <!-- Empty state -->
   <div id="vt-empty" class="empty" style="margin-top:40px">
-    Select a compiled sample from the dropdown above and click <strong>Scan</strong> to analyse it with VirusTotal.
+    Select a compiled sample or upload a file, then click <strong>Scan</strong> to analyse it with VirusTotal.
   </div>
 
 </div>
@@ -2652,9 +2699,9 @@ async function runPipeline() {
           const div = document.createElement('div');
           div.className = 'card card-sm apt-result-card';
           div.innerHTML = `<div class="apt-sec-label">ACTOR</div>
-            <div class="fw-600" style="font-size:14px">${escHtml(actor.name || actorId)}</div>
-            ${actor.country ? `<div class="text-xs text-dim" style="margin-top:3px">Country: ${escHtml(actor.country)}</div>` : ''}
-            ${fams ? `<div class="text-xs text-dim" style="margin-top:3px">Families: ${fams}</div>` : ''}`;
+            <div class="apt-actor-name">${escHtml(actor.name || actorId)}</div>
+            ${actor.country ? `<div class="apt-actor-meta">Country: ${escHtml(actor.country)}</div>` : ''}
+            ${fams ? `<div class="apt-actor-meta">Families: ${fams}</div>` : ''}`;
           resultsEl.appendChild(div);
         }
 
@@ -2679,9 +2726,9 @@ async function runPipeline() {
           row.href = rep.url;
           row.target = '_blank';
           row.rel = 'noopener noreferrer';
-          row.innerHTML = `<span class="badge badge-dim" style="font-size:9px;flex-shrink:0">#${rep.report_idx}</span>`
-            + `<span class="mono text-xs" style="flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;color:var(--blue)">${escHtml(rep.url)}</span>`
-            + `<span class="text-dim" style="font-size:10px;flex-shrink:0">${(rep.chars||0).toLocaleString()} chars</span>`;
+          row.innerHTML = `<span class="badge badge-dim apt-idx-badge">#${rep.report_idx}</span>`
+            + `<span class="apt-rep-url">${escHtml(rep.url)}</span>`
+            + `<span class="apt-rep-chars">${(rep.chars||0).toLocaleString()} chars</span>`;
           reportsList.appendChild(row);
         }
 
@@ -2696,14 +2743,14 @@ async function runPipeline() {
             const rows = ttps.map(t => {
               const col = TACTIC_COLORS[t.tactic] || TACTIC_COLORS.unknown;
               return `<div class="ttp-row">
-                <span class="badge badge-red" style="font-family:var(--mono)">${escHtml(t.id)}</span>
-                <span style="font-size:13px;flex:1">${escHtml(t.name||t.id)}</span>
-                <span class="badge" style="background:${col}22;color:${col};font-size:10px">${escHtml(t.tactic)}</span>
-                ${t.evidence ? `<span class="text-xs text-dim" style="max-width:160px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap" title="${escAttr(t.evidence)}">"${escHtml(t.evidence.slice(0,40))}"</span>` : ''}
+                <span class="badge badge-red apt-ttp-id">${escHtml(t.id)}</span>
+                <span class="apt-ttp-name">${escHtml(t.name||t.id)}</span>
+                <span class="badge text-xs" style="background:${col}22;color:${col}">${escHtml(t.tactic)}</span>
+                ${t.evidence ? `<span class="apt-ttp-evidence" title="${escAttr(t.evidence)}">"${escHtml(t.evidence.slice(0,40))}"</span>` : ''}
               </div>`;
             }).join('');
             div.innerHTML = `<div class="apt-sec-label">TTPS (${ttps.length})</div>
-              <div style="border:1px solid var(--sep);border-radius:var(--rs);overflow:hidden">${rows}</div>`;
+              <div class="apt-inner-list">${rows}</div>`;
           }
           resultsEl.appendChild(div);
         }
@@ -2716,12 +2763,12 @@ async function runPipeline() {
             div.className = 'card card-sm apt-result-card';
             const rows = mods.map(m =>
               `<div class="apt-mod-row">
-                <span class="badge badge-red" style="font-size:10px">${escHtml(m.attack_id)}</span>
+                <span class="badge badge-red text-xs">${escHtml(m.attack_id)}</span>
                 <span class="text-sm">${escHtml(m.title||m.module_id)}</span>
-                <span class="badge badge-dim text-xs" style="margin-left:auto">${escHtml(m.category)}</span>
+                <span class="badge badge-dim text-xs ms-auto">${escHtml(m.category)}</span>
               </div>`).join('');
             div.innerHTML = `<div class="apt-sec-label">SELECTED MODULES (${mods.length})</div>
-              <div style="border:1px solid var(--sep);border-radius:var(--rs);overflow:hidden">${rows}</div>`;
+              <div class="apt-inner-list">${rows}</div>`;
             resultsEl.appendChild(div);
           }
         }
@@ -2739,7 +2786,7 @@ async function runPipeline() {
             <div class="apt-dl-row">
               <span class="badge badge-green">✓ compiled</span>
               <span class="mono text-xs text-dim">session: ${escHtml(sid)}</span>
-              <button class="btn btn-ghost btn-sm" style="margin-left:auto" onclick="openSessionDrawer('${escAttr(sid)}')">🔍 Inspect</button>
+              <button class="btn btn-ghost btn-sm ms-auto" onclick="openSessionDrawer('${escAttr(sid)}')">🔍 Inspect</button>
             </div>
             ${dlBtns ? `<div class="apt-dl-btns">${dlBtns}</div>` : ''}`;
           resultsEl.appendChild(div);
@@ -2749,8 +2796,8 @@ async function runPipeline() {
         if (ev.status === 'error') {
           const div = document.createElement('div');
           div.className = 'card card-sm apt-result-card';
-          div.innerHTML = `<div class="badge badge-red" style="margin-bottom:8px">Error (step ${ev.step})</div>
-            <div class="terminal" style="min-height:60px">${escHtml(ev.msg||'unknown error')}</div>`;
+          div.innerHTML = `<div class="badge badge-red apt-err-badge">Error (step ${ev.step})</div>
+            <div class="terminal apt-err-terminal">${escHtml(ev.msg||'unknown error')}</div>`;
           resultsEl.appendChild(div);
         }
 
@@ -2766,7 +2813,7 @@ async function loadPipelineSessions() {
   const tbody = document.getElementById('sessions-tbody');
   const sessions = await fetch('/api/pipeline/sessions').then(r=>r.json()).catch(()=>[]);
   if (!sessions.length) {
-    tbody.innerHTML = '<tr><td colspan="6" class="text-dim text-sm" style="padding:14px">no sessions yet</td></tr>';
+    tbody.innerHTML = '<tr><td colspan="6" class="text-dim text-sm tbl-empty-cell">no sessions yet</td></tr>';
     return;
   }
   tbody.innerHTML = sessions.slice(0,20).map(s => {
@@ -3365,6 +3412,61 @@ function _vtSetProgress(icon, title, pct, msg) {
   document.getElementById('vt-progress-title').textContent = title;
   document.getElementById('vt-progress-fill').style.width  = pct + '%';
   document.getElementById('vt-progress-msg').textContent   = msg;
+}
+
+function vtSetTab(tab) {
+  document.getElementById('vt-src-sample').style.display = tab === 'sample' ? '' : 'none';
+  document.getElementById('vt-src-upload').style.display = tab === 'upload' ? '' : 'none';
+  document.getElementById('vt-tab-sample').className = tab === 'sample' ? 'btn btn-primary btn-sm' : 'btn btn-ghost btn-sm';
+  document.getElementById('vt-tab-upload').className = tab === 'upload' ? 'btn btn-primary btn-sm' : 'btn btn-ghost btn-sm';
+  document.getElementById('vt-results').style.display  = 'none';
+  document.getElementById('vt-empty').style.display    = '';
+  document.getElementById('vt-progress').style.display = 'none';
+  if (_vtPollTimer) { clearInterval(_vtPollTimer); _vtPollTimer = null; }
+}
+
+function vtHandleFile(file) {
+  if (!file) return;
+  const title = document.getElementById('vt-drop-zone').querySelector('.yara-drop-title');
+  if (title) title.textContent = file.name;
+  vtScanFromUpload(file);
+}
+
+function vtHandleDrop(e) {
+  e.preventDefault();
+  document.getElementById('vt-drop-zone').classList.remove('drag-over');
+  const file = e.dataTransfer.files[0];
+  if (file) vtHandleFile(file);
+}
+
+async function vtScanFromUpload(file) {
+  if (_vtPollTimer) { clearInterval(_vtPollTimer); _vtPollTimer = null; }
+  document.getElementById('vt-results').style.display  = 'none';
+  document.getElementById('vt-empty').style.display    = 'none';
+  document.getElementById('vt-progress').style.display = '';
+  _vtSetProgress('⏳', `Uploading ${file.name}…`, 15, 'sending file to VirusTotal…');
+
+  const fd = new FormData();
+  fd.append('file', file, file.name);
+  const r = await fetch('/api/vtscan/upload-raw', {method: 'POST', body: fd})
+    .then(res => res.json()).catch(e => ({ok: false, error: String(e)}));
+
+  if (!r.ok) {
+    document.getElementById('vt-progress').style.display = 'none';
+    document.getElementById('vt-empty').style.display    = '';
+    toast('Upload error: ' + r.error, 'error');
+    return;
+  }
+  if (r.cached) {
+    document.getElementById('vt-progress').style.display = 'none';
+    _vtShowResults(r);
+    toast('Loaded cached VT results', 'ok');
+    return;
+  }
+  _vtCurrentScan = {analysis_id: r.analysis_id, sha256: r.sha256};
+  _vtSetProgress('🔬', 'Analyzing…', 40, 'analysis queued — polling (may take 1–3 min)…');
+  _vtPollTimer = setInterval(_vtPollAnalysis, 9000);
+  _vtPollAnalysis();
 }
 
 function _vtShowResults(data) {

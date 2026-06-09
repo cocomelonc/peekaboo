@@ -1358,6 +1358,31 @@ def api_vtscan_file(sha256: str):
     return jsonify(result)
 
 
+@app.route("/api/vtscan/upload-raw", methods=["POST"])
+def api_vtscan_upload_raw():
+    """Upload any file directly to VirusTotal (no session required)."""
+    if not HAS_VTSCAN:
+        return jsonify({"ok": False, "error": "vtscan module not available"}), 503
+    f = request.files.get("file")
+    if not f:
+        return jsonify({"ok": False, "error": "no file uploaded"}), 400
+    import tempfile, os
+    suffix = "_" + (f.filename or "upload")
+    with tempfile.NamedTemporaryFile(delete=False, suffix=suffix) as tmp:
+        f.save(tmp.name)
+        tmp_path = Path(tmp.name)
+    try:
+        result = _vtscan.upload_file(tmp_path)
+        if result.get("ok") and not result.get("name"):
+            result["name"] = f.filename
+    finally:
+        try:
+            os.unlink(tmp_path)
+        except Exception:
+            pass
+    return jsonify(result)
+
+
 # -- YARA rule generator -------------------------------------------------------
 
 try:
