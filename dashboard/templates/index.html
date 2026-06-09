@@ -77,12 +77,12 @@ body{background:var(--bg);color:var(--text);font-family:var(--font);font-size:14
 .topbar-sub{font-size:12px;color:var(--dim)}
 .topbar-actions{display:flex;gap:8px;align-items:center}
 
-.content{flex:1;padding:24px;animation:fadeIn .2s ease}
+.content{flex:1;padding:32px 28px 28px;animation:fadeIn .2s ease}
 .panel{display:none}
 .panel.active{display:block}
 
 /* -- cards / boxes -- */
-.card{background:var(--bg2);border:1px solid var(--sep);border-radius:var(--r);padding:18px}
+.card{background:var(--bg2);border:1px solid var(--sep);border-radius:var(--r);padding:20px 18px 18px}
 .card-sm{padding:12px 14px}
 .card-header{display:flex;align-items:center;gap:10px;margin-bottom:14px}
 .card-title{font-size:14px;font-weight:600}
@@ -600,26 +600,30 @@ code{font-family:var(--mono);font-size:12px;background:var(--bg4);padding:1px 5p
 .mitre-detail-meta{margin-top:6px;display:flex;gap:5px;flex-wrap:wrap}
 .mitre-detail-actions{margin-left:12px;display:flex;gap:8px;align-items:flex-start;flex-shrink:0}
 
-/* -- PE Inspector tabs (self-contained inside a card) -- */
+/* -- PE Inspector -- */
 .pe-card{background:var(--bg2);border:1px solid var(--sep);border-radius:var(--r);overflow:hidden}
 .pe-tabs{display:flex;border-bottom:1px solid var(--sep);background:var(--bg3);overflow-x:auto;-webkit-overflow-scrolling:touch;scrollbar-width:none}
 .pe-tabs::-webkit-scrollbar{display:none}
 .pe-tab{padding:10px 20px;font-size:13px;font-weight:500;color:var(--text2);cursor:pointer;border-bottom:2px solid transparent;white-space:nowrap;flex-shrink:0;transition:color .15s,border-color .15s,background .15s;user-select:none}
 .pe-tab:hover{color:var(--text);background:rgba(234,230,255,.04)}
 .pe-tab.active{color:var(--purple);border-bottom-color:var(--purple);background:var(--bg2)}
-.pe-tab-body{padding:18px;overflow:hidden}
-.pe-score-row{background:var(--bg3);border-radius:var(--rs);padding:14px 16px;margin-bottom:16px;display:flex;align-items:center;gap:16px;flex-wrap:wrap}
-.pe-score-bar-wrap{flex:1;min-width:200px}
+.pe-tab-body{padding:20px;overflow:hidden}
+/* stats grid – score card + 2×2 mini grid side by side */
+.pe-stats-grid{display:grid;grid-template-columns:1fr 1fr;gap:14px;align-items:stretch;margin-bottom:16px}
+@media(max-width:900px){.pe-stats-grid{grid-template-columns:1fr}}
+.pe-stats-grid > .card{display:flex;flex-direction:column;justify-content:center}
+.pe-score-bar-wrap{flex:1;min-width:0}
 .pe-score-bar-track{height:8px;background:var(--bg4);border-radius:4px;overflow:hidden;margin-top:6px}
 .pe-score-bar-fill{height:100%;border-radius:4px;transition:width .4s ease}
+.pe-mini-grid{display:grid;grid-template-columns:1fr 1fr;gap:10px;align-items:stretch}
+.pe-mini-card{display:flex;flex-direction:column;justify-content:center}
+.pe-stat-mini-val{font-size:20px;font-weight:700;font-family:var(--mono);line-height:1}
+.pe-stat-mini-lbl{font-size:10px;color:var(--dim);margin-top:4px;text-transform:uppercase;letter-spacing:.5px}
+/* overview key-value table */
 .pe-kv-table{width:100%;border-collapse:collapse}
 .pe-kv-table td{padding:6px 0;border-bottom:1px solid rgba(61,56,96,.3);font-size:13px;vertical-align:top}
 .pe-kv-table tr:last-child td{border-bottom:none}
 .pe-kv-table .pe-kv-key{width:150px;color:var(--dim);padding-right:16px;white-space:nowrap;font-size:12px}
-.pe-stat-mini{display:flex;gap:12px;flex-wrap:wrap}
-.pe-stat-mini-item{background:var(--bg3);border:1px solid var(--sep);border-radius:var(--rs);padding:10px 14px;min-width:110px}
-.pe-stat-mini-val{font-size:20px;font-weight:700;font-family:var(--mono);line-height:1}
-.pe-stat-mini-lbl{font-size:10px;color:var(--dim);margin-top:3px;text-transform:uppercase;letter-spacing:.5px}
 .tbl-wrap{overflow-x:auto;-webkit-overflow-scrolling:touch;border-radius:var(--rs)}
 
 /* -- data table rows -- */
@@ -1454,6 +1458,13 @@ code{font-family:var(--mono);font-size:12px;background:var(--bg4);padding:1px 5p
 
   <!-- input card -->
   <div class="card mb-16">
+    <div class="card-header">
+      <span style="font-size:20px">🔬</span>
+      <div>
+        <div class="card-title">PE Inspector</div>
+        <div class="card-sub">analyse PE binaries — sections, imports, entropy, threat scoring</div>
+      </div>
+    </div>
     <div class="filter-bar" style="margin-bottom:0">
       <input type="text" id="pe-path"
              placeholder="Path to PE on server  (e.g. samples/abc123/file.exe)"
@@ -1474,7 +1485,7 @@ code{font-family:var(--mono);font-size:12px;background:var(--bg4);padding:1px 5p
   <div id="pe-results" style="display:none">
 
     <!-- score + mini stats -->
-    <div id="pe-stats-row" class="mb-16"></div>
+    <div id="pe-stats-row"></div>
 
     <!-- tabbed card -->
     <div class="pe-card">
@@ -3142,34 +3153,34 @@ function _peRenderStats(d) {
   const pct = d.threat_score;
   const suspCount = d.suspicious_imports.length;
   document.getElementById('pe-stats-row').innerHTML = `
-    <div class="pe-score-row">
-      <div class="pe-score-bar-wrap">
-        <div style="display:flex;align-items:center;justify-content:space-between">
+    <div class="pe-stats-grid">
+      <div class="card">
+        <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:10px">
           <span style="font-size:12px;color:var(--dim);text-transform:uppercase;letter-spacing:.6px">Threat Score</span>
-          <span style="font-size:20px;font-weight:700;font-family:var(--mono);color:${color}">${pct}<span style="font-size:13px;opacity:.7">/100</span></span>
+          <span style="font-size:22px;font-weight:700;font-family:var(--mono);color:${color}">${pct}<span style="font-size:13px;opacity:.7">/100</span></span>
         </div>
         <div class="pe-score-bar-track">
           <div class="pe-score-bar-fill" style="width:${pct}%;background:${color}"></div>
         </div>
-        <div style="margin-top:5px;font-size:12px;color:${color};font-weight:600">${label}${d.packer ? ' &mdash; packer: <span style="color:var(--yellow)">' + escHtml(d.packer) + '</span>' : ''}</div>
+        <div style="margin-top:8px;font-size:13px;color:${color};font-weight:600">${label}${d.packer ? ' &mdash; packer: <span style="color:var(--yellow)">' + escHtml(d.packer) + '</span>' : ''}</div>
       </div>
-    </div>
-    <div class="pe-stat-mini mb-16">
-      <div class="pe-stat-mini-item">
-        <div class="pe-stat-mini-val" style="color:var(--purple)">${escHtml(d.arch)}</div>
-        <div class="pe-stat-mini-lbl">${escHtml(d.pe_type)} / ${escHtml(d.subsystem)}</div>
-      </div>
-      <div class="pe-stat-mini-item">
-        <div class="pe-stat-mini-val" style="color:var(--blue)">${d.section_count}</div>
-        <div class="pe-stat-mini-lbl">sections &bull; ${d.high_entropy_secs} high entropy</div>
-      </div>
-      <div class="pe-stat-mini-item">
-        <div class="pe-stat-mini-val" style="color:${suspCount > 0 ? 'var(--red)' : 'var(--green)'}">${suspCount}</div>
-        <div class="pe-stat-mini-lbl">suspicious API hits</div>
-      </div>
-      <div class="pe-stat-mini-item">
-        <div class="pe-stat-mini-val" style="color:var(--dim)">${(d.file_size/1024).toFixed(1)}</div>
-        <div class="pe-stat-mini-lbl">KB &bull; ${escHtml(d.file_name)}</div>
+      <div class="pe-mini-grid">
+        <div class="card pe-mini-card">
+          <div class="pe-stat-mini-val" style="color:var(--purple)">${escHtml(d.arch)}</div>
+          <div class="pe-stat-mini-lbl">${escHtml(d.pe_type)} / ${escHtml(d.subsystem)}</div>
+        </div>
+        <div class="card pe-mini-card">
+          <div class="pe-stat-mini-val" style="color:var(--blue)">${d.section_count}</div>
+          <div class="pe-stat-mini-lbl">sections &bull; ${d.high_entropy_secs} high entropy</div>
+        </div>
+        <div class="card pe-mini-card">
+          <div class="pe-stat-mini-val" style="color:${suspCount > 0 ? 'var(--red)' : 'var(--green)'}">${suspCount}</div>
+          <div class="pe-stat-mini-lbl">suspicious API hits</div>
+        </div>
+        <div class="card pe-mini-card">
+          <div class="pe-stat-mini-val" style="color:var(--dim)">${(d.file_size/1024).toFixed(1)}</div>
+          <div class="pe-stat-mini-lbl">KB &bull; ${escHtml(d.file_name)}</div>
+        </div>
       </div>
     </div>`;
 }
