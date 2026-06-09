@@ -4092,7 +4092,6 @@ def run_shellcode() -> None:
                 )
                 continue
 
-            import ast as _ast
             raw_text = " ".join(f"0x{b:02x}" for b in sc_raw)
 
             with console.status("[info]processing...[/info]", spinner="dots"):
@@ -4770,8 +4769,6 @@ def run_ttp() -> None:
                 )
                 continue
 
-            import uuid
-            from datetime import datetime
             session_id = uuid.uuid4().hex[:12]
 
             console.print()
