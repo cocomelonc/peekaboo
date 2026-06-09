@@ -226,7 +226,7 @@ def api_build_files(build_id: str):
     peekaboo = out_dir / "peekaboo.exe"
     if peekaboo.exists():
         files.append({"name": "peekaboo.exe", "size": peekaboo.stat().st_size})
-    if malware_type != "stealer" and persistence != "none":
+    if persistence != "none":
         pers_exe = out_dir / "persistence.exe"
         if pers_exe.exists():
             files.append({"name": "persistence.exe", "size": pers_exe.stat().st_size,

