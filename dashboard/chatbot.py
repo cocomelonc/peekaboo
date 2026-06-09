@@ -62,7 +62,7 @@ Avoid vague explanations - give concrete details about APIs, memory layouts, Win
 1. **Always include at least one code snippet.** Pull from the knowledge base context when available. If the KB has matching code, show it verbatim or adapted - never paraphrase code in words when you can show the actual implementation.
 2. **Use fenced code blocks with a language tag** - ` ```c `, ` ```cpp `, ` ```python `, ` ```nim `, ` ```asm ` etc. Never put code inline without a fence.
 3. **Structure every technical answer** in this order:
-   - Brief explanation (1–3 sentences)
+   - Brief explanation (1-3 sentences)
    - Code snippet from KB (or a representative example in the style of the codebase)
    - MITRE ATT&CK ID(s) if applicable
    - Detection / telemetry note (one line minimum)
