@@ -381,8 +381,21 @@ code{font-family:var(--mono);font-size:12px;background:var(--bg4);padding:1px 5p
 .ev-hist-tag{font-size:10px;padding:1px 6px;border-radius:3px;background:rgba(97,175,239,.12);color:var(--blue);border:1px solid rgba(97,175,239,.25)}
 
 /* -- APT campaign -- */
-.apt-layout{display:grid;grid-template-columns:340px 1fr;gap:18px;align-items:start}
+.apt-layout{display:grid;grid-template-columns:320px 1fr;gap:18px;align-items:start}
+@media(max-width:920px){.apt-layout{grid-template-columns:1fr}}
 .apt-panel{background:var(--bg2);border:1px solid var(--sep);border-radius:var(--r);padding:18px}
+.apt-sidebar{display:flex;flex-direction:column;gap:14px;position:sticky;top:24px}
+.apt-suggestions-drop{position:absolute;top:calc(100% + 4px);left:0;right:0;background:var(--bg3);border:1px solid var(--sep);border-radius:var(--rs);z-index:20;display:none;max-height:180px;overflow-y:auto;box-shadow:0 8px 24px rgba(0,0,0,.4)}
+.apt-suggest-row{padding:8px 12px;cursor:pointer;display:flex;align-items:center;gap:8px;border-bottom:1px solid var(--sep);transition:background .1s}
+.apt-suggest-row:last-child{border-bottom:none}
+.apt-suggest-row:hover{background:var(--bg4)}
+.apt-result-card{margin-bottom:12px}
+.apt-sec-label{font-size:10px;font-weight:600;color:var(--dim);letter-spacing:.6px;text-transform:uppercase;margin-bottom:6px}
+.apt-mod-row{display:flex;align-items:center;gap:8px;padding:6px 0;border-bottom:1px solid var(--sep)}
+.apt-mod-row:last-child{border-bottom:none}
+.apt-dl-row{display:flex;align-items:center;gap:10px;flex-wrap:wrap}
+.apt-dl-btns{display:flex;gap:8px;flex-wrap:wrap;margin-top:10px}
+.apt-panel-label{font-size:13px;font-weight:600;color:var(--dim);text-transform:uppercase;letter-spacing:.5px}
 .ttp-row{display:flex;align-items:center;gap:8px;padding:8px 12px;border-bottom:1px solid rgba(61,56,96,.5)}
 .ttp-row:last-child{border-bottom:none}
 
@@ -1054,19 +1067,21 @@ code{font-family:var(--mono);font-size:12px;background:var(--bg4);padding:1px 5p
 <!-- ════════ APT CAMPAIGN ════════ -->
 <div id="panel-apt" class="panel">
   <div class="apt-layout">
-    <div>
-      <div class="apt-panel" style="margin-bottom:14px">
+
+    <!-- LEFT: actor input + pipeline steps (sticky) -->
+    <div class="apt-sidebar">
+      <div class="apt-panel">
         <div class="fw-600 mb-8" style="font-size:14px">🎯 APT Actor / Family</div>
         <div style="position:relative">
           <input type="text" id="apt-actor" placeholder="e.g. ta505, apt28, win.emotet…" oninput="aptActorSearch(this.value)">
-          <div id="apt-suggestions" style="position:absolute;top:calc(100% + 4px);left:0;right:0;background:var(--bg3);border:1px solid var(--sep);border-radius:var(--rs);z-index:20;display:none;max-height:180px;overflow-y:auto"></div>
+          <div id="apt-suggestions" class="apt-suggestions-drop"></div>
         </div>
-        <button class="btn btn-primary" style="width:100%;margin-top:10px;justify-content:center" onclick="runPipeline()" id="apt-run-btn">
+        <button class="btn btn-primary" style="width:100%;margin-top:10px" onclick="runPipeline()" id="apt-run-btn">
           <span>▶</span> Run Pipeline
         </button>
       </div>
       <div class="apt-panel">
-        <div class="fw-600 mb-8" style="font-size:13px;color:var(--dim);text-transform:uppercase;letter-spacing:.5px">Pipeline Steps</div>
+        <div class="apt-panel-label mb-8">Pipeline Steps</div>
         <div class="pipe-steps" id="pipe-steps">
           <div class="pipe-step" id="ps-1"><div class="pipe-step-icon" id="psi-1">🗄️</div><div class="pipe-step-body"><div class="pipe-step-name">Malpedia Fetch</div><div class="pipe-step-msg" id="psm-1">Fetch actor / family data</div></div></div>
           <div class="pipe-step" id="ps-2"><div class="pipe-step-icon" id="psi-2">⬇️</div><div class="pipe-step-body"><div class="pipe-step-name">Report Download</div><div class="pipe-step-msg" id="psm-2">Download threat reports</div></div></div>
@@ -1077,6 +1092,7 @@ code{font-family:var(--mono);font-size:12px;background:var(--bg4);padding:1px 5p
       </div>
     </div>
 
+    <!-- RIGHT: live results -->
     <div>
       <div class="apt-panel" id="apt-results" style="min-height:420px">
         <div class="empty" style="padding:60px 20px">
@@ -1085,22 +1101,25 @@ code{font-family:var(--mono);font-size:12px;background:var(--bg4);padding:1px 5p
         </div>
       </div>
     </div>
+
   </div>
 
-  <div style="margin-top:18px">
-    <div class="card">
-      <div class="card-header">
-        <span style="font-size:16px">🕐</span>
-        <div class="card-title">Past Sessions</div>
-        <span class="text-xs text-dim" style="margin-left:8px">click a row to inspect</span>
-        <button class="btn btn-ghost btn-sm" style="margin-left:auto" onclick="loadPipelineSessions()">↻ Refresh</button>
-      </div>
+  <!-- past sessions -->
+  <div class="card" style="margin-top:18px">
+    <div class="card-header">
+      <span style="font-size:16px">🕐</span>
+      <div class="card-title">Past Sessions</div>
+      <span class="text-xs text-dim" style="margin-left:8px">click a row to inspect</span>
+      <button class="btn btn-ghost btn-sm" style="margin-left:auto" onclick="loadPipelineSessions()">↻ Refresh</button>
+    </div>
+    <div class="tbl-wrap">
       <table class="tbl">
         <thead><tr><th>Session</th><th>Actor</th><th>Reports</th><th>TTPs</th><th>Status</th><th>Started</th></tr></thead>
         <tbody id="sessions-tbody"></tbody>
       </table>
     </div>
   </div>
+
 </div>
 
 <!-- ════════ COVERAGE MAP ════════ -->
@@ -2439,7 +2458,7 @@ function aptActorSearch(val) {
     const items = [...(d.actors||[]).slice(0,6).map(a=>({v:a,t:'actor'})), ...(d.families||[]).slice(0,6).map(f=>({v:f,t:'family'}))];
     if (!items.length) { box.style.display = 'none'; return; }
     box.innerHTML = items.map(i => `
-      <div onclick="selectActorSuggest('${escAttr(i.v)}')" style="padding:8px 12px;cursor:pointer;display:flex;align-items:center;gap:8px;border-bottom:1px solid var(--sep);transition:background .1s" onmouseover="this.style.background='var(--bg4)'" onmouseout="this.style.background=''">
+      <div onclick="selectActorSuggest('${escAttr(i.v)}')" class="apt-suggest-row">
         <span class="badge ${i.t==='actor'?'badge-blue':'badge-purple'}" style="font-size:10px">${i.t}</span>
         <span style="font-size:13px">${escHtml(i.v)}</span>
       </div>`).join('');
@@ -2525,9 +2544,8 @@ async function runPipeline() {
           const actor = ev.data || {};
           const fams = (actor.families||[]).slice(0,5).map(f => escHtml(typeof f==='object'?f.name:f)).join(', ');
           const div = document.createElement('div');
-          div.className = 'card card-sm';
-          div.style.marginBottom = '12px';
-          div.innerHTML = `<div class="text-xs text-dim" style="letter-spacing:.5px;margin-bottom:6px">ACTOR</div>
+          div.className = 'card card-sm apt-result-card';
+          div.innerHTML = `<div class="apt-sec-label">ACTOR</div>
             <div class="fw-600" style="font-size:14px">${escHtml(actor.name || actorId)}</div>
             ${actor.country ? `<div class="text-xs text-dim" style="margin-top:3px">Country: ${escHtml(actor.country)}</div>` : ''}
             ${fams ? `<div class="text-xs text-dim" style="margin-top:3px">Families: ${fams}</div>` : ''}`;
@@ -2538,11 +2556,9 @@ async function runPipeline() {
         if (ev.step === 2 && ev.status === 'running' && ev.data?.report) {
           if (!reportsSection) {
             reportsSection = document.createElement('div');
-            reportsSection.className = 'card card-sm';
-            reportsSection.style.marginBottom = '12px';
+            reportsSection.className = 'card card-sm apt-result-card';
             reportsHdr = document.createElement('div');
-            reportsHdr.className = 'text-xs text-dim';
-            reportsHdr.style.cssText = 'letter-spacing:.5px;margin-bottom:8px';
+            reportsHdr.className = 'apt-sec-label';
             reportsHdr.textContent = 'REPORTS';
             reportsList = document.createElement('div');
             reportsSection.appendChild(reportsHdr);
@@ -2567,10 +2583,9 @@ async function runPipeline() {
         if (ev.step === 3 && ev.status === 'done') {
           const ttps = ev.data || [];
           const div = document.createElement('div');
-          div.className = 'card card-sm';
-          div.style.marginBottom = '12px';
+          div.className = 'card card-sm apt-result-card';
           if (!ttps.length) {
-            div.innerHTML = `<div class="text-xs text-dim" style="letter-spacing:.5px;margin-bottom:6px">TTPS</div><div class="text-dim text-sm">No TTPs extracted from reports</div>`;
+            div.innerHTML = `<div class="apt-sec-label">TTPS</div><div class="text-dim text-sm">No TTPs extracted from reports</div>`;
           } else {
             const rows = ttps.map(t => {
               const col = TACTIC_COLORS[t.tactic] || TACTIC_COLORS.unknown;
@@ -2581,7 +2596,7 @@ async function runPipeline() {
                 ${t.evidence ? `<span class="text-xs text-dim" style="max-width:160px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap" title="${escAttr(t.evidence)}">"${escHtml(t.evidence.slice(0,40))}"</span>` : ''}
               </div>`;
             }).join('');
-            div.innerHTML = `<div class="text-xs text-dim" style="letter-spacing:.5px;margin-bottom:8px">TTPS (${ttps.length})</div>
+            div.innerHTML = `<div class="apt-sec-label">TTPS (${ttps.length})</div>
               <div style="border:1px solid var(--sep);border-radius:var(--rs);overflow:hidden">${rows}</div>`;
           }
           resultsEl.appendChild(div);
@@ -2592,15 +2607,14 @@ async function runPipeline() {
           const mods = (ev.data || {}).selected_modules || [];
           if (mods.length) {
             const div = document.createElement('div');
-            div.className = 'card card-sm';
-            div.style.marginBottom = '12px';
+            div.className = 'card card-sm apt-result-card';
             const rows = mods.map(m =>
-              `<div style="display:flex;align-items:center;gap:8px;padding:6px 0;border-bottom:1px solid var(--sep)">
+              `<div class="apt-mod-row">
                 <span class="badge badge-red" style="font-size:10px">${escHtml(m.attack_id)}</span>
                 <span class="text-sm">${escHtml(m.title||m.module_id)}</span>
                 <span class="badge badge-dim text-xs" style="margin-left:auto">${escHtml(m.category)}</span>
               </div>`).join('');
-            div.innerHTML = `<div class="text-xs text-dim" style="letter-spacing:.5px;margin-bottom:8px">SELECTED MODULES (${mods.length})</div>
+            div.innerHTML = `<div class="apt-sec-label">SELECTED MODULES (${mods.length})</div>
               <div style="border:1px solid var(--sep);border-radius:var(--rs);overflow:hidden">${rows}</div>`;
             resultsEl.appendChild(div);
           }
@@ -2612,25 +2626,23 @@ async function runPipeline() {
           const sid  = data.session_id || '';
           const files = data.files || [];
           const div = document.createElement('div');
-          div.className = 'card card-sm';
-          div.style.marginBottom = '12px';
+          div.className = 'card card-sm apt-result-card';
           const dlBtns = files.map(f =>
             `<a href="/api/samples/${sid}/download/${encodeURIComponent(f)}" class="btn btn-green btn-sm">⬇ ${escHtml(f)}</a>`).join(' ');
-          div.innerHTML = `<div class="text-xs text-dim" style="letter-spacing:.5px;margin-bottom:8px">COMPILED BINARY</div>
-            <div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap">
+          div.innerHTML = `<div class="apt-sec-label">COMPILED BINARY</div>
+            <div class="apt-dl-row">
               <span class="badge badge-green">✓ compiled</span>
               <span class="mono text-xs text-dim">session: ${escHtml(sid)}</span>
               <button class="btn btn-ghost btn-sm" style="margin-left:auto" onclick="openSessionDrawer('${escAttr(sid)}')">🔍 Inspect</button>
             </div>
-            ${dlBtns ? `<div style="margin-top:10px;display:flex;gap:8px;flex-wrap:wrap">${dlBtns}</div>` : ''}`;
+            ${dlBtns ? `<div class="apt-dl-btns">${dlBtns}</div>` : ''}`;
           resultsEl.appendChild(div);
         }
 
         // any error -> error card
         if (ev.status === 'error') {
           const div = document.createElement('div');
-          div.className = 'card card-sm';
-          div.style.marginBottom = '12px';
+          div.className = 'card card-sm apt-result-card';
           div.innerHTML = `<div class="badge badge-red" style="margin-bottom:8px">Error (step ${ev.step})</div>
             <div class="terminal" style="min-height:60px">${escHtml(ev.msg||'unknown error')}</div>`;
           resultsEl.appendChild(div);
