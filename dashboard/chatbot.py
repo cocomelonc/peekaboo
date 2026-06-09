@@ -414,16 +414,16 @@ def _ollama_available() -> tuple[bool, str]:
 _CANNED: list[tuple[str, str]] = [
     (
         r"what is peekaboo|what('s| is) this (framework|tool|project)|explain peekaboo",
-        """**Peekaboo** is an open-source APT simulation and threat research framework by [@cocomelonc](https://cocomelonc.github.io).
+        """**Peekaboo** is an open-source APT simulation and threat research framework by <span class="badge badge-green"><span style="color:#00FF00">@cocomelonc</span></span>.
 
-It bridges offensive research and defensive implementation by providing:
-- **Compiled C/C++/Nim/ASM modules** mapped to MITRE ATT&CK TTPs
-- **C2 channels**: Telegram, GitHub Issues, Bitbucket, VirusTotal abuse
-- **Injection techniques**: VirtualAllocEx, EnumDesktopsA callbacks, APC injection
-- **AV/EDR bypass**: syscalls, API hashing, string encryption, unhooking
-- **Crypto payloads**: Speck, FEAL-8, MARS, Treyfer, Lucifer
-- **Persistence**: Registry Run keys, Winlogon, DLL hijacking
-- **AI-powered assistant** (you're talking to it now) with RAG over the full codebase
+It bridges offensive research and defensive implementation by providing:    
+    - **Compiled C/C++/Nim/ASM modules** mapped to MITRE ATT&CK TTPs    
+    - **C2 channels**: Telegram, GitHub Issues, Bitbucket, VirusTotal abuse    
+    - **Injection techniques**: VirtualAllocEx, EnumDesktopsA callbacks, APC injection    
+    - **AV/EDR bypass**: syscalls, API hashing, string encryption, unhooking    
+    - **Crypto payloads**: Speck, FEAL-8, MARS, Treyfer, Lucifer    
+    - **Persistence**: Registry Run keys, Winlogon, DLL hijacking    
+    - **AI-powered assistant** (you're talking to it now) with RAG over the full codebase    
 
 All techniques are framed educationally - each module links to a blog post explaining the mechanics, telemetry, and detection logic."""
     ),
@@ -494,7 +494,7 @@ POST https://api.telegram.org/bot<TOKEN>/sendDocument
 **Detection:** Monitor for periodic beaconing to `api.telegram.org` with consistent intervals, or unusual processes making Telegram API calls."""
     ),
     (
-        r"av evasion|edr bypass|antivirus|defender|amsi|syscall",
+        r"av evasion|edr bypass|antivirus|defender|amsi|syscall|evasion",
         """Peekaboo implements multiple AV/EDR bypass layers:
 
 **1. Direct Syscalls** - bypass hooked `ntdll.dll` by calling kernel directly
@@ -521,20 +521,20 @@ Detection: look for memory regions with `RWX` permissions, `NtProtectVirtualMemo
     (
         r"mitre att.?ck|ttp|tactic|technique",
         """Peekaboo maps directly to **MITRE ATT&CK** across these technique families:
-
-|       Tactic         | Techniques   |          Modules            |
-|----------------------|--------------|-----------------------------|
-| Execution            | T1059, T1106 | shellcoding, syscalls       |
-| Persistence          | T1547, T1574 | registry run, DLL hijack    |
-| Defense Evasion      | T1027, T1562 | encryption, AMSI bypass     |
-| Privilege Escalation | T1055, T1134 | injection, token theft      |
-| C2                   | T1071, T1102 | Telegram, GitHub, Bitbucket |
-| Exfiltration         | T1041        | C2 channel exfil            |
-
-Use the **MITRE ATT&CK** tab in this dashboard to:
-- Browse all 150+ ATT&CK groups and their techniques
-- See which Peekaboo modules cover each technique (✓ implemented badge)
-- Filter the library by technique category"""
+    
+| Tactic               | Techniques           | Modules                |
+| :------------------- | :------------------- | :--------------------- |
+| Execution            | T1059, T1106         | shellcoding, syscalls  |
+| Persistence          | T1547, T1574         | registry run, DLL...   |
+| Defense Evasion      | T1027, T1562         | encryption, AMSI...    |
+| Privilege Escalation | T1055, T1134         | injection, token theft |
+| C2                   | T1071, T1102         | Telegram, GitHub...    |
+| Exfiltration         | T1041                | C2 channel exfil       |
+   
+Use the **MITRE ATT&CK** tab in this dashboard to:    
+    - Browse all 150+ ATT&CK groups and their techniques    
+    - See which Peekaboo modules cover each technique (✓ implemented badge)    
+    - Filter the library by technique category"""
     ),
     (
         r"what model|which (llm|model|ai)|ollama model|qwen",
