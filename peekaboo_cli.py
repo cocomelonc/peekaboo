@@ -1770,7 +1770,7 @@ def print_banner() -> None:
 # -- top-level commands --------------------------------------------------------
 TOP_COMMANDS = [
     "evasion", "library", "artifacts", "builder", "shellcode", "yara",
-    "malpedia", "ttp", "help", "exit", "quit",
+    "malpedia", "ttp", "pe", "help", "exit", "quit",
 ]
 
 TOP_HELP = [
@@ -1782,6 +1782,7 @@ TOP_HELP = [
     ("yara",      "Generate YARA rules from binaries; scan with yara-python"),
     ("malpedia",  "APT actors, malware families, reports, YARA from Malpedia"),
     ("ttp",       "TTP -> implementation map: browse ATT&CK techniques and compile"),
+    ("pe",        "PE Anatomy Inspector -- sections, imports, entropy, threat score"),
     ("help",      "show this help"),
     ("exit",      "quit peekaboo-cli"),
 ]
@@ -4211,6 +4212,249 @@ def run_shellcode() -> None:
             )
 
 
+# -- PE Inspector --------------------------------------------------------------
+
+PE_COMMANDS = ["analyse", "open", "sections", "imports", "suspicious", "score", "help", "back"]
+
+_THREAT_LABEL = {
+    range(0,  20): ("LOW",      "good"),
+    range(20, 50): ("MEDIUM",   "medium"),
+    range(50, 75): ("HIGH",     "high"),
+    range(75, 101):("CRITICAL", "critical"),
+}
+
+
+def _threat_label(score: int) -> tuple[str, str]:
+    for r, (label, style) in _THREAT_LABEL.items():
+        if score in r:
+            return label, style
+    return "LOW", "good"
+
+
+def _pe_score_bar(score: int, width: int = 30) -> str:
+    filled = int(score / 100 * width)
+    return "[" + "#" * filled + "-" * (width - filled) + f"] {score}/100"
+
+
+def _render_pe_header(r: dict) -> None:
+    label, style = _threat_label(r["threat_score"])
+    console.print()
+    console.print(Panel(
+        f"  file      : [cmd]{r['file_name']}[/cmd]  ({r['file_size']:,} bytes)\n"
+        f"  sha256    : [dim]{r['sha256']}[/dim]\n"
+        f"  arch      : {r['arch']}  |  type: {r['pe_type']}  |  subsystem: {r['subsystem']}\n"
+        f"  timestamp : {r['timestamp']}\n"
+        f"  entry     : {r['entry_point']}  |  image_base: {r['image_base']}\n"
+        f"  packer    : {r['packer'] or 'none detected'}  |  packed: {r['is_packed']}\n"
+        f"  overlay   : {r['overlay'] or 'none'}\n"
+        f"  threat    : [{style}]{_pe_score_bar(r['threat_score'])}  {label}[/{style}]",
+        title="[heading]PE Header[/heading]",
+        border_style="dim",
+    ))
+
+
+def _render_pe_sections(r: dict) -> None:
+    t = Table(box=box.ASCII, show_header=True, header_style="heading",
+              border_style="dim", padding=(0, 1))
+    t.add_column("Name",       style="cmd",  no_wrap=True)
+    t.add_column("Virt Addr",  style="dim",  no_wrap=True)
+    t.add_column("Raw Size",   justify="right")
+    t.add_column("Entropy",    justify="right")
+    t.add_column("RWX",        no_wrap=True)
+    t.add_column("Note",       style="warn")
+
+    for s in r["sections"]:
+        rwx = ("r" if s["readable"] else "-") + ("w" if s["writable"] else "-") + ("x" if s["executable"] else "-")
+        ent = s["entropy"]
+        ent_style = "err" if ent > 6.8 else ("warn" if ent > 6.0 else "good")
+        note = "[err][!] high entropy[/err]" if ent > 6.8 else ("[warn]writable+exec[/warn]" if s["writable"] and s["executable"] else "")
+        t.add_row(
+            s["name"],
+            s["virt_addr"],
+            f"{s['raw_size']:,}",
+            f"[{ent_style}]{ent:.3f}[/{ent_style}]",
+            rwx,
+            note,
+        )
+    console.print(t)
+    console.print(
+        f"  [dim]sections: {r['section_count']}  |  "
+        f"high-entropy: {r['high_entropy_secs']}  |  "
+        f"overall entropy: {r['overall_entropy']:.3f}[/dim]\n"
+    )
+
+
+def _render_pe_imports(r: dict) -> None:
+    t = Table(box=box.ASCII, show_header=True, header_style="heading",
+              border_style="dim", padding=(0, 1))
+    t.add_column("DLL",          style="cmd",  no_wrap=True)
+    t.add_column("Functions",    justify="right")
+    t.add_column("Suspicious",   justify="right")
+    t.add_column("Sample APIs",  style="dim")
+
+    for imp in r["imports"]:
+        susp_count = imp["suspicious_count"]
+        susp_style = "err" if susp_count > 3 else ("warn" if susp_count > 0 else "good")
+        sample = ", ".join(imp["functions"][:4])
+        if len(imp["functions"]) > 4:
+            sample += f" ... +{len(imp['functions']) - 4}"
+        t.add_row(
+            imp["dll"],
+            str(imp["function_count"]),
+            f"[{susp_style}]{susp_count}[/{susp_style}]",
+            sample,
+        )
+    console.print(t)
+    console.print(
+        f"  [dim]dlls: {r['import_count']}  |  total functions: {r['total_import_fns']}[/dim]\n"
+    )
+
+
+def _render_pe_suspicious(r: dict) -> None:
+    by_cat = r.get("suspicious_by_category", {})
+    if not by_cat:
+        console.print("  [good][+] no suspicious imports detected[/good]\n")
+        return
+    CAT_STYLE = {
+        "injection":    "critical",
+        "hollowing":    "critical",
+        "anti_debug":   "high",
+        "anti_vm":      "high",
+        "network":      "medium",
+        "credential":   "medium",
+        "execution":    "warn",
+        "persistence":  "warn",
+        "keylog_screen":"warn",
+    }
+    t = Table(box=box.ASCII, show_header=True, header_style="heading",
+              border_style="dim", padding=(0, 1))
+    t.add_column("Category",  no_wrap=True)
+    t.add_column("APIs", style="dim")
+
+    for cat, apis in sorted(by_cat.items()):
+        style = CAT_STYLE.get(cat, "info")
+        t.add_row(
+            f"[{style}]{cat}[/{style}]",
+            ", ".join(apis),
+        )
+    console.print(t)
+    console.print()
+
+
+def run_pe() -> None:
+    """Interactive PE Anatomy Inspector sub-REPL."""
+    session = _make_session(PE_COMMANDS)
+    current: dict | None = None
+
+    console.print()
+    console.print(Panel(
+        "  Analyze PE binaries: sections, imports, entropy, threat score\n"
+        "  [dim]commands: analyse <path>  open <path>  sections  imports  suspicious  score  help  back[/dim]",
+        title="[heading]PE Inspector[/heading]",
+        border_style="dim",
+    ))
+    console.print()
+
+    while True:
+        prompt = "pe> " if current is None else f"pe [{current['file_name']}]> "
+        try:
+            raw = session.prompt(prompt, style=PT_STYLE).strip()
+        except KeyboardInterrupt:
+            console.print("\n[dim]use  back  to return[/dim]")
+            continue
+        except EOFError:
+            break
+
+        if not raw:
+            continue
+        parts = raw.split(None, 1)
+        cmd   = parts[0].lower()
+        arg   = parts[1].strip() if len(parts) > 1 else ""
+
+        if cmd in ("back", "exit", "quit"):
+            break
+
+        elif cmd == "help":
+            t = Table(box=box.ASCII, show_header=False, border_style="dim", padding=(0, 1))
+            for c, desc in [
+                ("analyse <path>",  "load and fully analyse a PE file"),
+                ("open <path>",     "alias for analyse"),
+                ("sections",        "show section table with entropy"),
+                ("imports",         "show import table"),
+                ("suspicious",      "show suspicious API hits by category"),
+                ("score",           "show threat score breakdown"),
+                ("help",            "show this help"),
+                ("back",            "return to main menu"),
+            ]:
+                t.add_row(f"[cmd]{c}[/cmd]", desc)
+            console.print(t)
+            console.print()
+
+        elif cmd in ("analyse", "open"):
+            if not arg:
+                console.print("  [warn][!] usage: analyse <path>[/warn]\n")
+                continue
+            p = Path(arg).expanduser()
+            if not p.exists():
+                console.print(f"  [err][!] file not found: {p}[/err]\n")
+                continue
+            with console.status("[info]analysing...[/info]", spinner="dots"):
+                try:
+                    from pe_inspector import analyze as _pe_analyze
+                    current = _pe_analyze(p)
+                except Exception as e:
+                    console.print(f"  [err][!] {e}[/err]\n")
+                    continue
+            if not current["ok"]:
+                console.print(f"  [err][!] {current['error']}[/err]\n")
+                current = None
+                continue
+            _render_pe_header(current)
+            _render_pe_sections(current)
+
+        elif cmd == "sections":
+            if current is None:
+                console.print("  [warn][!] no file loaded -- use  analyse <path>  first[/warn]\n")
+            else:
+                _render_pe_sections(current)
+
+        elif cmd == "imports":
+            if current is None:
+                console.print("  [warn][!] no file loaded -- use  analyse <path>  first[/warn]\n")
+            else:
+                _render_pe_imports(current)
+
+        elif cmd == "suspicious":
+            if current is None:
+                console.print("  [warn][!] no file loaded -- use  analyse <path>  first[/warn]\n")
+            else:
+                _render_pe_suspicious(current)
+
+        elif cmd == "score":
+            if current is None:
+                console.print("  [warn][!] no file loaded -- use  analyse <path>  first[/warn]\n")
+            else:
+                label, style = _threat_label(current["threat_score"])
+                console.print()
+                console.print(Panel(
+                    f"  [{style}]{_pe_score_bar(current['threat_score'])}  {label}[/{style}]\n\n"
+                    f"  packed          : {current['is_packed']}  (packer: {current['packer'] or 'none'})\n"
+                    f"  high-entropy sections : {current['high_entropy_secs']}\n"
+                    f"  suspicious API cats   : {', '.join(current['suspicious_by_category'].keys()) or 'none'}\n"
+                    f"  overlay         : {'yes' if current['overlay'] else 'no'}\n"
+                    f"  total imports   : {current['total_import_fns']}",
+                    title="[heading]Threat Score[/heading]",
+                    border_style="dim",
+                ))
+                console.print()
+
+        else:
+            console.print(
+                f"[warn][!] unknown command: {cmd}  "
+                f"(type  help  for commands)[/warn]"
+            )
+
+
 # -- builder -------------------------------------------------------------------
 
 BUILD_PAGE_SIZE = PAGE_SIZE
@@ -5320,6 +5564,7 @@ def main() -> None:
         "yara":      run_yara,
         "malpedia":  run_malpedia,
         "ttp":       run_ttp,
+        "pe":        run_pe,
     }
 
     session = _make_session(TOP_COMMANDS)

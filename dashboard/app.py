@@ -1676,5 +1676,47 @@ def api_artifacts_rebuild():
     )
 
 
+# ---------------------------------------------------------------------------
+# PE Inspector
+# ---------------------------------------------------------------------------
+
+@app.route("/api/pe/analyse", methods=["POST"])
+def api_pe_analyse():
+    """Analyse an uploaded PE binary and return full anatomy report."""
+    if "file" not in request.files:
+        return jsonify({"error": "no file uploaded"}), 400
+    f    = request.files["file"]
+    raw  = f.read()
+    if not raw:
+        return jsonify({"error": "empty file"}), 400
+    try:
+        from pe_inspector import analyze as _pe_analyze
+        result = _pe_analyze(raw)
+        result["file_name"] = f.filename or "upload"
+        return jsonify(result)
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
+
+
+@app.route("/api/pe/analyse/path", methods=["POST"])
+def api_pe_analyse_path():
+    """Analyse a PE by path on the server (from samples dir)."""
+    data = request.get_json(silent=True) or {}
+    path = data.get("path", "").strip()
+    if not path:
+        return jsonify({"error": "path required"}), 400
+    from pathlib import Path as _Path
+    p = _Path(path)
+    if not p.is_absolute():
+        p = BASE_DIR.parent / "samples" / path
+    if not p.exists():
+        return jsonify({"error": f"file not found: {p}"}), 404
+    try:
+        from pe_inspector import analyze as _pe_analyze
+        return jsonify(_pe_analyze(p))
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
+
+
 if __name__ == "__main__":
     app.run(debug=True, host="0.0.0.0", port=5000)
