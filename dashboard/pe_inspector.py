@@ -1,5 +1,5 @@
 """
-pe_inspector.py — PE binary anatomy analyzer for peekaboo
+pe_inspector.py - PE binary anatomy analyzer for peekaboo
 """
 from __future__ import annotations
 

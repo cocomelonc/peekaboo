@@ -172,9 +172,18 @@ code{font-family:var(--mono);font-size:12px;background:var(--bg4);padding:1px 5p
 .mod-card-body{padding:14px;flex:1;display:flex;flex-direction:column;gap:8px}
 .mod-card-title{font-size:13px;font-weight:600;line-height:1.35;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden}
 .mod-card-meta{display:flex;flex-wrap:wrap;gap:4px;align-items:center}
-.mod-card-date{font-size:11px;color:var(--dim)}
+.mod-card-date{font-size:11px;color:var(--dim);margin-left:auto}
 .mod-card-snippet{font-family:var(--mono);font-size:10px;color:var(--dim);line-height:1.5;display:-webkit-box;-webkit-line-clamp:3;-webkit-box-orient:vertical;overflow:hidden;background:var(--bg3);border-radius:4px;padding:6px 8px}
-.mod-card-foot{display:flex;gap:6px;justify-content:flex-end;padding:10px 14px;border-top:1px solid var(--sep);background:rgba(0,0,0,.12)}
+.mod-card-foot{display:flex;gap:6px;justify-content:flex-end;align-items:center;padding:10px 14px;border-top:1px solid var(--sep);background:rgba(0,0,0,.12)}
+.mod-na{padding:2px 8px;font-size:11px;color:var(--dim)}
+.lib-cat-pills{display:flex;gap:6px;flex-wrap:wrap}
+.lib-plat-pills{display:flex;gap:6px;flex-wrap:wrap;margin-left:auto}
+.cat-count{opacity:.6;font-size:10px}
+.mm-meta{display:flex;flex-wrap:wrap;gap:8px;margin-bottom:14px}
+.mm-tabs{display:flex;gap:6px;margin-bottom:8px;flex-wrap:wrap}
+.cm-status{margin-bottom:12px}
+.cm-download{margin-top:14px}
+.cm-status-badge{font-size:13px;padding:6px 12px}
 
 /* -- platform icon -- */
 .plat{font-size:13px}
@@ -443,6 +452,31 @@ code{font-family:var(--mono);font-size:12px;background:var(--bg4);padding:1px 5p
 .rep-title{font-size:13px;font-weight:500;line-height:1.35;color:var(--text)}
 .rep-meta{font-size:11px;color:var(--dim)}
 .rep-families{display:flex;gap:4px;flex-wrap:wrap;margin-top:3px}
+/* -- malpedia panel layout -- */
+.malp-layout{display:grid;grid-template-columns:1fr 1fr;gap:18px;align-items:stretch;margin-bottom:18px}
+@media(max-width:900px){.malp-layout{grid-template-columns:1fr}}
+.malp-layout > .card{display:flex;flex-direction:column;min-height:340px}
+#malp-results{overflow-y:auto;max-height:360px;flex:1;min-height:0}
+.malp-status-dot{width:8px;height:8px;border-radius:50%;background:var(--dim);margin-left:auto;flex-shrink:0}
+.malp-search-row{display:flex;gap:8px;margin-bottom:10px}
+.malp-search-row input{flex:1;min-width:0}
+.malp-type-row{display:flex;gap:6px;margin-bottom:14px;flex-wrap:wrap}
+.malp-rep-controls{margin-left:auto;display:flex;align-items:center;gap:8px;flex-wrap:wrap}
+.malp-rep-filter{padding:4px 8px;font-size:12px;width:160px}
+.malp-result-row{padding:8px 10px;border-radius:var(--rs);cursor:pointer;display:flex;align-items:center;gap:8px;border:1px solid var(--sep);transition:border-color .12s;margin-bottom:4px}
+.malp-result-row:last-child{margin-bottom:0}
+.malp-result-row:hover{border-color:rgba(255,255,255,.2)}
+.malp-desc{font-size:13px;line-height:1.6;margin-bottom:12px}
+.malp-sec-label{font-size:10px;font-weight:600;color:var(--dim);text-transform:uppercase;letter-spacing:.5px;margin-bottom:4px}
+.malp-badge-row{display:flex;gap:4px;flex-wrap:wrap;margin-bottom:8px}
+.malp-post-row{padding:6px 0;border-bottom:1px solid var(--sep);font-size:12px}
+.malp-post-row:last-child{border-bottom:none}
+.malp-post-link{color:var(--blue);text-decoration:none}
+.malp-post-link:hover{text-decoration:underline}
+.malp-post-date{margin-left:8px;font-size:11px;color:var(--dim)}
+.malp-actions{margin-top:12px}
+.malp-rep-arrow{color:var(--dim);font-size:16px;padding-top:1px;flex-shrink:0}
+.malp-fam-badge{font-size:9px;cursor:pointer}
 
 /* -- beacons -- */
 .beacon-msg{padding:10px 14px;background:var(--bg3);border-radius:var(--rs);margin-bottom:8px;border-left:3px solid var(--green);animation:slideRight .2s ease}
@@ -1065,9 +1099,9 @@ code{font-family:var(--mono);font-size:12px;background:var(--bg4);padding:1px 5p
     <div class="filter-search">
       <input type="text" placeholder="🔍  search modules…" id="lib-search" oninput="filterLibrary()">
     </div>
-    <div id="lib-cat-pills" style="display:flex;gap:6px;flex-wrap:wrap"></div>
-    <div style="display:flex;gap:6px;margin-left:auto">
-      <span class="filter-pill" id="plat-all" onclick="setPlatform('all')" style="border-color:var(--purple);color:var(--purple)">All</span>
+    <div id="lib-cat-pills" class="lib-cat-pills"></div>
+    <div class="lib-plat-pills">
+      <span class="filter-pill active" id="plat-all" onclick="setPlatform('all')">All</span>
       <span class="filter-pill" id="plat-windows" onclick="setPlatform('windows')">🪟 Win</span>
       <span class="filter-pill" id="plat-linux" onclick="setPlatform('linux')">🐧 Linux</span>
       <span class="filter-pill" id="plat-macos" onclick="setPlatform('macos')">🍎 macOS</span>
@@ -1102,7 +1136,7 @@ code{font-family:var(--mono);font-size:12px;background:var(--bg4);padding:1px 5p
     </div>
     <div id="samples-empty" class="empty" style="display:none">
       <div class="empty-icon">📦</div>
-      <div>No samples compiled yet — use the Builder or run an APT Campaign</div>
+      <div>No samples compiled yet - use the Builder or run an APT Campaign</div>
     </div>
   </div>
 </div>
@@ -1374,7 +1408,7 @@ code{font-family:var(--mono);font-size:12px;background:var(--bg4);padding:1px 5p
     </div>
   </div>
 
-  <!-- results — hidden until a file is analysed -->
+  <!-- results - hidden until a file is analysed -->
   <div id="pe-results" style="display:none">
 
     <!-- score + mini stats -->
@@ -1599,17 +1633,17 @@ code{font-family:var(--mono);font-size:12px;background:var(--bg4);padding:1px 5p
 
 <!-- ════════ MALPEDIA ════════ -->
 <div id="panel-malpedia" class="panel">
-  <div class="grid-2" style="margin-bottom:18px;align-items:start">
+  <div class="malp-layout">
     <div class="card">
       <div class="card-header">
         <div class="card-title">Malpedia Search</div>
-        <div id="malpedia-status-dot" style="width:8px;height:8px;border-radius:50%;background:var(--dim);margin-left:auto"></div>
+        <div id="malpedia-status-dot" class="malp-status-dot"></div>
       </div>
-      <div style="display:flex;gap:8px;margin-bottom:10px">
-        <input type="text" id="malp-search" placeholder="actor or family name…" style="flex:1" onkeydown="if(event.key==='Enter')searchMalpedia()">
+      <div class="malp-search-row">
+        <input type="text" id="malp-search" placeholder="actor or family name…" onkeydown="if(event.key==='Enter')searchMalpedia()">
         <button class="btn btn-primary btn-sm" onclick="searchMalpedia()">Search</button>
       </div>
-      <div style="display:flex;gap:6px;margin-bottom:14px">
+      <div class="malp-type-row">
         <span class="filter-pill active" id="malp-t-all" onclick="setMalpType('all')">All</span>
         <span class="filter-pill" id="malp-t-actor" onclick="setMalpType('actor')">Actors</span>
         <span class="filter-pill" id="malp-t-family" onclick="setMalpType('family')">Families</span>
@@ -1626,8 +1660,8 @@ code{font-family:var(--mono);font-size:12px;background:var(--bg4);padding:1px 5p
     <div class="card-header">
       <span style="font-size:18px">📰</span>
       <div class="card-title">Latest Threat Reports</div>
-      <div style="margin-left:auto;display:flex;align-items:center;gap:10px">
-        <input type="text" id="malp-rep-search" placeholder="filter…" style="width:160px;padding:4px 8px;font-size:12px" oninput="filterMalpReports()">
+      <div class="malp-rep-controls">
+        <input type="text" id="malp-rep-search" class="malp-rep-filter" placeholder="filter…" oninput="filterMalpReports()">
         <button class="btn btn-ghost btn-sm" onclick="loadMalpReports()">↻ Refresh</button>
         <a href="https://malpedia.caad.fkie.fraunhofer.de/library" target="_blank" class="btn btn-ghost btn-sm">Open Library ↗</a>
       </div>
@@ -1738,8 +1772,8 @@ code{font-family:var(--mono);font-size:12px;background:var(--bg4);padding:1px 5p
       <button class="modal-close" onclick="closeModal('mod-modal')">✕</button>
     </div>
     <div class="modal-body">
-      <div id="mm-meta" style="display:flex;flex-wrap:wrap;gap:8px;margin-bottom:14px"></div>
-      <div id="mm-source-tabs" style="display:flex;gap:6px;margin-bottom:8px"></div>
+      <div id="mm-meta" class="mm-meta"></div>
+      <div id="mm-source-tabs" class="mm-tabs"></div>
       <pre id="mm-source"><code class="language-c" id="mm-code"></code></pre>
     </div>
     <div class="modal-foot">
@@ -1757,9 +1791,9 @@ code{font-family:var(--mono);font-size:12px;background:var(--bg4);padding:1px 5p
       <button class="modal-close" onclick="closeModal('compile-modal')">✕</button>
     </div>
     <div class="modal-body">
-      <div id="cm-status" style="margin-bottom:12px"></div>
+      <div id="cm-status" class="cm-status"></div>
       <div class="terminal" id="cm-log"></div>
-      <div id="cm-download" style="margin-top:14px;display:none"></div>
+      <div id="cm-download" class="cm-download" style="display:none"></div>
     </div>
   </div>
 </div>
@@ -2154,7 +2188,7 @@ function buildCatPills(stats) {
   const allPill = `<span class="filter-pill active" id="cat-all" onclick="setCat('all')">All</span>`;
   const pills = (stats.categories || []).map(([cat, count]) => {
     const col = (stats.colors||{})[cat] || '#636366';
-    return `<span class="filter-pill" id="cat-${cat}" onclick="setCat('${cat}')" style="--cat-col:${col}">${cat} <span style="opacity:.6;font-size:10px">${count}</span></span>`;
+    return `<span class="filter-pill" id="cat-${cat}" onclick="setCat('${cat}')" style="--cat-col:${col}">${cat} <span class="cat-count">${count}</span></span>`;
   }).join('');
   el.innerHTML = allPill + pills;
 }
@@ -2193,7 +2227,7 @@ function renderLibGrid() {
   empty.style.display = 'none';
   const platIcon = {windows:'🪟', linux:'🐧', macos:'🍎'};
   grid.innerHTML = mods.map(m => {
-    const ids = (m.attack_ids||[]).map(a => `<span class="badge badge-red" style="font-size:10px">${a}</span>`).join('');
+    const ids = (m.attack_ids||[]).map(a => `<span class="badge badge-red text-xs">${a}</span>`).join('');
     const snippet = (m.snippet||'').split('\n').slice(0,3).join('\n');
     return `
       <div class="mod-card">
@@ -2201,17 +2235,17 @@ function renderLibGrid() {
         <div class="mod-card-body">
           <div class="mod-card-title">${escHtml(m.title)}</div>
           <div class="mod-card-meta">
-            <span class="badge" style="background:${m.color||'#333'}22;color:${m.color||'#999'};font-size:10px">${m.category}</span>
+            <span class="badge text-xs" style="background:${m.color||'#333'}22;color:${m.color||'#999'}">${m.category}</span>
             ${ids}
             <span class="plat" title="${m.platform}">${platIcon[m.platform]||'💻'}</span>
-            <span class="mod-card-date" style="margin-left:auto">${m.date}</span>
+            <span class="mod-card-date">${m.date}</span>
           </div>
           ${snippet ? `<div class="mod-card-snippet">${escHtml(snippet)}</div>` : ''}
         </div>
         <div class="mod-card-foot">
           <button class="btn btn-ghost btn-xs" onclick='openModModal(${JSON.stringify(m.id)})'>🔍 View</button>
-          ${m.has_post ? `<a href="${m.blog_url}" target="_blank" class="btn btn-ghost btn-xs">📖 Blog</a>` : '<span class="text-xs text-dim" style="padding:2px 8px">no post</span>'}
-          ${m.compilable ? `<button class="btn btn-blue btn-xs" onclick='quickCompile(${JSON.stringify(m.id)})'>⚡ Compile</button>` : '<span class="text-xs text-dim" style="padding:2px 8px">no compiler</span>'}
+          ${m.has_post ? `<a href="${m.blog_url}" target="_blank" class="btn btn-ghost btn-xs">📖 Blog</a>` : '<span class="mod-na">no post</span>'}
+          ${m.compilable ? `<button class="btn btn-blue btn-xs" onclick='quickCompile(${JSON.stringify(m.id)})'>⚡ Compile</button>` : '<span class="mod-na">no compiler</span>'}
         </div>
       </div>`;
   }).join('');
@@ -2240,7 +2274,7 @@ async function openModModal(moduleId) {
     const ids = (m.attack_ids||[]).map(a => `<span class="badge badge-red">${a}</span>`).join('');
     const osIcon = platIcon[m.platform] || '💻';
     document.getElementById('mm-meta').innerHTML = `
-      <span class="badge" style="background:${m.color||'#333'}22;color:${m.color||'#999'}">${m.category}</span>
+      <span class="badge text-sm" style="background:${m.color||'#333'}22;color:${m.color||'#999'}">${m.category}</span>
       ${ids}
       <span class="badge badge-dim">${osIcon} ${m.platform}</span>
       <span class="badge badge-dim">${m.compiler}</span>
@@ -2297,7 +2331,7 @@ async function doCompile(moduleId) {
     const r = await fetch(`/api/library/${encodeURIComponent(moduleId)}/compile`, {method:'POST'});
     const d = await r.json();
     if (d.ok) {
-      document.getElementById('cm-status').innerHTML = `<div class="badge badge-green" style="font-size:13px;padding:6px 12px">✓ Compiled successfully</div>`;
+      document.getElementById('cm-status').innerHTML = `<div class="badge badge-green cm-status-badge">✓ Compiled successfully</div>`;
       document.getElementById('cm-log').textContent = d.log || '';
       if (d.download) {
         document.getElementById('cm-download').style.display = 'block';
@@ -2306,7 +2340,7 @@ async function doCompile(moduleId) {
       }
       toast('Compiled: ' + moduleId.slice(-20), 'ok');
     } else {
-      document.getElementById('cm-status').innerHTML = `<div class="badge badge-red" style="font-size:13px;padding:6px 12px">✗ Compilation failed</div>`;
+      document.getElementById('cm-status').innerHTML = `<div class="badge badge-red cm-status-badge">✗ Compilation failed</div>`;
       document.getElementById('cm-log').textContent = d.log || d.error || '';
       toast('Compile failed', 'err');
     }
@@ -2481,7 +2515,7 @@ async function loadSamples() {
       ? `<div class="samp-file-btns">${(s.files||[]).map(f =>
           `<a href="/api/samples/${s.session_id}/download/${f.name}" class="btn btn-ghost btn-xs">⬇ ${escHtml(f.name)}</a>`
         ).join('')}</div>`
-      : '<span class="text-dim text-xs">—</span>';
+      : '<span class="text-dim text-xs">-</span>';
     const st = s.status === 'success' ? 'badge-green' : (s.status === 'built' ? 'badge-blue' : 'badge-dim');
     return `<tr>
       <td><span class="samp-sid" title="${escHtml(s.session_id)}">${escHtml(s.session_id)}</span></td>
@@ -3083,7 +3117,7 @@ function _peRenderOverview(d) {
     ['File',          escHtml(d.file_name)],
     ['Size',          `${d.file_size.toLocaleString()} bytes &nbsp;<span class="text-dim text-xs">(${(d.file_size/1024).toFixed(1)} KB)</span>`],
     ['MD5',           `<code style="font-size:11px;word-break:break-all">${d.md5}</code>`],
-    ['SHA1',          `<code style="font-size:11px;word-break:break-all">${d.sha1 || '—'}</code>`],
+    ['SHA1',          `<code style="font-size:11px;word-break:break-all">${d.sha1 || '-'}</code>`],
     ['SHA256',        `<code style="font-size:11px;word-break:break-all">${d.sha256}</code>`],
     ['Arch / Type',   `<span style="color:var(--purple)">${escHtml(d.arch)}</span> &nbsp; ${escHtml(d.pe_type)} &nbsp; <span class="text-dim">${escHtml(d.subsystem)}</span>`],
     ['Timestamp',     escHtml(d.timestamp)],
@@ -3594,7 +3628,7 @@ const MITRE_CAT_COLORS = {
 };
 
 // -----------------------------------------------------------------
-// MITRE ATT&CK Panel — tabbed, server-side paginated
+// MITRE ATT&CK Panel - tabbed, server-side paginated
 // -----------------------------------------------------------------
 
 function initMitrePanel() {
@@ -3929,7 +3963,7 @@ async function searchMalpedia() {
   ];
   if (!items.length) { el.innerHTML = '<div class="text-dim text-sm">No results</div>'; return; }
   el.innerHTML = items.map(i => `
-    <div onclick="loadMalpDetail('${escAttr(i.id)}','${i.type}')" style="padding:8px 10px;border-radius:var(--rs);cursor:pointer;display:flex;align-items:center;gap:8px;border:1px solid var(--sep);transition:border-color .12s" onmouseover="this.style.borderColor='rgba(255,255,255,.2)'" onmouseout="this.style.borderColor='var(--sep)'">
+    <div class="malp-result-row" onclick="loadMalpDetail('${escAttr(i.id)}','${i.type}')">
       <span class="badge ${i.type==='actor'?'badge-blue':'badge-purple'} text-xs">${i.type}</span>
       <span class="text-sm">${escHtml(i.id)}</span>
     </div>`).join('');
@@ -3950,9 +3984,9 @@ async function loadMalpDetail(id, type) {
   const families = (data.families||[]).slice(0,8).map(f => `<span class="badge badge-dim text-xs">${escHtml(f.id)}</span>`).join('');
   const syns     = (data.synonyms||[]).slice(0,6).map(s => `<span class="badge badge-dim text-xs">${escHtml(s)}</span>`).join('');
   const posts    = (data.related_posts||[]).slice(0,4).map(p => `
-    <div style="padding:6px 0;border-bottom:1px solid var(--sep);font-size:12px">
-      <a href="${p.url||'#'}" target="_blank" style="color:var(--blue)">${escHtml(p.title||p.url||'')}</a>
-      <span class="text-xs text-dim" style="margin-left:8px">${p.date||''}</span>
+    <div class="malp-post-row">
+      <a href="${p.url||'#'}" target="_blank" class="malp-post-link">${escHtml(p.title||p.url||'')}</a>
+      <span class="malp-post-date">${p.date||''}</span>
     </div>`).join('');
   card.innerHTML = `
     <div class="card-header">
@@ -3961,11 +3995,11 @@ async function loadMalpDetail(id, type) {
         ${data.country ? `<div class="card-sub">${data.country}</div>` : ''}
       </div>
     </div>
-    ${data.description ? `<div class="text-sm" style="margin-bottom:12px;line-height:1.6">${escHtml(data.description.slice(0,400))}</div>` : ''}
-    ${syns ? `<div style="margin-bottom:8px"><div class="text-xs text-dim" style="margin-bottom:4px">Aliases</div><div style="display:flex;gap:4px;flex-wrap:wrap">${syns}</div></div>` : ''}
-    ${families ? `<div style="margin-bottom:10px"><div class="text-xs text-dim" style="margin-bottom:4px">Malware Families</div><div style="display:flex;gap:4px;flex-wrap:wrap">${families}</div></div>` : ''}
-    ${posts ? `<div><div class="text-xs text-dim" style="margin-bottom:4px">Related Posts</div>${posts}</div>` : ''}
-    <div style="margin-top:12px">
+    ${data.description ? `<div class="malp-desc">${escHtml(data.description.slice(0,400))}</div>` : ''}
+    ${syns ? `<div class="malp-badge-row"><div class="malp-sec-label">Aliases</div>${syns}</div>` : ''}
+    ${families ? `<div class="malp-badge-row"><div class="malp-sec-label">Malware Families</div>${families}</div>` : ''}
+    ${posts ? `<div><div class="malp-sec-label">Related Posts</div>${posts}</div>` : ''}
+    <div class="malp-actions">
       <button class="btn btn-primary btn-sm" onclick="prefillAPT('${escAttr(id)}')">🎯 Run Pipeline</button>
     </div>`;
 }
@@ -4003,9 +4037,9 @@ function renderMalpReports(reports) {
   }
   el.innerHTML = reports.map(r => {
     const fams = (r.families||[]).map(f =>
-      `<span class="badge badge-purple" style="font-size:9px;cursor:pointer" onclick="event.preventDefault();document.getElementById('malp-search').value='${escAttr(f)}';searchMalpedia()">${escHtml(f)}</span>`
+      `<span class="badge badge-purple malp-fam-badge" onclick="event.preventDefault();document.getElementById('malp-search').value='${escAttr(f)}';searchMalpedia()">${escHtml(f)}</span>`
     ).join('');
-    const org = r.org ? `<span class="badge badge-dim" style="font-size:10px">${escHtml(r.org)}</span>` : '';
+    const org = r.org ? `<span class="badge badge-dim text-xs">${escHtml(r.org)}</span>` : '';
     const author = r.author && r.author !== r.org ? ` · ${escHtml(r.author)}` : '';
     return `<a class="rep-row" href="${escAttr(r.url)}" target="_blank" rel="noopener">
       <div class="rep-date">${escHtml(r.date||'')}</div>
@@ -4014,7 +4048,7 @@ function renderMalpReports(reports) {
         <div class="rep-meta">${org}${author}</div>
         ${fams ? `<div class="rep-families">${fams}</div>` : ''}
       </div>
-      <span style="color:var(--dim);font-size:16px;padding-top:1px">↗</span>
+      <span class="malp-rep-arrow">↗</span>
     </a>`;
   }).join('');
 }
