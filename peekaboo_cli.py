@@ -9,6 +9,9 @@ Usage:
 from __future__ import annotations
 import os
 import sys
+import uuid
+from collections import Counter
+from datetime import datetime
 from pathlib import Path
 
 # -- make dashboard modules importable ----------------------------------------
@@ -75,6 +78,15 @@ SEV_TAG = {
 PT_STYLE = PtStyle.from_dict({
     "prompt": "ansicyan bold",
 })
+
+
+def _make_session(words: list[str]) -> PromptSession:
+    return PromptSession(
+        history=InMemoryHistory(),
+        completer=WordCompleter(words, ignore_case=True),
+        style=PT_STYLE,
+    )
+
 
 # -- documentation strings (Markdown, rendered by rich) -----------------------
 
@@ -2067,7 +2079,6 @@ def run_artifacts() -> None:
         return
 
     # build lookup structures
-    from collections import Counter
     tid_map: dict[str, dict] = {e["tid"]: e for e in all_entries}
     tactic_counts: Counter = Counter()
     for e in all_entries:
@@ -2078,15 +2089,7 @@ def run_artifacts() -> None:
     all_tactics = sorted(tactic_counts.keys())
     all_tids    = sorted(tid_map.keys())
 
-    completer = WordCompleter(
-        ARTIFACT_COMMANDS + all_tactics + all_tids,
-        ignore_case=True,
-    )
-    session: PromptSession = PromptSession(
-        history=InMemoryHistory(),
-        completer=completer,
-        style=PT_STYLE,
-    )
+    session = _make_session(ARTIFACT_COMMANDS + all_tactics + all_tids)
 
     built_at = all_entries[0].get("built_at", "?")[:16] if all_entries else "?"
     console.print()
@@ -2439,22 +2442,13 @@ def run_library() -> None:
         return
 
     # build category -> entries map
-    from collections import Counter
     cat_counts: Counter = Counter(e["category"] for e in all_entries)
     all_cats = sorted(cat_counts.keys())
 
     # slug -> entry lookup
     slug_map = {e["slug"]: e for e in all_entries}
 
-    completer = WordCompleter(
-        LIBRARY_COMMANDS + all_cats + list(slug_map.keys()),
-        ignore_case=True,
-    )
-    session: PromptSession = PromptSession(
-        history=InMemoryHistory(),
-        completer=completer,
-        style=PT_STYLE,
-    )
+    session = _make_session(LIBRARY_COMMANDS + all_cats + list(slug_map.keys()))
 
     console.print()
     console.print(Panel(
@@ -2794,12 +2788,7 @@ def run_evasion(ev_mod) -> None:
     result:      dict  | None = None
     selected:    set[str]     = set()
 
-    completer = WordCompleter(EVASION_COMMANDS, ignore_case=True)
-    session: PromptSession = PromptSession(
-        history=InMemoryHistory(),
-        completer=completer,
-        style=PT_STYLE,
-    )
+    session = _make_session(EVASION_COMMANDS)
 
     console.print()
     console.print(Panel(
@@ -3240,15 +3229,7 @@ def run_malpedia() -> None:
         actor_list   = _mp.list_actors()
         family_list  = _mp.list_families()
 
-    completer = WordCompleter(
-        MALPEDIA_COMMANDS + actor_list[:200] + family_list[:200],
-        ignore_case=True,
-    )
-    session: PromptSession = PromptSession(
-        history=InMemoryHistory(),
-        completer=completer,
-        style=PT_STYLE,
-    )
+    session = _make_session(MALPEDIA_COMMANDS + actor_list[:200] + family_list[:200])
 
     console.print()
     console.print(Panel(
@@ -3621,12 +3602,7 @@ def run_yara() -> None:
 
     yr_result: dict | None = None
 
-    completer = WordCompleter(YARA_COMMANDS, ignore_case=True)
-    session: PromptSession = PromptSession(
-        history=InMemoryHistory(),
-        completer=completer,
-        style=PT_STYLE,
-    )
+    session = _make_session(YARA_COMMANDS)
 
     console.print()
     console.print(Panel(
@@ -3910,15 +3886,7 @@ def run_shellcode() -> None:
     all_fmt_ids   = [f[0] for f in _SC_FORMAT_INFO]
     all_xform_ids = [f[0] for f in _SC_TRANSFORM_INFO]
 
-    completer = WordCompleter(
-        SHELLCODE_COMMANDS + all_fmt_ids + all_xform_ids,
-        ignore_case=True,
-    )
-    session: PromptSession = PromptSession(
-        history=InMemoryHistory(),
-        completer=completer,
-        style=PT_STYLE,
-    )
+    session = _make_session(SHELLCODE_COMMANDS + all_fmt_ids + all_xform_ids)
 
     console.print()
     console.print(Panel(
@@ -4245,9 +4213,6 @@ def run_shellcode() -> None:
 
 # -- builder -------------------------------------------------------------------
 
-import uuid as _uuid
-from datetime import datetime as _dt
-
 BUILD_PAGE_SIZE = 20
 
 BUILDER_COMMANDS = [
@@ -4350,8 +4315,8 @@ def _render_history_table(builds: list[dict]) -> None:
         dur = ""
         try:
             if b.get("start_time") and b.get("end_time"):
-                s = _dt.fromisoformat(b["start_time"])
-                e2 = _dt.fromisoformat(b["end_time"])
+                s = datetime.fromisoformat(b["start_time"])
+                e2 = datetime.fromisoformat(b["end_time"])
                 secs = (e2 - s).total_seconds()
                 dur = f"{secs:.1f}s"
         except Exception:
@@ -4408,8 +4373,8 @@ def _render_build_detail(b: dict) -> None:
     dur = ""
     try:
         if b.get("start_time") and b.get("end_time"):
-            s = _dt.fromisoformat(b["start_time"])
-            e2 = _dt.fromisoformat(b["end_time"])
+            s = datetime.fromisoformat(b["start_time"])
+            e2 = datetime.fromisoformat(b["end_time"])
             dur = f"{(e2-s).total_seconds():.1f}s"
     except Exception:
         pass
@@ -4609,15 +4574,7 @@ def run_ttp() -> None:
     tactics    = sorted({r["tactic"] for r in all_rows if r["tactic"]})
     platforms  = ["windows", "linux", "macos"]
 
-    completer = WordCompleter(
-        TTP_COMMANDS + attack_ids + tactics + platforms,
-        ignore_case=True,
-    )
-    session: PromptSession = PromptSession(
-        history=InMemoryHistory(),
-        completer=completer,
-        style=PT_STYLE,
-    )
+    session = _make_session(TTP_COMMANDS + attack_ids + tactics + platforms)
 
     n_techs = _db.count_ttp_techniques()
     n_impls = _db.count_ttp_implementations()
@@ -4928,15 +4885,7 @@ def run_builder() -> None:
         "winlogon":        "Winlogon Shell/Userinit  (requires SYSTEM privileges)",
     }
 
-    completer = WordCompleter(
-        BUILDER_COMMANDS + all_slugs + stealer_names + pers_names,
-        ignore_case=True,
-    )
-    session: PromptSession = PromptSession(
-        history=InMemoryHistory(),
-        completer=completer,
-        style=PT_STYLE,
-    )
+    session = _make_session(BUILDER_COMMANDS + all_slugs + stealer_names + pers_names)
 
     win_n = sum(1 for m in all_mods if m["platform"] == "windows")
     lin_n = sum(1 for m in all_mods if m["platform"] == "linux")
@@ -5128,9 +5077,9 @@ def run_builder() -> None:
                     None if pers_raw == "none" else "registry_run"
                 )
 
-                session_id = _uuid.uuid4().hex[:12]
-                build_id   = f"cli-{_uuid.uuid4().hex[:8]}"
-                start_t    = _dt.now()
+                session_id = uuid.uuid4().hex[:12]
+                build_id   = f"cli-{uuid.uuid4().hex[:8]}"
+                start_t    = datetime.now()
 
                 # compile stealer
                 console.print()
@@ -5138,7 +5087,7 @@ def run_builder() -> None:
                     f"[info]compiling stealer: {slug}...[/info]", spinner="dots"
                 ):
                     s_ok, s_log, s_out = _compiler.compile_stealer(slug, session_id)
-                end_t = _dt.now()
+                end_t = datetime.now()
                 _render_build_log(s_log, s_ok)
 
                 p_ok, p_log, p_out = True, "", None
@@ -5152,7 +5101,7 @@ def run_builder() -> None:
                         )
                     _render_build_log(p_log, p_ok)
 
-                elapsed = (_dt.now() - start_t).total_seconds()
+                elapsed = (datetime.now() - start_t).total_seconds()
 
                 if s_ok:
                     s_size = s_out.stat().st_size if s_out and s_out.exists() else 0
@@ -5249,9 +5198,9 @@ def run_builder() -> None:
             ))
             console.print()
 
-            session_id = _uuid.uuid4().hex[:12]
-            build_id   = f"cli-{_uuid.uuid4().hex[:8]}"
-            start_t    = _dt.now()
+            session_id = uuid.uuid4().hex[:12]
+            build_id   = f"cli-{uuid.uuid4().hex[:8]}"
+            start_t    = datetime.now()
 
             with console.status(
                 f"[info]compiling {mod['slug']} ({mod['compiler']})...[/info]",
@@ -5259,7 +5208,7 @@ def run_builder() -> None:
             ):
                 ok, log, out_path = _compiler.compile_module(mod["id"], session_id)
 
-            end_t   = _dt.now()
+            end_t   = datetime.now()
             elapsed = (end_t - start_t).total_seconds()
 
             _render_build_log(log, ok)
@@ -5366,12 +5315,17 @@ def main() -> None:
 
     ev_mod = _load_evasion_module()
 
-    top_completer = WordCompleter(TOP_COMMANDS, ignore_case=True)
-    session: PromptSession = PromptSession(
-        history=InMemoryHistory(),
-        completer=top_completer,
-        style=PT_STYLE,
-    )
+    _dispatch: dict[str, object] = {
+        "library":   run_library,
+        "artifacts": run_artifacts,
+        "builder":   run_builder,
+        "shellcode": run_shellcode,
+        "yara":      run_yara,
+        "malpedia":  run_malpedia,
+        "ttp":       run_ttp,
+    }
+
+    session = _make_session(TOP_COMMANDS)
 
     while True:
         try:
@@ -5385,43 +5339,21 @@ def main() -> None:
         if not raw:
             continue
 
-        cmd = raw.split()[0].lower()
+        parts = raw.split()
+        cmd   = parts[0].lower()
 
         if cmd in ("exit", "quit"):
             console.print("[dim]goodbye.[/dim]\n")
             break
-
         elif cmd == "help":
-            parts = raw.split()
             print_top_help(parts[1] if len(parts) > 1 else None)
-
         elif cmd == "evasion":
             if ev_mod is None:
                 console.print("[err][!] evasion module not available[/err]")
             else:
                 run_evasion(ev_mod)
-
-        elif cmd == "library":
-            run_library()
-
-        elif cmd == "artifacts":
-            run_artifacts()
-
-        elif cmd == "builder":
-            run_builder()
-
-        elif cmd == "shellcode":
-            run_shellcode()
-
-        elif cmd == "yara":
-            run_yara()
-
-        elif cmd == "malpedia":
-            run_malpedia()
-
-        elif cmd == "ttp":
-            run_ttp()
-
+        elif cmd in _dispatch:
+            _dispatch[cmd]()  # type: ignore[operator]
         else:
             console.print(
                 f"[warn][!] unknown command: {cmd}  "
