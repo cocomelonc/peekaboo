@@ -454,8 +454,30 @@ code{font-family:var(--mono);font-size:12px;background:var(--bg4);padding:1px 5p
 .mitre-tab.active{color:var(--purple);border-bottom-color:var(--purple)}
 .mitre-section{animation:fadeIn .15s ease}
 
+/* -- PE Inspector tabs (self-contained inside a card) -- */
+.pe-card{background:var(--bg2);border:1px solid var(--sep);border-radius:var(--r);overflow:hidden}
+.pe-tabs{display:flex;border-bottom:1px solid var(--sep);background:var(--bg3);overflow-x:auto;-webkit-overflow-scrolling:touch;scrollbar-width:none}
+.pe-tabs::-webkit-scrollbar{display:none}
+.pe-tab{padding:10px 20px;font-size:13px;font-weight:500;color:var(--text2);cursor:pointer;border-bottom:2px solid transparent;white-space:nowrap;flex-shrink:0;transition:color .15s,border-color .15s,background .15s;user-select:none}
+.pe-tab:hover{color:var(--text);background:rgba(234,230,255,.04)}
+.pe-tab.active{color:var(--purple);border-bottom-color:var(--purple);background:var(--bg2)}
+.pe-tab-body{padding:18px;overflow:hidden}
+.pe-score-row{background:var(--bg3);border-radius:var(--rs);padding:14px 16px;margin-bottom:16px;display:flex;align-items:center;gap:16px;flex-wrap:wrap}
+.pe-score-bar-wrap{flex:1;min-width:200px}
+.pe-score-bar-track{height:8px;background:var(--bg4);border-radius:4px;overflow:hidden;margin-top:6px}
+.pe-score-bar-fill{height:100%;border-radius:4px;transition:width .4s ease}
+.pe-kv-table{width:100%;border-collapse:collapse}
+.pe-kv-table td{padding:6px 0;border-bottom:1px solid rgba(61,56,96,.3);font-size:13px;vertical-align:top}
+.pe-kv-table tr:last-child td{border-bottom:none}
+.pe-kv-table .pe-kv-key{width:150px;color:var(--dim);padding-right:16px;white-space:nowrap;font-size:12px}
+.pe-stat-mini{display:flex;gap:12px;flex-wrap:wrap}
+.pe-stat-mini-item{background:var(--bg3);border:1px solid var(--sep);border-radius:var(--rs);padding:10px 14px;min-width:110px}
+.pe-stat-mini-val{font-size:20px;font-weight:700;font-family:var(--mono);line-height:1}
+.pe-stat-mini-lbl{font-size:10px;color:var(--dim);margin-top:3px;text-transform:uppercase;letter-spacing:.5px}
+.tbl-wrap{overflow-x:auto;-webkit-overflow-scrolling:touch;border-radius:var(--rs)}
+
 /* -- data table rows -- */
-.data-table{width:100%;border-collapse:collapse}
+.data-table{width:100%;border-collapse:collapse;min-width:400px}
 .data-table th{font-size:11px;font-weight:600;color:var(--dim);text-transform:uppercase;letter-spacing:.6px;padding:6px 10px;border-bottom:1px solid var(--sep);text-align:left;white-space:nowrap}
 .data-table td{padding:8px 10px;border-bottom:1px solid rgba(61,56,96,.4);font-size:13px;vertical-align:middle}
 .data-table tr:last-child td{border-bottom:none}
@@ -492,6 +514,9 @@ code{font-family:var(--mono);font-size:12px;background:var(--bg4);padding:1px 5p
     </div>
     <div class="nav-item" onclick="showPanel('evasion')" id="nav-evasion">
       <span class="nav-icon">😈</span> Evasion Lab
+    </div>
+    <div class="nav-item" onclick="showPanel('pe')" id="nav-pe">
+      <span class="nav-icon">🔬</span> PE Inspector
     </div>
     <div class="nav-item" onclick="showPanel('library')" id="nav-library">
       <span class="nav-icon">📦</span> Module Library
@@ -1216,6 +1241,81 @@ code{font-family:var(--mono);font-size:12px;background:var(--bg4);padding:1px 5p
 
 </div>
 
+<!-- ════════ PE INSPECTOR ════════ -->
+<div id="panel-pe" class="panel">
+
+  <!-- input card -->
+  <div class="card mb-16">
+    <div class="filter-bar" style="margin-bottom:0">
+      <input type="text" id="pe-path"
+             placeholder="Path to PE on server  (e.g. samples/abc123/file.exe)"
+             style="flex:1;min-width:0"
+             onkeydown="if(event.key==='Enter')peAnalysePath()">
+      <button class="btn btn-primary btn-sm" onclick="peAnalysePath()">Analyse</button>
+      <span style="color:var(--dim);font-size:12px;flex-shrink:0">or</span>
+      <label class="btn btn-ghost btn-sm" style="cursor:pointer;flex-shrink:0">
+        Upload PE
+        <input type="file" id="pe-upload" accept=".exe,.dll,.sys,.ocx"
+               style="display:none" onchange="peAnalyseUpload(this)">
+      </label>
+      <span id="pe-status" class="text-dim" style="font-size:12px;flex-shrink:0"></span>
+    </div>
+  </div>
+
+  <!-- results — hidden until a file is analysed -->
+  <div id="pe-results" style="display:none">
+
+    <!-- score + mini stats -->
+    <div id="pe-stats-row" class="mb-16"></div>
+
+    <!-- tabbed card -->
+    <div class="pe-card">
+      <div class="pe-tabs">
+        <div class="pe-tab active" id="petab-overview"   onclick="switchPeTab('overview')">Overview</div>
+        <div class="pe-tab"        id="petab-sections"   onclick="switchPeTab('sections')">Sections</div>
+        <div class="pe-tab"        id="petab-imports"    onclick="switchPeTab('imports')">Imports</div>
+        <div class="pe-tab"        id="petab-suspicious" onclick="switchPeTab('suspicious')">Suspicious APIs</div>
+      </div>
+
+      <div class="pe-tab-body">
+
+        <!-- overview -->
+        <div id="pe-section-overview">
+          <div class="tbl-wrap">
+            <table class="pe-kv-table" id="pe-overview-table"></table>
+          </div>
+        </div>
+
+        <!-- sections -->
+        <div id="pe-section-sections" style="display:none">
+          <div class="tbl-wrap">
+            <table class="data-table" id="pe-sections-table"></table>
+          </div>
+        </div>
+
+        <!-- imports -->
+        <div id="pe-section-imports" style="display:none">
+          <div class="filter-bar" style="margin-bottom:12px">
+            <input type="text" id="pe-imp-q"
+                   placeholder="Filter by DLL or function name..."
+                   style="flex:1;min-width:0" oninput="filterPeImports()">
+          </div>
+          <div class="tbl-wrap">
+            <table class="data-table" id="pe-imports-table"></table>
+          </div>
+        </div>
+
+        <!-- suspicious APIs -->
+        <div id="pe-section-suspicious" style="display:none">
+          <div id="pe-suspicious-body"></div>
+        </div>
+
+      </div>
+    </div>
+
+  </div>
+</div>
+
 <!-- ════════ ARTIFACT MAP ════════ -->
 <div id="panel-artifacts" class="panel">
 
@@ -1642,6 +1742,7 @@ const PANEL_META = {
   builder:   ['Builder',           'compile malware for EDR benchmarking'],
   shellcode: ['Shellcode',         'parse · encode · convert · analyse shellcode'],
   evasion:   ['Evasion Lab',       'score AV evasion potential + apply PE patch transforms'],
+  pe:        ['PE Inspector',      'sections, entropy, imports, suspicious APIs, threat score'],
   library:   ['Module Library',   'browse 190+ techniques from meow & blog'],
   samples:  ['Samples',          'compiled binaries organized by session'],
   apt:      ['APT Campaign',     'Malpedia -> TTPs -> auto-compile pipeline'],
@@ -2734,6 +2835,229 @@ function vtSelectFile(fname, label) {
     o.classList.toggle('vt-selected', o.dataset.fname === fname));
   vtCloseDrop('vt-file-drop');
 }
+// -----------------------------------
+
+// -----------------------------------------------------------------
+// PE Inspector
+// -----------------------------------------------------------------
+
+let _peData = null;
+let _peActiveTab = 'overview';
+
+const _THREAT_COLOR = {low:'var(--green)', medium:'var(--yellow)', high:'var(--red)', critical:'var(--red)'};
+const _CAT_STYLE = {
+  injection:'var(--red)', hollowing:'var(--red)',
+  anti_debug:'var(--orange)', anti_vm:'var(--orange)',
+  network:'var(--blue)', credential:'var(--pink)',
+  execution:'var(--yellow)', persistence:'var(--yellow)', keylog_screen:'var(--yellow)',
+};
+
+function _threatLabel(score) {
+  if (score < 20) return {label:'LOW',     color:'var(--green)'};
+  if (score < 50) return {label:'MEDIUM',  color:'var(--yellow)'};
+  if (score < 75) return {label:'HIGH',    color:'var(--red)'};
+  return               {label:'CRITICAL', color:'var(--red)'};
+}
+
+function _scoreBar(score) {
+  const w = 28, filled = Math.round(score / 100 * w);
+  return '[' + '#'.repeat(filled) + '-'.repeat(w - filled) + '] ' + score + '/100';
+}
+
+function switchPeTab(tab) {
+  _peActiveTab = tab;
+  ['overview','sections','imports','suspicious'].forEach(t => {
+    document.getElementById('petab-' + t)?.classList.toggle('active', t === tab);
+    const s = document.getElementById('pe-section-' + t);
+    if (s) s.style.display = t === tab ? '' : 'none';
+  });
+}
+
+async function peAnalysePath() {
+  const path = document.getElementById('pe-path').value.trim();
+  if (!path) return;
+  _peRun(async () => {
+    const r = await fetch('/api/pe/analyse/path', {
+      method: 'POST',
+      headers: {'Content-Type':'application/json'},
+      body: JSON.stringify({path}),
+    }).then(r => r.json());
+    return r;
+  });
+}
+
+async function peAnalyseUpload(input) {
+  const file = input.files[0];
+  if (!file) return;
+  _peRun(async () => {
+    const fd = new FormData();
+    fd.append('file', file);
+    const r = await fetch('/api/pe/analyse', {method:'POST', body: fd}).then(r => r.json());
+    return r;
+  });
+}
+
+async function _peRun(fetchFn) {
+  const status = document.getElementById('pe-status');
+  document.getElementById('pe-results').style.display = 'none';
+  status.textContent = 'analysing...';
+  try {
+    const d = await fetchFn();
+    if (!d.ok) { status.textContent = 'error: ' + (d.error || 'unknown'); return; }
+    _peData = d;
+    status.textContent = d.file_name;
+    _peRenderAll(d);
+    document.getElementById('pe-results').style.display = '';
+    switchPeTab('overview');
+  } catch(e) {
+    status.textContent = 'error: ' + e.message;
+  }
+}
+
+function _peRenderAll(d) {
+  _peRenderStats(d);
+  _peRenderOverview(d);
+  _peRenderSections(d);
+  _peRenderImports(d);
+  _peRenderSuspicious(d);
+}
+
+function _peRenderStats(d) {
+  const {label, color} = _threatLabel(d.threat_score);
+  const pct = d.threat_score;
+  const suspCount = d.suspicious_imports.length;
+  document.getElementById('pe-stats-row').innerHTML = `
+    <div class="pe-score-row">
+      <div class="pe-score-bar-wrap">
+        <div style="display:flex;align-items:center;justify-content:space-between">
+          <span style="font-size:12px;color:var(--dim);text-transform:uppercase;letter-spacing:.6px">Threat Score</span>
+          <span style="font-size:20px;font-weight:700;font-family:var(--mono);color:${color}">${pct}<span style="font-size:13px;opacity:.7">/100</span></span>
+        </div>
+        <div class="pe-score-bar-track">
+          <div class="pe-score-bar-fill" style="width:${pct}%;background:${color}"></div>
+        </div>
+        <div style="margin-top:5px;font-size:12px;color:${color};font-weight:600">${label}${d.packer ? ' &mdash; packer: <span style="color:var(--yellow)">' + escHtml(d.packer) + '</span>' : ''}</div>
+      </div>
+    </div>
+    <div class="pe-stat-mini mb-16">
+      <div class="pe-stat-mini-item">
+        <div class="pe-stat-mini-val" style="color:var(--purple)">${escHtml(d.arch)}</div>
+        <div class="pe-stat-mini-lbl">${escHtml(d.pe_type)} / ${escHtml(d.subsystem)}</div>
+      </div>
+      <div class="pe-stat-mini-item">
+        <div class="pe-stat-mini-val" style="color:var(--blue)">${d.section_count}</div>
+        <div class="pe-stat-mini-lbl">sections &bull; ${d.high_entropy_secs} high entropy</div>
+      </div>
+      <div class="pe-stat-mini-item">
+        <div class="pe-stat-mini-val" style="color:${suspCount > 0 ? 'var(--red)' : 'var(--green)'}">${suspCount}</div>
+        <div class="pe-stat-mini-lbl">suspicious API hits</div>
+      </div>
+      <div class="pe-stat-mini-item">
+        <div class="pe-stat-mini-val" style="color:var(--dim)">${(d.file_size/1024).toFixed(1)}</div>
+        <div class="pe-stat-mini-lbl">KB &bull; ${escHtml(d.file_name)}</div>
+      </div>
+    </div>`;
+}
+
+function _peRenderOverview(d) {
+  const rows = [
+    ['File',          escHtml(d.file_name)],
+    ['Size',          `${d.file_size.toLocaleString()} bytes &nbsp;<span class="text-dim text-xs">(${(d.file_size/1024).toFixed(1)} KB)</span>`],
+    ['MD5',           `<code style="font-size:11px;word-break:break-all">${d.md5}</code>`],
+    ['SHA1',          `<code style="font-size:11px;word-break:break-all">${d.sha1 || '—'}</code>`],
+    ['SHA256',        `<code style="font-size:11px;word-break:break-all">${d.sha256}</code>`],
+    ['Arch / Type',   `<span style="color:var(--purple)">${escHtml(d.arch)}</span> &nbsp; ${escHtml(d.pe_type)} &nbsp; <span class="text-dim">${escHtml(d.subsystem)}</span>`],
+    ['Timestamp',     escHtml(d.timestamp)],
+    ['Entry Point',   `<code style="font-size:11px">${d.entry_point}</code>`],
+    ['Image Base',    `<code style="font-size:11px">${d.image_base}</code>`],
+    ['Packer',        d.packer ? `<span style="color:var(--red);font-weight:600">${escHtml(d.packer)}</span>` : '<span class="text-dim">none detected</span>'],
+    ['Overlay',       d.overlay
+      ? `<span style="color:var(--yellow)">yes &mdash; offset ${d.overlay.offset.toLocaleString()}, ${d.overlay.size.toLocaleString()} bytes, entropy ${d.overlay.entropy}</span>`
+      : '<span class="text-dim">none</span>'],
+    ['Overall Entropy', `<span style="color:${d.overall_entropy > 6.5 ? 'var(--red)' : d.overall_entropy > 5 ? 'var(--yellow)' : 'var(--green)'}">${d.overall_entropy.toFixed(3)}</span>`],
+  ];
+  document.getElementById('pe-overview-table').innerHTML =
+    '<tbody>' + rows.map(([k, v]) =>
+      `<tr><td class="pe-kv-key">${k}</td><td>${v}</td></tr>`
+    ).join('') + '</tbody>';
+}
+
+function _peRenderSections(d) {
+  const hdr = `<thead><tr>
+    <th>Name</th><th>Virt Addr</th><th>Raw Size</th><th>Entropy</th><th>RWX</th><th>Note</th>
+  </tr></thead>`;
+  const body = d.sections.map(s => {
+    const rwx = (s.readable?'r':'-') + (s.writable?'w':'-') + (s.executable?'x':'-');
+    const ec  = s.entropy > 6.8 ? 'var(--red)' : s.entropy > 6.0 ? 'var(--yellow)' : 'var(--green)';
+    const note = s.entropy > 6.8
+      ? '<span style="color:var(--red)">[!] high entropy</span>'
+      : (s.writable && s.executable ? '<span style="color:var(--yellow)">writable+exec</span>' : '');
+    return `<tr>
+      <td><code style="color:var(--cyan)">${escHtml(s.name)}</code></td>
+      <td class="text-dim text-xs">${s.virt_addr}</td>
+      <td class="text-dim text-xs">${s.raw_size.toLocaleString()}</td>
+      <td style="color:${ec};font-family:var(--mono)">${s.entropy.toFixed(3)}</td>
+      <td class="text-dim text-xs">${rwx}</td>
+      <td>${note}</td>
+    </tr>`;
+  }).join('');
+  document.getElementById('pe-sections-table').innerHTML = hdr + '<tbody>' + body + '</tbody>';
+}
+
+function _peRenderImports(d) {
+  const hdr = `<thead><tr>
+    <th>DLL</th><th>Functions</th><th>Suspicious</th><th>Sample APIs</th>
+  </tr></thead>`;
+  const body = d.imports.map(imp => {
+    const sc = imp.suspicious_count;
+    const scColor = sc > 3 ? 'var(--red)' : sc > 0 ? 'var(--yellow)' : 'var(--green)';
+    const sample = imp.functions.slice(0,5).join(', ') + (imp.functions.length > 5 ? ` ... +${imp.functions.length-5}` : '');
+    return `<tr data-dll="${escAttr(imp.dll)}" data-fns="${escAttr(imp.functions.join(','))}">
+      <td><code style="color:var(--purple)">${escHtml(imp.dll)}</code></td>
+      <td class="text-dim text-xs">${imp.function_count}</td>
+      <td style="color:${scColor};font-weight:600">${sc}</td>
+      <td class="text-dim text-xs">${escHtml(sample)}</td>
+    </tr>`;
+  }).join('');
+  document.getElementById('pe-imports-table').innerHTML = hdr + '<tbody id="pe-imports-body">' + body + '</tbody>';
+}
+
+function filterPeImports() {
+  const q = document.getElementById('pe-imp-q').value.toLowerCase();
+  document.querySelectorAll('#pe-imports-body tr').forEach(tr => {
+    const dll = tr.dataset.dll?.toLowerCase() || '';
+    const fns = tr.dataset.fns?.toLowerCase() || '';
+    tr.style.display = (!q || dll.includes(q) || fns.includes(q)) ? '' : 'none';
+  });
+}
+
+function _peRenderSuspicious(d) {
+  const el = document.getElementById('pe-suspicious-body');
+  const by_cat = d.suspicious_by_category || {};
+  const cats = Object.keys(by_cat);
+  if (!cats.length) {
+    el.innerHTML = '<div class="empty"><div>No suspicious imports detected.</div></div>';
+    return;
+  }
+  const RISK = {injection:'CRITICAL',hollowing:'CRITICAL',anti_debug:'HIGH',anti_vm:'HIGH',
+    network:'MEDIUM',credential:'MEDIUM',execution:'MEDIUM',persistence:'MEDIUM',keylog_screen:'MEDIUM'};
+  const rows = cats.map(cat => {
+    const color = _CAT_STYLE[cat] || 'var(--dim)';
+    const risk  = RISK[cat] || 'LOW';
+    const apis  = by_cat[cat].map(a =>
+      `<code style="font-size:11px;color:var(--cyan);white-space:nowrap">${escHtml(a)}</code>`
+    ).join(' ');
+    return `<tr>
+      <td style="white-space:nowrap"><span style="color:${color};font-weight:600">${cat.replace(/_/g,' ')}</span></td>
+      <td style="white-space:nowrap"><span class="badge" style="background:${color}22;color:${color};font-size:10px">${risk}</span></td>
+      <td style="line-height:1.8">${apis}</td>
+    </tr>`;
+  }).join('');
+  el.innerHTML = `<div class="tbl-wrap"><table class="data-table"><thead><tr>
+    <th>Category</th><th>Risk</th><th>APIs</th>
+  </tr></thead><tbody>${rows}</tbody></table></div>`;
+}
+
 // -----------------------------------
 
 async function loadVtScanner() {
