@@ -1515,18 +1515,19 @@ the CLI builder (the dashboard handles them separately).
 
 ## Commands
 
-| command               | description                                     |
-|-----------------------|-------------------------------------------------|
-| `list [filter]`       | list compilable modules; filter by platform/cat |
-| `list stealer`        | list standalone stealer modules                 |
-| `list persistence`    | list persistence mechanisms                     |
-| `search <query>`      | search meow modules + stealers simultaneously   |
-| `build <slug>`        | compile meow module -- colorized compiler log   |
-| `build <stealer>`     | compile stealer + choose persistence mechanism  |
-| `history [N]`         | last N builds from DB (default 20)              |
-| `show <build-id>`     | full compiler log for a specific build          |
-| `help [cmd]`          | show this help, or docs for a specific command  |
-| `back`                | return to main menu                             |
+| command               | description                                       |
+|-----------------------|---------------------------------------------------|
+| `list [filter]`       | list compilable modules; filter by platform/cat   |
+| `list stealer`        | list standalone stealer modules                   |
+| `list persistence`    | list persistence mechanisms                       |
+| `search <query>`      | search meow modules + stealers simultaneously     |
+| `build <slug>`        | compile meow module -- colorized compiler log     |
+| `build <stealer>`     | compile stealer + choose persistence mechanism    |
+| `history [N]`         | last N builds from DB (default 20)                |
+| `show <build-id>`     | full compiler log for a specific build            |
+| `clear`               | delete build history from DB + binaries from disk |
+| `help [cmd]`          | show this help, or docs for a specific command    |
+| `back`                | return to main menu                               |
 
 ## Filters for list
 
@@ -1718,6 +1719,30 @@ Show full details and compiler log for a specific build.
 1. Build metadata panel: ID, slug, platform, compiler, status, date, duration
 2. Full compiler log with colorized `[ok]` / `[fail]` / `[warn]` markers
    (long logs open in a pager; press `q` to exit)
+""",
+        "clear": """\
+## clear
+
+Delete all build history from the database **and** delete all compiled
+binaries (`peekaboo.exe`, `persistence.exe`) from the `malware/` tree.
+
+Does **not** touch TTPs, Sigma rules, MITRE ATT&CK data, or Malpedia.
+
+**Usage:**
+
+    clear
+
+A confirmation prompt is shown before anything is deleted.
+
+**What is removed:**
+
+- All rows in the `builds` DB table
+- Every `peekaboo.exe` found under `malware/**`
+- Every `persistence.exe` found under `malware/**`
+
+**Examples:**
+
+    clear
 """,
     },
 }
@@ -4461,7 +4486,7 @@ def run_pe() -> None:
 BUILD_PAGE_SIZE = PAGE_SIZE
 
 BUILDER_COMMANDS = [
-    "list", "search", "build", "history", "show", "help", "back",
+    "list", "search", "build", "history", "show", "clear", "help", "back",
 ]
 
 BUILDER_HELP = [
@@ -4470,6 +4495,7 @@ BUILDER_HELP = [
     ("build <slug>",     "compile module and save to samples/"),
     ("history [N]",      "show last N builds from DB (default 20)"),
     ("show <build-id>",  "full compiler log for a specific build"),
+    ("clear",            "delete build history from DB + compiled binaries from disk"),
     ("help",             "show this help"),
     ("back",             "return to main menu"),
 ]
@@ -5510,6 +5536,39 @@ def run_builder() -> None:
                 _render_history_table(builds)
             except Exception as exc:
                 console.print(f"  [err][=^..^=] db error: {exc}[/err]\n")
+
+        # -- clear ------------------------------------------------------------
+        elif cmd == "clear":
+            console.print(
+                "\n  [warn]This will delete ALL build history from the database[/warn]\n"
+                "  [warn]and ALL compiled binaries (peekaboo.exe / persistence.exe)[/warn]\n"
+                "  [warn]from the malware/ directory tree.[/warn]\n"
+            )
+            try:
+                confirm = session.prompt("  Type  yes  to confirm: ").strip().lower()
+            except (KeyboardInterrupt, EOFError):
+                console.print("  [dim]cancelled[/dim]\n")
+                continue
+            if confirm != "yes":
+                console.print("  [dim]cancelled[/dim]\n")
+                continue
+            try:
+                _db.clear_builds()
+            except Exception as exc:
+                console.print(f"  [err][=^..^=] db error: {exc}[/err]\n")
+                continue
+            deleted = []
+            for pattern in ("peekaboo.exe", "persistence.exe"):
+                for f in _mal_dir.rglob(pattern):
+                    try:
+                        f.unlink()
+                        deleted.append(f)
+                    except Exception:
+                        pass
+            console.print(
+                f"  [ok][=^..^=] build history cleared  |  "
+                f"{len(deleted)} binary file{'s' if len(deleted) != 1 else ''} deleted[/ok]\n"
+            )
 
         # -- show <build-id> --------------------------------------------------
         elif cmd == "show":
