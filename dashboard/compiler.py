@@ -81,6 +81,15 @@ def _apply_credential_subs(src: str) -> str:
         if cfg.get("api_key"):
             subs["ANGELCAM_API_KEY_PLACEHOLDER"] = cfg["api_key"]
 
+    if re.search(r'hooks\.slack|sendToSlack|SLACK', src, re.I):
+        cfg = _load_cfg("slack_config")
+        url = cfg.get("webhook_url", "")
+        if url and "YOUR/WEBHOOK" not in url:
+            # replace the hardcoded test path inside the WinHttpOpenRequest call
+            subs["/services/T05LNF51FAM/B09M7L8BQ91/GQtnKW33OKeQzTZbkZvustAu"] = \
+                "/" + url.split("hooks.slack.com/", 1)[-1] if "hooks.slack.com/" in url else url
+            subs["SLACK_WEBHOOK_URL_PLACEHOLDER"] = url
+
     for k, v in subs.items():
         if k and v:
             src = src.replace(k, v)

