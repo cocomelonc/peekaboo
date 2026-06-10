@@ -2626,16 +2626,20 @@ async function loadBuildHistory() {
   tbody.innerHTML = logs.slice(0,20).map(b => {
     const p   = b.params || {};
     const st  = b.status === 'success' ? 'badge-green' : 'badge-red';
-    const mod = p.slug || p.injection || p.stealer || '-';
+    let mod;
+    if (p.slug)                       mod = p.slug;
+    else if (p.malware === 'stealer') mod = p.stealer || '-';
+    else if (p.malware === 'ttp')     mod = p.meow_slug || p.attack_id || '-';
+    else                               mod = p.injection || '-';
     const mode = p.slug ? 'module' : (p.malware || '-');
     let binCell = '<span class="text-dim text-xs">-</span>';
-    if (b.status === 'success' && b.binary_available) {
-      const fname = b.binary_name || 'peekaboo.exe';
-      binCell = `<div style="display:flex;gap:4px;align-items:center;flex-wrap:wrap">
-        <a href="/api/build/${b.id}/binary/${fname}" class="btn btn-green btn-sm" title="Download binary" download>⬇ ${fname}</a>
-        <button class="btn btn-ghost btn-sm" title="Generate YARA rule" onclick="yaraFromBuildId('${b.id}','${fname}')">🔰 YARA</button>
-        <button class="btn btn-ghost btn-sm" title="Scan with VirusTotal" onclick="vtFromBuildId('${b.id}','${fname}')">🔬 VT</button>
-      </div>`;
+    if (b.status === 'success' && b.binary_files?.length) {
+      binCell = `<div style="display:flex;gap:4px;align-items:center;flex-wrap:wrap">` +
+        b.binary_files.map(f => `
+          <a href="/api/build/${b.id}/binary/${f.name}" class="btn btn-green btn-sm" title="Download ${f.name}" download>⬇ ${f.name}</a>
+          <button class="btn btn-ghost btn-sm" title="Generate YARA rule" onclick="yaraFromBuildId('${b.id}','${f.name}')">🔰 YARA</button>
+          <button class="btn btn-ghost btn-sm" title="Scan with VirusTotal" onclick="vtFromBuildId('${b.id}','${f.name}')">🔬 VT</button>
+        `).join('') + `</div>`;
     } else if (b.status === 'success') {
       binCell = '<span class="text-dim text-xs">not on disk</span>';
     }
@@ -3568,15 +3572,19 @@ async function loadVtBuilds() {
   const builds = await fetch('/api/logs?limit=50').then(r => r.json()).catch(() => []);
   const menu = document.getElementById('vt-build-menu');
   menu.innerHTML = '';
-  const available = builds.filter(b => b.status === 'success' && b.binary_available);
+  const available = builds.filter(b => b.status === 'success' && b.binary_files?.length);
   if (!available.length) {
     menu.innerHTML = '<div class="vt-select-opt vt-ph">no compiled binaries found</div>';
     return;
   }
   for (const b of available) {
-    const p     = b.params || {};
-    const mod   = p.slug || p.stealer || p.injection || b.id;
-    const fname = b.binary_name || 'peekaboo.exe';
+    const p   = b.params || {};
+    let mod;
+    if (p.slug)                       mod = p.slug;
+    else if (p.malware === 'stealer') mod = p.stealer || b.id;
+    else if (p.malware === 'ttp')     mod = p.meow_slug || p.attack_id || b.id;
+    else                               mod = p.injection || b.id;
+    const fname = b.binary_files[0].name;
     const label = `${b.id}  ·  ${mod}  (${fname})  ${b.created?.slice(0,16)||''}`;
     const div   = document.createElement('div');
     div.className     = 'vt-select-opt';
@@ -3783,15 +3791,19 @@ async function loadYaraBuilds() {
   const builds = await fetch('/api/logs?limit=50').then(r => r.json()).catch(() => []);
   const menu = document.getElementById('yara-build-menu');
   menu.innerHTML = '';
-  const available = builds.filter(b => b.status === 'success' && b.binary_available);
+  const available = builds.filter(b => b.status === 'success' && b.binary_files?.length);
   if (!available.length) {
     menu.innerHTML = '<div class="vt-select-opt vt-ph">no compiled binaries found</div>';
     return;
   }
   for (const b of available) {
-    const p     = b.params || {};
-    const mod   = p.slug || p.stealer || p.injection || b.id;
-    const fname = b.binary_name || 'peekaboo.exe';
+    const p   = b.params || {};
+    let mod;
+    if (p.slug)                       mod = p.slug;
+    else if (p.malware === 'stealer') mod = p.stealer || b.id;
+    else if (p.malware === 'ttp')     mod = p.meow_slug || p.attack_id || b.id;
+    else                               mod = p.injection || b.id;
+    const fname = b.binary_files[0].name;
     const label = `${b.id}  ·  ${mod}  (${fname})  ${b.created?.slice(0,16)||''}`;
     const div   = document.createElement('div');
     div.className   = 'vt-select-opt';

