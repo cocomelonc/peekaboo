@@ -1660,6 +1660,9 @@ code{font-family:var(--mono);font-size:12px;background:var(--bg4);padding:1px 5p
     <div class="pe-card">
       <div class="pe-tabs">
         <div class="pe-tab active" id="petab-overview"   onclick="switchPeTab('overview')">Overview</div>
+        <div class="pe-tab"        id="petab-dos"        onclick="switchPeTab('dos')">DOS Header</div>
+        <div class="pe-tab"        id="petab-filehdr"    onclick="switchPeTab('filehdr')">File Header</div>
+        <div class="pe-tab"        id="petab-opthdr"     onclick="switchPeTab('opthdr')">Optional Header</div>
         <div class="pe-tab"        id="petab-sections"   onclick="switchPeTab('sections')">Sections</div>
         <div class="pe-tab"        id="petab-imports"    onclick="switchPeTab('imports')">Imports</div>
         <div class="pe-tab"        id="petab-suspicious" onclick="switchPeTab('suspicious')">Suspicious APIs</div>
@@ -1671,6 +1674,27 @@ code{font-family:var(--mono);font-size:12px;background:var(--bg4);padding:1px 5p
         <div id="pe-section-overview">
           <div class="tbl-wrap">
             <table class="pe-kv-table" id="pe-overview-table"></table>
+          </div>
+        </div>
+
+        <!-- DOS header -->
+        <div id="pe-section-dos" style="display:none">
+          <div class="tbl-wrap">
+            <table class="pe-kv-table" id="pe-dos-table"></table>
+          </div>
+        </div>
+
+        <!-- File header -->
+        <div id="pe-section-filehdr" style="display:none">
+          <div class="tbl-wrap">
+            <table class="pe-kv-table" id="pe-filehdr-table"></table>
+          </div>
+        </div>
+
+        <!-- Optional header -->
+        <div id="pe-section-opthdr" style="display:none">
+          <div class="tbl-wrap">
+            <table class="pe-kv-table" id="pe-opthdr-table"></table>
           </div>
         </div>
 
@@ -3433,7 +3457,7 @@ function _scoreBar(score) {
 
 function switchPeTab(tab) {
   _peActiveTab = tab;
-  ['overview','sections','imports','suspicious'].forEach(t => {
+  ['overview','dos','filehdr','opthdr','sections','imports','suspicious'].forEach(t => {
     document.getElementById('petab-' + t)?.classList.toggle('active', t === tab);
     const s = document.getElementById('pe-section-' + t);
     if (s) s.style.display = t === tab ? '' : 'none';
@@ -3484,6 +3508,9 @@ async function _peRun(fetchFn) {
 function _peRenderAll(d) {
   _peRenderStats(d);
   _peRenderOverview(d);
+  _peRenderDosHeader(d);
+  _peRenderFileHeader(d);
+  _peRenderOptHeader(d);
   _peRenderSections(d);
   _peRenderImports(d);
   _peRenderSuspicious(d);
@@ -3549,21 +3576,117 @@ function _peRenderOverview(d) {
     ).join('') + '</tbody>';
 }
 
+function _peKvTable(rows, tableId) {
+  document.getElementById(tableId).innerHTML =
+    '<tbody>' + rows.map(([k, v]) =>
+      `<tr><td class="pe-kv-key">${k}</td><td>${v}</td></tr>`
+    ).join('') + '</tbody>';
+}
+
+function _peHex(v) { return `<code style="font-size:11px">${escHtml(String(v))}</code>`; }
+function _peDim(v) { return `<span class="text-dim text-xs">${escHtml(String(v))}</span>`; }
+function _peFlags(arr) {
+  if (!arr || !arr.length) return '<span class="text-dim text-xs">none</span>';
+  return arr.map(f => `<span class="ev-hist-tag" style="font-size:10px">${escHtml(f)}</span>`).join(' ');
+}
+
+function _peRenderDosHeader(d) {
+  const dh = d.dos_header;
+  if (!dh) return;
+  _peKvTable([
+    ['e_magic (signature)',        _peHex(dh.e_magic)],
+    ['e_cblp (bytes on last page)',_peDim(dh.e_cblp)],
+    ['e_cp (pages in file)',       _peDim(dh.e_cp)],
+    ['e_crlc (relocations)',       _peDim(dh.e_crlc)],
+    ['e_cparhdr (header paragraphs)', _peDim(dh.e_cparhdr)],
+    ['e_minalloc',                 _peDim(dh.e_minalloc)],
+    ['e_maxalloc',                 _peDim(dh.e_maxalloc)],
+    ['e_ss (initial SS)',          _peHex(dh.e_ss)],
+    ['e_sp (initial SP)',          _peHex(dh.e_sp)],
+    ['e_csum (checksum)',          _peHex(dh.e_csum)],
+    ['e_ip (initial IP)',          _peHex(dh.e_ip)],
+    ['e_cs (initial CS)',          _peHex(dh.e_cs)],
+    ['e_lfarlc (reloc table offset)', _peHex(dh.e_lfarlc)],
+    ['e_ovno (overlay number)',    _peDim(dh.e_ovno)],
+    ['e_oemid',                    _peDim(dh.e_oemid)],
+    ['e_oeminfo',                  _peDim(dh.e_oeminfo)],
+    ['e_lfanew (PE signature offset)', _peHex(dh.e_lfanew)],
+  ], 'pe-dos-table');
+}
+
+function _peRenderFileHeader(d) {
+  const fh = d.file_header;
+  if (!fh) return;
+  _peKvTable([
+    ['Machine',               `${_peHex(fh.machine)} &nbsp; <span class="text-dim text-xs">${escHtml(fh.machine_str)}</span>`],
+    ['NumberOfSections',      _peDim(fh.number_of_sections)],
+    ['TimeDateStamp',         `${escHtml(fh.time_date_stamp)} &nbsp; ${_peHex(fh.time_date_stamp_raw)}`],
+    ['PointerToSymbolTable',  _peHex(fh.pointer_to_symbol_table)],
+    ['NumberOfSymbols',       _peDim(fh.number_of_symbols)],
+    ['SizeOfOptionalHeader',  _peDim(fh.size_of_optional_header)],
+    ['Characteristics',       _peHex(fh.characteristics)],
+    ['Characteristics (flags)', _peFlags(fh.characteristics_flags)],
+  ], 'pe-filehdr-table');
+}
+
+function _peRenderOptHeader(d) {
+  const oh = d.optional_header;
+  if (!oh) return;
+  const rows = [
+    ['Magic',                    `${_peHex(oh.magic)} &nbsp; <span class="text-dim text-xs">${escHtml(oh.magic_str)}</span>`],
+    ['LinkerVersion',            _peDim(oh.linker_version)],
+    ['SizeOfCode',               _peDim(oh.size_of_code?.toLocaleString())],
+    ['SizeOfInitializedData',    _peDim(oh.size_of_initialized_data?.toLocaleString())],
+    ['SizeOfUninitializedData',  _peDim(oh.size_of_uninitialized_data?.toLocaleString())],
+    ['AddressOfEntryPoint',      _peHex(oh.address_of_entry_point)],
+    ['BaseOfCode',               _peHex(oh.base_of_code)],
+  ];
+  if (oh.base_of_data !== undefined) rows.push(['BaseOfData', _peHex(oh.base_of_data)]);
+  rows.push(
+    ['ImageBase',               _peHex(oh.image_base)],
+    ['SectionAlignment',        _peDim(oh.section_alignment?.toLocaleString())],
+    ['FileAlignment',           _peDim(oh.file_alignment?.toLocaleString())],
+    ['OSVersion',               _peDim(oh.os_version)],
+    ['ImageVersion',            _peDim(oh.image_version)],
+    ['SubsystemVersion',        _peDim(oh.subsystem_version)],
+    ['Win32VersionValue',       _peDim(oh.win32_version_value)],
+    ['SizeOfImage',             _peDim(oh.size_of_image?.toLocaleString())],
+    ['SizeOfHeaders',           _peDim(oh.size_of_headers?.toLocaleString())],
+    ['CheckSum',                _peHex(oh.checksum)],
+    ['Subsystem',               `${_peDim(oh.subsystem)} &nbsp; <span class="text-dim text-xs">${escHtml(oh.subsystem_str)}</span>`],
+    ['DllCharacteristics',      _peHex(oh.dll_characteristics)],
+    ['DllCharacteristics (flags)', _peFlags(oh.dll_characteristics_flags)],
+    ['SizeOfStackReserve',      _peDim(oh.size_of_stack_reserve?.toLocaleString())],
+    ['SizeOfStackCommit',       _peDim(oh.size_of_stack_commit?.toLocaleString())],
+    ['SizeOfHeapReserve',       _peDim(oh.size_of_heap_reserve?.toLocaleString())],
+    ['SizeOfHeapCommit',        _peDim(oh.size_of_heap_commit?.toLocaleString())],
+    ['NumberOfRvaAndSizes',     _peDim(oh.number_of_rva_and_sizes)],
+  );
+  _peKvTable(rows, 'pe-opthdr-table');
+}
+
 function _peRenderSections(d) {
   const hdr = `<thead><tr>
-    <th>Name</th><th>Virt Addr</th><th>Raw Size</th><th>Entropy</th><th>RWX</th><th>Note</th>
+    <th>Name</th><th>Virt Addr</th><th>Virt Size</th>
+    <th>Raw Offset</th><th>Raw Size</th>
+    <th>Entropy</th><th>Characteristics</th><th>RWX</th><th>Note</th>
   </tr></thead>`;
   const body = d.sections.map(s => {
     const rwx = (s.readable?'r':'-') + (s.writable?'w':'-') + (s.executable?'x':'-');
     const ec  = s.entropy > 6.8 ? 'var(--red)' : s.entropy > 6.0 ? 'var(--yellow)' : 'var(--green)';
     const note = s.entropy > 6.8
-      ? '<span style="color:var(--red)">[=^..^=] high entropy</span>'
-      : (s.writable && s.executable ? '<span style="color:var(--yellow)">writable+exec</span>' : '');
+      ? '<span style="color:var(--red)">high entropy</span>'
+      : (s.writable && s.executable ? '<span style="color:var(--yellow)">W+X</span>' : '');
+    const flags = (s.characteristics_flags || []).join(' ');
+    const flagsTitle = flags ? ` title="${escAttr(flags)}"` : '';
     return `<tr>
       <td><code style="color:var(--cyan)">${escHtml(s.name)}</code></td>
       <td class="text-dim text-xs">${s.virt_addr}</td>
+      <td class="text-dim text-xs">${s.virt_size?.toLocaleString() ?? '-'}</td>
+      <td class="text-dim text-xs">${s.pointer_to_raw_data ?? '-'}</td>
       <td class="text-dim text-xs">${s.raw_size.toLocaleString()}</td>
       <td style="color:${ec};font-family:var(--mono)">${s.entropy.toFixed(3)}</td>
+      <td class="text-dim text-xs"${flagsTitle}>${s.characteristics ?? '-'}</td>
       <td class="text-dim text-xs">${rwx}</td>
       <td>${note}</td>
     </tr>`;

@@ -161,6 +161,57 @@ _SUBSYSTEM: dict[int, str] = {
 }
 
 # ---------------------------------------------------------------------------
+# Machine types
+# ---------------------------------------------------------------------------
+
+_MACHINE: dict[int, str] = {
+    0x0000: "unknown",  0x014C: "x86",     0x0200: "ia64",
+    0x8664: "x86_64",   0xAA64: "arm64",   0x01C0: "arm",
+    0x01C4: "arm_thumb",0x5032: "riscv32", 0x5064: "riscv64",
+    0x0EBC: "efi_byte_code",
+}
+
+# File header characteristic flags
+_FILE_CHARS: list[tuple[int, str]] = [
+    (0x0001, "RELOCS_STRIPPED"),      (0x0002, "EXECUTABLE_IMAGE"),
+    (0x0004, "LINE_NUMS_STRIPPED"),   (0x0008, "LOCAL_SYMS_STRIPPED"),
+    (0x0010, "AGGRESSIVE_WS_TRIM"),   (0x0020, "LARGE_ADDRESS_AWARE"),
+    (0x0080, "BYTES_REVERSED_LO"),    (0x0100, "32BIT_MACHINE"),
+    (0x0200, "DEBUG_STRIPPED"),       (0x0400, "REMOVABLE_RUN_FROM_SWAP"),
+    (0x0800, "NET_RUN_FROM_SWAP"),    (0x1000, "SYSTEM"),
+    (0x2000, "DLL"),                  (0x4000, "UP_SYSTEM_ONLY"),
+    (0x8000, "BYTES_REVERSED_HI"),
+]
+
+# DLL characteristic flags
+_DLL_CHARS: list[tuple[int, str]] = [
+    (0x0020, "HIGH_ENTROPY_VA"),      (0x0040, "DYNAMIC_BASE"),
+    (0x0080, "FORCE_INTEGRITY"),      (0x0100, "NX_COMPAT"),
+    (0x0200, "NO_ISOLATION"),         (0x0400, "NO_SEH"),
+    (0x0800, "NO_BIND"),              (0x1000, "APPCONTAINER"),
+    (0x2000, "WDM_DRIVER"),           (0x4000, "GUARD_CF"),
+    (0x8000, "TERMINAL_SERVER_AWARE"),
+]
+
+# Section characteristic flags
+_SEC_CHARS: list[tuple[int, str]] = [
+    (0x00000008, "NO_PAD"),           (0x00000020, "CNT_CODE"),
+    (0x00000040, "CNT_INITIALIZED"),  (0x00000080, "CNT_UNINITIALIZED"),
+    (0x00000200, "LNK_INFO"),         (0x00000800, "LNK_REMOVE"),
+    (0x00001000, "LNK_COMDAT"),       (0x00004000, "NO_DEFER_SPEC_EXC"),
+    (0x00008000, "GPREL"),            (0x01000000, "LNK_NRELOC_OVFL"),
+    (0x02000000, "MEM_DISCARDABLE"), (0x04000000, "MEM_NOT_CACHED"),
+    (0x08000000, "MEM_NOT_PAGED"),   (0x10000000, "MEM_SHARED"),
+    (0x20000000, "MEM_EXECUTE"),     (0x40000000, "MEM_READ"),
+    (0x80000000, "MEM_WRITE"),
+]
+
+
+def _flags(value: int, table: list[tuple[int, str]]) -> list[str]:
+    return [name for mask, name in table if value & mask]
+
+
+# ---------------------------------------------------------------------------
 # Entropy helper
 # ---------------------------------------------------------------------------
 
@@ -220,6 +271,94 @@ def analyze(source: str | Path | bytes) -> dict[str, Any]:
     result["subsystem"]   = _SUBSYSTEM.get(pe.OPTIONAL_HEADER.Subsystem, str(pe.OPTIONAL_HEADER.Subsystem))
     result["image_size"]  = pe.OPTIONAL_HEADER.SizeOfImage
 
+    # -- DOS header ---------------------------------------------------------
+    def _gh(obj: Any, field: str, default: Any = 0) -> Any:
+        """Safe getattr for pefile Structure objects."""
+        return getattr(obj, field, default)
+
+    dh = pe.DOS_HEADER
+    result["dos_header"] = {
+        "e_magic":    hex(_gh(dh, "e_magic")),
+        "e_cblp":     _gh(dh, "e_cblp"),
+        "e_cp":       _gh(dh, "e_cp"),
+        "e_crlc":     _gh(dh, "e_crlc"),
+        "e_cparhdr":  _gh(dh, "e_cparhdr"),
+        "e_minalloc": _gh(dh, "e_minalloc"),
+        "e_maxalloc": _gh(dh, "e_maxalloc"),
+        "e_ss":       hex(_gh(dh, "e_ss")),
+        "e_sp":       hex(_gh(dh, "e_sp")),
+        "e_csum":     hex(_gh(dh, "e_csum")),
+        "e_ip":       hex(_gh(dh, "e_ip")),
+        "e_cs":       hex(_gh(dh, "e_cs")),
+        "e_lfarlc":   hex(_gh(dh, "e_lfarlc")),
+        "e_ovno":     _gh(dh, "e_ovno"),
+        "e_oemid":    _gh(dh, "e_oemid"),
+        "e_oeminfo":  _gh(dh, "e_oeminfo"),
+        "e_lfanew":   hex(_gh(dh, "e_lfanew")),
+    }
+
+    # -- File header (COFF) -------------------------------------------------
+    fh = pe.FILE_HEADER
+    fh_chars = _gh(fh, "Characteristics")
+    result["file_header"] = {
+        "machine":                  hex(_gh(fh, "Machine")),
+        "machine_str":              _MACHINE.get(_gh(fh, "Machine"), hex(_gh(fh, "Machine"))),
+        "number_of_sections":       _gh(fh, "NumberOfSections"),
+        "time_date_stamp":          _ts(_gh(fh, "TimeDateStamp")),
+        "time_date_stamp_raw":      hex(_gh(fh, "TimeDateStamp")),
+        "pointer_to_symbol_table":  hex(_gh(fh, "PointerToSymbolTable")),
+        "number_of_symbols":        _gh(fh, "NumberOfSymbols"),
+        "size_of_optional_header":  _gh(fh, "SizeOfOptionalHeader"),
+        "characteristics":          hex(fh_chars),
+        "characteristics_flags":    _flags(fh_chars, _FILE_CHARS),
+    }
+
+    # -- Optional header ----------------------------------------------------
+    oh = pe.OPTIONAL_HEADER
+    dll_chars = _gh(oh, "DllCharacteristics")
+    maj_link  = _gh(oh, "MajorLinkerVersion")
+    min_link  = _gh(oh, "MinorLinkerVersion")
+    maj_os    = _gh(oh, "MajorOperatingSystemVersion")
+    min_os    = _gh(oh, "MinorOperatingSystemVersion")
+    maj_img   = _gh(oh, "MajorImageVersion")
+    min_img   = _gh(oh, "MinorImageVersion")
+    maj_sub   = _gh(oh, "MajorSubsystemVersion")
+    min_sub   = _gh(oh, "MinorSubsystemVersion")
+    subsys    = _gh(oh, "Subsystem")
+    opt: dict[str, Any] = {
+        "magic":                      hex(_gh(oh, "Magic")),
+        "magic_str":                  "PE32+" if is64 else "PE32",
+        "linker_version":             f"{maj_link}.{min_link}",
+        "size_of_code":               _gh(oh, "SizeOfCode"),
+        "size_of_initialized_data":   _gh(oh, "SizeOfInitializedData"),
+        "size_of_uninitialized_data": _gh(oh, "SizeOfUninitializedData"),
+        "address_of_entry_point":     hex(_gh(oh, "AddressOfEntryPoint")),
+        "base_of_code":               hex(_gh(oh, "BaseOfCode")),
+        "image_base":                 hex(_gh(oh, "ImageBase")),
+        "section_alignment":          _gh(oh, "SectionAlignment"),
+        "file_alignment":             _gh(oh, "FileAlignment"),
+        "os_version":                 f"{maj_os}.{min_os}",
+        "image_version":              f"{maj_img}.{min_img}",
+        "subsystem_version":          f"{maj_sub}.{min_sub}",
+        "win32_version_value":        _gh(oh, "Win32VersionValue"),
+        "size_of_image":              _gh(oh, "SizeOfImage"),
+        "size_of_headers":            _gh(oh, "SizeOfHeaders"),
+        "checksum":                   hex(_gh(oh, "CheckSum")),
+        "subsystem":                  subsys,
+        "subsystem_str":              _SUBSYSTEM.get(subsys, str(subsys)),
+        "dll_characteristics":        hex(dll_chars),
+        "dll_characteristics_flags":  _flags(dll_chars, _DLL_CHARS),
+        "size_of_stack_reserve":      _gh(oh, "SizeOfStackReserve"),
+        "size_of_stack_commit":       _gh(oh, "SizeOfStackCommit"),
+        "size_of_heap_reserve":       _gh(oh, "SizeOfHeapReserve"),
+        "size_of_heap_commit":        _gh(oh, "SizeOfHeapCommit"),
+        "number_of_rva_and_sizes":    _gh(oh, "NumberOfRvaAndSizes"),
+    }
+    bd = _gh(oh, "BaseOfData", None)
+    if bd is not None:
+        opt["base_of_data"] = hex(bd)
+    result["optional_header"] = opt
+
     # -- sections -----------------------------------------------------------
     sections = []
     total_entropy = 0.0
@@ -233,15 +372,22 @@ def analyze(source: str | Path | bytes) -> dict[str, Any]:
             high_entropy_count += 1
         chars = s.Characteristics
         sections.append({
-            "name":       name,
-            "virt_addr":  hex(s.VirtualAddress),
-            "virt_size":  s.Misc_VirtualSize,
-            "raw_size":   s.SizeOfRawData,
-            "entropy":    round(ent, 3),
-            "readable":   bool(chars & 0x40000000),
-            "writable":   bool(chars & 0x80000000),
-            "executable": bool(chars & 0x20000000),
-            "suspicious": ent > 6.8 or (bool(chars & 0x80000000) and bool(chars & 0x20000000)),
+            "name":                    name,
+            "virt_addr":               hex(s.VirtualAddress),
+            "virt_size":               s.Misc_VirtualSize,
+            "raw_size":                s.SizeOfRawData,
+            "pointer_to_raw_data":     hex(s.PointerToRawData),
+            "pointer_to_relocations":  hex(s.PointerToRelocations),
+            "pointer_to_linenumbers":  hex(s.PointerToLinenumbers),
+            "number_of_relocations":   s.NumberOfRelocations,
+            "number_of_linenumbers":   s.NumberOfLinenumbers,
+            "characteristics":         hex(chars),
+            "characteristics_flags":   _flags(chars, _SEC_CHARS),
+            "entropy":                 round(ent, 3),
+            "readable":                bool(chars & 0x40000000),
+            "writable":                bool(chars & 0x80000000),
+            "executable":              bool(chars & 0x20000000),
+            "suspicious":              ent > 6.8 or (bool(chars & 0x80000000) and bool(chars & 0x20000000)),
         })
     result["sections"]         = sections
     result["section_count"]    = len(sections)

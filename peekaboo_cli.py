@@ -4691,7 +4691,8 @@ def run_shellcode() -> None:
 
 # -- PE Inspector --------------------------------------------------------------
 
-PE_COMMANDS = ["analyse", "open", "sections", "imports", "suspicious", "score", "help", "back"]
+PE_COMMANDS = ["analyse", "open", "dos-header", "file-header", "opt-header",
+               "sections", "imports", "suspicious", "score", "help", "back"]
 
 _THREAT_LABEL = {
     range(0,  20): ("LOW",      "good"),
@@ -4730,29 +4731,135 @@ def _render_pe_header(r: dict) -> None:
     ))
 
 
+def _render_kv_table(rows: list[tuple[str, str]], title: str) -> None:
+    t = Table(box=box.ROUNDED, show_header=False,
+              border_style="bright_black", padding=(0, 1), title=title)
+    t.add_column("field", style="info",  no_wrap=True, min_width=30)
+    t.add_column("value", style="cmd",   min_width=30)
+    for k, v in rows:
+        t.add_row(k, str(v))
+    console.print()
+    console.print(t)
+    console.print()
+
+
+def _render_dos_header(r: dict) -> None:
+    dh = r.get("dos_header")
+    if not dh:
+        console.print("  [warn]DOS header data not available - re-analyse the file[/warn]\n")
+        return
+    rows = [
+        ("e_magic   (signature)",         dh["e_magic"]),
+        ("e_cblp    (bytes on last page)", str(dh["e_cblp"])),
+        ("e_cp      (pages in file)",      str(dh["e_cp"])),
+        ("e_crlc    (relocations)",        str(dh["e_crlc"])),
+        ("e_cparhdr (header paragraphs)",  str(dh["e_cparhdr"])),
+        ("e_minalloc",                     str(dh["e_minalloc"])),
+        ("e_maxalloc",                     str(dh["e_maxalloc"])),
+        ("e_ss      (initial SS)",         dh["e_ss"]),
+        ("e_sp      (initial SP)",         dh["e_sp"]),
+        ("e_csum    (checksum)",           dh["e_csum"]),
+        ("e_ip      (initial IP)",         dh["e_ip"]),
+        ("e_cs      (initial CS)",         dh["e_cs"]),
+        ("e_lfarlc  (reloc table offset)", dh["e_lfarlc"]),
+        ("e_ovno    (overlay number)",     str(dh["e_ovno"])),
+        ("e_oemid",                        str(dh["e_oemid"])),
+        ("e_oeminfo",                      str(dh["e_oeminfo"])),
+        ("e_lfanew  (PE offset)",          dh["e_lfanew"]),
+    ]
+    _render_kv_table(rows, "[heading]DOS Header[/heading]")
+
+
+def _render_file_header(r: dict) -> None:
+    fh = r.get("file_header")
+    if not fh:
+        console.print("  [warn]File header data not available - re-analyse the file[/warn]\n")
+        return
+    flags_str = "  ".join(fh["characteristics_flags"]) or "none"
+    rows = [
+        ("Machine",                  f"{fh['machine']}  ({fh['machine_str']})"),
+        ("NumberOfSections",         str(fh["number_of_sections"])),
+        ("TimeDateStamp",            fh["time_date_stamp"]),
+        ("TimeDateStamp (raw)",      fh["time_date_stamp_raw"]),
+        ("PointerToSymbolTable",     fh["pointer_to_symbol_table"]),
+        ("NumberOfSymbols",          str(fh["number_of_symbols"])),
+        ("SizeOfOptionalHeader",     str(fh["size_of_optional_header"])),
+        ("Characteristics",          fh["characteristics"]),
+        ("Characteristics (flags)",  flags_str),
+    ]
+    _render_kv_table(rows, "[heading]File Header (COFF)[/heading]")
+
+
+def _render_opt_header(r: dict) -> None:
+    oh = r.get("optional_header")
+    if not oh:
+        console.print("  [warn]Optional header data not available - re-analyse the file[/warn]\n")
+        return
+    dll_flags = "  ".join(oh["dll_characteristics_flags"]) or "none"
+    rows = [
+        ("Magic",                    f"{oh['magic']}  ({oh['magic_str']})"),
+        ("LinkerVersion",            oh["linker_version"]),
+        ("SizeOfCode",               f"{oh['size_of_code']:,}"),
+        ("SizeOfInitializedData",    f"{oh['size_of_initialized_data']:,}"),
+        ("SizeOfUninitializedData",  f"{oh['size_of_uninitialized_data']:,}"),
+        ("AddressOfEntryPoint",      oh["address_of_entry_point"]),
+        ("BaseOfCode",               oh["base_of_code"]),
+    ]
+    if "base_of_data" in oh:
+        rows.append(("BaseOfData", oh["base_of_data"]))
+    rows += [
+        ("ImageBase",                oh["image_base"]),
+        ("SectionAlignment",         f"{oh['section_alignment']:,}"),
+        ("FileAlignment",            f"{oh['file_alignment']:,}"),
+        ("OSVersion",                oh["os_version"]),
+        ("ImageVersion",             oh["image_version"]),
+        ("SubsystemVersion",         oh["subsystem_version"]),
+        ("Win32VersionValue",        str(oh["win32_version_value"])),
+        ("SizeOfImage",              f"{oh['size_of_image']:,}"),
+        ("SizeOfHeaders",            f"{oh['size_of_headers']:,}"),
+        ("CheckSum",                 oh["checksum"]),
+        ("Subsystem",                f"{oh['subsystem']}  ({oh['subsystem_str']})"),
+        ("DllCharacteristics",       oh["dll_characteristics"]),
+        ("DllCharacteristics (flags)", dll_flags),
+        ("SizeOfStackReserve",       f"{oh['size_of_stack_reserve']:,}"),
+        ("SizeOfStackCommit",        f"{oh['size_of_stack_commit']:,}"),
+        ("SizeOfHeapReserve",        f"{oh['size_of_heap_reserve']:,}"),
+        ("SizeOfHeapCommit",         f"{oh['size_of_heap_commit']:,}"),
+        ("NumberOfRvaAndSizes",      str(oh["number_of_rva_and_sizes"])),
+    ]
+    _render_kv_table(rows, "[heading]Optional Header[/heading]")
+
+
 def _render_pe_sections(r: dict) -> None:
     t = Table(box=box.ROUNDED, show_header=True, header_style="bold bright_white on bright_black",
               border_style="bright_black", padding=(0, 1))
-    t.add_column("Name",       style="cmd",  no_wrap=True)
-    t.add_column("Virt Addr",  style="dim",  no_wrap=True)
-    t.add_column("Raw Size",   justify="right")
-    t.add_column("Entropy",    justify="right")
-    t.add_column("RWX",        no_wrap=True)
-    t.add_column("Note",       style="warn")
+    t.add_column("Name",          style="cmd",  no_wrap=True)
+    t.add_column("Virt Addr",     style="dim",  no_wrap=True)
+    t.add_column("Virt Size",     justify="right")
+    t.add_column("Raw Offset",    style="dim",  no_wrap=True)
+    t.add_column("Raw Size",      justify="right")
+    t.add_column("Entropy",       justify="right")
+    t.add_column("Chars",         style="dim",  no_wrap=True)
+    t.add_column("RWX",           no_wrap=True)
+    t.add_column("Note",          style="warn")
 
     for s in r["sections"]:
         rwx = ("r" if s["readable"] else "-") + ("w" if s["writable"] else "-") + ("x" if s["executable"] else "-")
         ent = s["entropy"]
         ent_style = "err" if ent > 6.8 else ("warn" if ent > 6.0 else "good")
-        note = "[err][=^..^=] high entropy[/err]" if ent > 6.8 else ("[warn]writable+exec[/warn]" if s["writable"] and s["executable"] else "")
+        note = "[err]high entropy[/err]" if ent > 6.8 else ("[warn]W+X[/warn]" if s["writable"] and s["executable"] else "")
         t.add_row(
             s["name"],
             s["virt_addr"],
+            f"{s['virt_size']:,}",
+            s.get("pointer_to_raw_data", "-"),
             f"{s['raw_size']:,}",
             f"[{ent_style}]{ent:.3f}[/{ent_style}]",
+            s.get("characteristics", "-"),
             rwx,
             note,
         )
+    console.print()
     console.print(t)
     console.print(
         f"  [dim]sections: {r['section_count']}  |  "
@@ -4858,7 +4965,10 @@ def run_pe() -> None:
             for c, desc in [
                 ("analyse <path>",  "load and fully analyse a PE file"),
                 ("open <path>",     "alias for analyse"),
-                ("sections",        "show section table with entropy"),
+                ("dos-header",      "show DOS (MZ) header fields"),
+                ("file-header",     "show COFF file header fields"),
+                ("opt-header",      "show optional header fields"),
+                ("sections",        "show section table with entropy + raw offsets + characteristics"),
                 ("imports",         "show import table"),
                 ("suspicious",      "show suspicious API hits by category"),
                 ("score",           "show threat score breakdown"),
@@ -4890,6 +5000,24 @@ def run_pe() -> None:
                 continue
             _render_pe_header(current)
             _render_pe_sections(current)
+
+        elif cmd == "dos-header":
+            if current is None:
+                console.print("  [warn][=^..^=] no file loaded -- use  analyse <path>  first[/warn]\n")
+            else:
+                _render_dos_header(current)
+
+        elif cmd == "file-header":
+            if current is None:
+                console.print("  [warn][=^..^=] no file loaded -- use  analyse <path>  first[/warn]\n")
+            else:
+                _render_file_header(current)
+
+        elif cmd == "opt-header":
+            if current is None:
+                console.print("  [warn][=^..^=] no file loaded -- use  analyse <path>  first[/warn]\n")
+            else:
+                _render_opt_header(current)
 
         elif cmd == "sections":
             if current is None:
