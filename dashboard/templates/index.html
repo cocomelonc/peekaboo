@@ -852,7 +852,7 @@ code{font-family:var(--mono);font-size:12px;background:var(--bg4);padding:1px 5p
     <div class="tbl-wrap">
       <table class="tbl">
         <thead><tr>
-          <th>ID</th><th>Mode</th><th>Encryption</th><th>Injection</th><th>Persistence</th><th>Status</th><th>Time</th>
+          <th>ID</th><th>Mode</th><th>Slug / Injection</th><th>Persistence</th><th>Status</th><th>Time</th><th>Binary</th>
         </tr></thead>
         <tbody id="build-history-tbody"></tbody>
       </table>
@@ -1369,8 +1369,32 @@ code{font-family:var(--mono);font-size:12px;background:var(--bg4);padding:1px 5p
   <!-- source selector tabs -->
   <div class="yara-src-tabs">
     <button class="btn btn-primary btn-sm" id="yara-tab-sample" onclick="yaraSetTab('sample')">📦 From Sample</button>
+    <button class="btn btn-ghost btn-sm"   id="yara-tab-build"  onclick="yaraSetTab('build')">🔨 From Build</button>
     <button class="btn btn-ghost btn-sm"   id="yara-tab-upload" onclick="yaraSetTab('upload')">⬆️ Upload File</button>
     <span class="yara-src-hint">generates YARA rules from PE metadata · strings · entry-point bytes · import hash</span>
+  </div>
+
+  <!-- -- from build -- -->
+  <div id="yara-src-build" style="display:none">
+    <div class="card mb-16">
+      <div class="card-header">
+        <span style="font-size:18px">🔨</span>
+        <div><div class="card-title">YARA from Build History</div><div class="card-sub">pick a compiled binary from any build</div></div>
+        <button class="btn btn-ghost btn-sm" style="margin-left:auto" onclick="loadYaraBuilds()">↻ Refresh</button>
+      </div>
+      <div class="vt-pick-row">
+        <div class="vt-select vt-drop-wide" id="yara-build-drop" style="flex:1">
+          <div class="vt-select-val" onclick="vtToggleDrop('yara-build-drop')">
+            <span id="yara-build-label" class="vt-ph">- select build -</span>
+            <span class="vt-select-arrow">▼</span>
+          </div>
+          <div class="vt-select-menu" id="yara-build-menu"></div>
+        </div>
+        <button class="btn btn-primary vt-pick-btn" onclick="yaraGenerateFromBuild()" id="yara-build-gen-btn">
+          ⚙️ Generate
+        </button>
+      </div>
+    </div>
   </div>
 
   <!-- -- from sample -- -->
@@ -2572,19 +2596,44 @@ async function loadBuildHistory() {
   const logs = await fetch('/api/logs').then(r=>r.json()).catch(()=>[]);
   const tbody = document.getElementById('build-history-tbody');
   if (!logs.length) { tbody.innerHTML = '<tr><td colspan="7" class="text-dim text-sm" style="padding:14px">no builds yet</td></tr>'; return; }
-  tbody.innerHTML = logs.slice(0,10).map(b => {
-    const p = b.params||{};
-    const st = b.status === 'success' ? 'badge-green' : 'badge-red';
+  tbody.innerHTML = logs.slice(0,20).map(b => {
+    const p   = b.params || {};
+    const st  = b.status === 'success' ? 'badge-green' : 'badge-red';
+    const mod = p.slug || p.injection || p.stealer || '-';
+    const mode = p.slug ? 'module' : (p.malware || '-');
+    let binCell = '<span class="text-dim text-xs">-</span>';
+    if (b.status === 'success' && b.binary_available) {
+      const fname = b.binary_name || 'peekaboo.exe';
+      binCell = `<div style="display:flex;gap:4px;align-items:center;flex-wrap:wrap">
+        <a href="/api/build/${b.id}/binary/${fname}" class="btn btn-green btn-sm" title="Download binary" download>⬇ ${fname}</a>
+        <button class="btn btn-ghost btn-sm" title="Generate YARA rule" onclick="yaraFromBuildId('${b.id}','${fname}')">🔰 YARA</button>
+      </div>`;
+    } else if (b.status === 'success') {
+      binCell = '<span class="text-dim text-xs">not on disk</span>';
+    }
     return `<tr>
       <td class="mono text-xs">${b.id}</td>
-      <td>${p.malware||'-'}</td>
-      <td>${p.encryption||'-'}</td>
-      <td>${p.injection||p.stealer||'-'}</td>
-      <td>${p.persistence||'none'}</td>
+      <td>${mode}</td>
+      <td class="text-xs">${mod}</td>
+      <td class="text-xs">${p.persistence||'none'}</td>
       <td><span class="badge ${st}">${b.status}</span></td>
       <td class="text-xs text-dim">${b.created?.slice(0,16)||''}</td>
+      <td>${binCell}</td>
     </tr>`;
   }).join('');
+}
+
+async function yaraFromBuildId(buildId, fname) {
+  showPanel('yara');
+  yaraSetTab('build');
+  await loadYaraBuilds();
+  // pre-select this build
+  _yaraSelectedBuild = buildId;
+  const lbl = document.getElementById('yara-build-label');
+  lbl.textContent = `${buildId}  (${fname})`; lbl.className = '';
+  document.querySelectorAll('#yara-build-menu .vt-select-opt').forEach(o =>
+    o.classList.toggle('vt-selected', o.dataset.bid === buildId));
+  yaraGenerateFromBuild();
 }
 
 // -----------------------------------------------------------------
@@ -3602,11 +3651,73 @@ let _yaraSelectedFile    = '';
 let _yaraCurrentRule     = '';
 let _yaraCurrentName     = '';
 
+let _yaraSelectedBuild = '';
+
 function yaraSetTab(tab) {
   document.getElementById('yara-src-sample').style.display = tab === 'sample' ? '' : 'none';
+  document.getElementById('yara-src-build').style.display  = tab === 'build'  ? '' : 'none';
   document.getElementById('yara-src-upload').style.display = tab === 'upload' ? '' : 'none';
   document.getElementById('yara-tab-sample').className = tab === 'sample' ? 'btn btn-primary btn-sm' : 'btn btn-ghost btn-sm';
+  document.getElementById('yara-tab-build').className  = tab === 'build'  ? 'btn btn-primary btn-sm' : 'btn btn-ghost btn-sm';
   document.getElementById('yara-tab-upload').className = tab === 'upload' ? 'btn btn-primary btn-sm' : 'btn btn-ghost btn-sm';
+  if (tab === 'build' && !document.getElementById('yara-build-menu').children.length) {
+    loadYaraBuilds();
+  }
+}
+
+async function loadYaraBuilds() {
+  const builds = await fetch('/api/logs?limit=50').then(r => r.json()).catch(() => []);
+  const menu = document.getElementById('yara-build-menu');
+  menu.innerHTML = '';
+  const available = builds.filter(b => b.status === 'success' && b.binary_available);
+  if (!available.length) {
+    menu.innerHTML = '<div class="vt-select-opt vt-ph">no compiled binaries found</div>';
+    return;
+  }
+  for (const b of available) {
+    const p     = b.params || {};
+    const mod   = p.slug || p.stealer || p.injection || b.id;
+    const fname = b.binary_name || 'peekaboo.exe';
+    const label = `${b.id}  ·  ${mod}  (${fname})  ${b.created?.slice(0,16)||''}`;
+    const div   = document.createElement('div');
+    div.className   = 'vt-select-opt';
+    div.textContent = label;
+    div.dataset.bid = b.id;
+    div.dataset.fname = fname;
+    div.onclick = () => {
+      _yaraSelectedBuild = b.id;
+      const lbl = document.getElementById('yara-build-label');
+      lbl.textContent = label; lbl.className = '';
+      document.querySelectorAll('#yara-build-menu .vt-select-opt').forEach(o =>
+        o.classList.toggle('vt-selected', o.dataset.bid === b.id));
+      vtCloseDrop('yara-build-drop');
+    };
+    menu.appendChild(div);
+  }
+}
+
+async function yaraGenerateFromBuild() {
+  const bid = _yaraSelectedBuild;
+  if (!bid) { toast('Select a build first', 'warn'); return; }
+
+  document.getElementById('yara-results').style.display  = 'none';
+  document.getElementById('yara-empty').style.display    = 'none';
+  document.getElementById('yara-progress').style.display = '';
+  document.getElementById('yara-progress-title').textContent = 'Analysing build binary…';
+  document.getElementById('yara-progress-fill').style.width  = '40%';
+  document.getElementById('yara-build-gen-btn').disabled = true;
+
+  const r = await fetch('/api/yara/from-build', {
+    method: 'POST',
+    headers: {'Content-Type': 'application/json'},
+    body: JSON.stringify({build_id: bid}),
+  }).then(r => r.json()).catch(e => ({ok: false, error: String(e)}));
+
+  document.getElementById('yara-progress').style.display = 'none';
+  document.getElementById('yara-build-gen-btn').disabled = false;
+
+  if (!r.ok) { toast('YARA error: ' + r.error, 'error'); document.getElementById('yara-empty').style.display = ''; return; }
+  _yaraRenderResults(r, r.binary || 'binary');
 }
 
 async function loadYaraScanner() {

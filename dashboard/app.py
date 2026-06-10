@@ -157,6 +157,16 @@ def _run_build(build_id: str, params: dict) -> None:
     except Exception as exc:
         out, status, rc = str(exc), "error", -1
 
+    # derive binary path and store it so history can serve downloads
+    if status == "success":
+        malware_type = params.get("malware", "injection")
+        if malware_type == "stealer":
+            bin_path = MALWARE_DIR / "stealer" / params.get("stealer", "telegram") / "peekaboo.exe"
+        else:
+            bin_path = MALWARE_DIR / "injection" / params.get("injection", "virtualallocex") / "peekaboo.exe"
+        with _lock:
+            _builds[build_id]["params"] = dict(params, out_path=str(bin_path.relative_to(BASE_DIR)))
+
     with _lock:
         _builds[build_id].update(output=out, returncode=rc, status=status,
                                   end_time=datetime.now().isoformat())
@@ -292,7 +302,12 @@ def api_beacons():
 def api_logs():
     try:
         limit = min(int(request.args.get("limit", 10)), 200)
-        return jsonify(_db.get_builds(limit))
+        builds = _db.get_builds(limit)
+        for b in builds:
+            p = _resolve_build_binary(b)
+            b["binary_available"] = p is not None
+            b["binary_name"]      = p.name if p else None
+        return jsonify(builds)
     except Exception:
         return jsonify([])
 
@@ -321,6 +336,70 @@ def api_builds_binaries_clear():
         return jsonify({"ok": True, "deleted": len(deleted), "files": deleted})
     except Exception as e:
         return jsonify({"ok": False, "error": str(e)}), 500
+
+
+def _resolve_build_binary(build: dict) -> Path | None:
+    """Return the Path to a build's primary binary, or None if not found."""
+    params = build.get("params", {})
+    # Preferred: explicitly stored relative (or absolute) path
+    stored = params.get("out_path", "")
+    if stored:
+        p = Path(stored) if Path(stored).is_absolute() else BASE_DIR / stored
+        if p.exists():
+            return p
+    # Fallback for dashboard builds that pre-date out_path storage
+    malware_type = params.get("malware", "")
+    if malware_type == "stealer":
+        p = MALWARE_DIR / "stealer" / params.get("stealer", "telegram") / "peekaboo.exe"
+    elif malware_type in ("injection", "") and "injection" in params:
+        p = MALWARE_DIR / "injection" / params["injection"] / "peekaboo.exe"
+    else:
+        return None
+    return p if p.exists() else None
+
+
+@app.route("/api/build/<build_id>/binary-info")
+def api_build_binary_info(build_id: str):
+    """Return info about the compiled binary for any build (live or historical)."""
+    with _lock:
+        job = dict(_builds.get(build_id, {}))
+    if not job:
+        job = _db.get_build(build_id) or {}
+    if not job:
+        return jsonify({"error": "not found"}), 404
+    if job.get("status") != "success":
+        return jsonify({"files": []})
+    p = _resolve_build_binary(job)
+    if not p:
+        return jsonify({"files": []})
+    return jsonify({"files": [{"name": p.name, "size": p.stat().st_size}]})
+
+
+@app.route("/api/build/<build_id>/binary/<filename>")
+def api_build_binary_download(build_id: str, filename: str):
+    """Download a compiled binary from any build (live or historical)."""
+    if filename not in {"peekaboo.exe", "persistence.exe"}:
+        return jsonify({"error": "not allowed"}), 400
+    with _lock:
+        job = dict(_builds.get(build_id, {}))
+    if not job:
+        job = _db.get_build(build_id) or {}
+    if not job:
+        return jsonify({"error": "not found"}), 404
+    if job.get("status") != "success":
+        return jsonify({"error": "build not successful"}), 400
+    p = _resolve_build_binary(job)
+    if not p:
+        return jsonify({"error": "binary not found on disk"}), 404
+    # if they asked for a different name, look in same directory
+    target = p.parent / filename if filename != p.name else p
+    if not target.exists():
+        return jsonify({"error": f"{filename} not found"}), 404
+    # safety: must stay within BASE_DIR
+    if not str(target.resolve()).startswith(str(BASE_DIR.resolve())):
+        return jsonify({"error": "invalid path"}), 400
+    return send_file(target, as_attachment=True, download_name=filename,
+                     mimetype="application/octet-stream")
 
 
 _SAFE_CONFIGS = {
@@ -1511,6 +1590,33 @@ def api_yara_upload():
             os.unlink(tmp_path)
         except Exception:
             pass
+    return jsonify(result)
+
+
+@app.route("/api/yara/from-build", methods=["POST"])
+def api_yara_from_build():
+    """Generate a YARA rule directly from a compiled build binary."""
+    if not HAS_YARAGEN:
+        return jsonify({"ok": False, "error": "yaragen module not available"}), 503
+    data = request.get_json(force=True) or {}
+    build_id = data.get("build_id", "").strip()
+    if not build_id:
+        return jsonify({"ok": False, "error": "build_id required"}), 400
+    with _lock:
+        job = dict(_builds.get(build_id, {}))
+    if not job:
+        job = _db.get_build(build_id) or {}
+    if not job:
+        return jsonify({"ok": False, "error": "build not found"}), 404
+    if job.get("status") != "success":
+        return jsonify({"ok": False, "error": "build did not succeed"}), 400
+    p = _resolve_build_binary(job)
+    if not p:
+        return jsonify({"ok": False, "error": "binary not found on disk"}), 404
+    result = _yaragen.generate_rule(p)
+    result["rule_name"] = re.sub(r'[^a-zA-Z0-9_]', '_', p.stem) or result.get("rule_name", "build")
+    result["build_id"]  = build_id
+    result["binary"]    = p.name
     return jsonify(result)
 
 
