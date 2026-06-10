@@ -23,6 +23,7 @@ from rich.theme import Theme
 from rich.table import Table
 from rich.panel import Panel
 from rich.text import Text
+from rich.rule import Rule
 from rich.syntax import Syntax
 from rich.columns import Columns
 from rich.markdown import Markdown
@@ -34,22 +35,32 @@ from prompt_toolkit.history import InMemoryHistory
 from prompt_toolkit.completion import WordCompleter
 from prompt_toolkit.styles import Style as PtStyle
 
-# -- custom theme (ASCII-safe colors only, no Unicode symbols) -----------------
+# -- cyberpunk color theme (xterm-256 + true-color; degrades gracefully) -------
 THEME = Theme({
-    "banner":   "bold green",
-    "prompt":   "bold cyan",
-    "cmd":      "bold yellow",
-    "ok":       "bold green",
+    # base
+    "banner":   "bold bright_green",
+    "prompt":   "bold bright_cyan",
+    "cmd":      "bold bright_yellow",
+    "ok":       "bold bright_green",
     "warn":     "bold yellow",
-    "err":      "bold red",
-    "info":     "cyan",
+    "err":      "bold bright_red",
+    "info":     "bright_cyan",
     "dim":      "grey50",
-    "heading":  "bold white",
-    "critical": "bold red",
-    "high":     "red",
-    "medium":   "yellow",
-    "low":      "cyan",
-    "good":     "green",
+    "heading":  "bold bright_white",
+    # severity
+    "critical": "bold bright_white on red",
+    "high":     "bold red",
+    "medium":   "bold yellow",
+    "low":      "bright_cyan",
+    "good":     "bright_green",
+    # extras
+    "accent":   "bold medium_purple",
+    "kw":       "bold bright_yellow",
+    "hi":       "bold bright_white",
+    "label":    "grey74",
+    "mono":     "bright_white",
+    "tag":      "bold black on bright_cyan",
+    "sep":      "bright_black",
 })
 
 console = Console(theme=THEME, highlight=False)
@@ -75,7 +86,12 @@ SEV_TAG = {
 
 # -- prompt_toolkit style ------------------------------------------------------
 PT_STYLE = PtStyle.from_dict({
-    "prompt": "ansicyan bold",
+    "prompt":                              "ansibrightyellow bold",
+    "completion-menu.completion":          "bg:ansiblack ansiwhite",
+    "completion-menu.completion.current":  "bg:ansicyan ansiblack bold",
+    "completion-menu.meta.completion":     "bg:ansiblack ansigray",
+    "scrollbar.background":                "bg:ansiblack",
+    "scrollbar.button":                    "bg:ansiwhite",
 })
 
 
@@ -1764,33 +1780,65 @@ def show_help(module: str = "_top", cmd: str | None = None) -> None:
             )
             return
         console.print()
-        console.print(Panel(Markdown(text), box=box.ASCII, border_style="cyan",
+        console.print(Panel(Markdown(text), box=box.ROUNDED, border_style="bright_cyan",
                             padding=(1, 2)))
         console.print()
     else:
         text = mod_docs.get("_overview", "")
         if text:
             console.print()
-            console.print(Panel(Markdown(text), box=box.ASCII, border_style="cyan",
+            console.print(Panel(Markdown(text), box=box.ROUNDED, border_style="bright_cyan",
                                 padding=(1, 2)))
             console.print()
 
 
-BANNER = r"""[=^..^=]
-[=^..^=] #####  ###### #    #         ##         #####   ####   ####
-[=^..^=] #    # #      #   #         #  #        #    # #    # #    #
-[=^..^=] #    # #####  ####   ##### #    # ##### #####  #    # #    #
-[=^..^=] #####  #      #  #         ######       #    # #    # #    #
-[=^..^=] #      #      #   #        #    #       #    # #    # #    #
-[=^..^=] #      ###### #    #       #    #       #####   ####   ####
-[=^..^=]
-[=^..^=] Malware Development Framework (for trainings, education and research)
-[=^..^=] by @cocomelonc - https://cocomelonc.github.io
-"""
+_BANNER_LINES = [
+    "",
+    " #####  ###### #    #         ##         #####   ####   ####",
+    " #    # #      #   #         #  #        #    # #    # #    #",
+    " #    # #####  ####   ##### #    # ##### #####  #    # #    #",
+    " #####  #      #  #         ######       #    # #    # #    #",
+    " #      #      #   #        #    #       #    # #    # #    #",
+    " #      ###### #    #       #    #       #####   ####   ####",
+    "",
+]
+# alternating green shades create a subtle gradient down the logo
+_BANNER_STYLES = [
+    "bold bright_green",
+    "bold bright_green",
+    "bold green",
+    "bold bright_green",
+    "bold green",
+    "bold bright_green",
+    "bold bright_green",
+    "bold bright_green",
+]
 
 
 def print_banner() -> None:
-    console.print(BANNER, style="banner")
+    console.print()
+    for i, line in enumerate(_BANNER_LINES):
+        t = Text()
+        t.append("[=^..^=]", style="bold bright_cyan")
+        t.append(line, style=_BANNER_STYLES[i])
+        console.print(t)
+
+    console.print()
+    console.print(Rule(style="bright_black"))
+
+    badge = Text()
+    badge.append("  ")
+    badge.append(" [=^..^=] DEFCON Demo Labs Singapore 2026 ", style="bold black on bright_cyan")
+    badge.append("   ")
+    badge.append("Malware Development Framework", style="bold bright_white")
+    badge.append("  ·  ", style="dim")
+    badge.append("by @cocomelonc", style="dim")
+    badge.append("  ·  ", style="dim")
+    badge.append("https://cocomelonc.github.io", style="dim")
+    console.print(badge)
+
+    console.print(Rule(style="bright_black"))
+    console.print()
 
 
 # -- top-level commands --------------------------------------------------------
@@ -1881,8 +1929,8 @@ ARTIFACT_HELP = [
 
 
 def _artifact_help() -> None:
-    t = Table(box=box.ASCII, show_header=True, header_style="heading",
-              border_style="dim", padding=(0, 1))
+    t = Table(box=box.ROUNDED, show_header=True, header_style="bold bright_white on bright_black",
+              border_style="bright_black", padding=(0, 1))
     t.add_column("command",     style="cmd",  no_wrap=True, min_width=26)
     t.add_column("description", style="info")
     for cmd, desc in ARTIFACT_HELP:
@@ -1914,8 +1962,8 @@ def _render_artifact_table(entries: list[dict], title: str = "Artifact Map",
     start  = page * ART_PAGE_SIZE
     chunk  = entries[start:start + ART_PAGE_SIZE]
 
-    t = Table(box=box.ASCII, show_header=True, header_style="heading",
-              border_style="dim", padding=(0, 1),
+    t = Table(box=box.ROUNDED, show_header=True, header_style="bold bright_white on bright_black",
+              border_style="bright_black", padding=(0, 1),
               title=f"{title}  [{start+1}-{min(start+len(chunk), total)} / {total}]",
               show_lines=False)
     t.add_column("#",       style="dim",  min_width=4,  justify="right", no_wrap=True)
@@ -1973,13 +2021,13 @@ def _render_artifact_detail(e: dict) -> None:
     console.print()
     console.print(Panel(meta,
                         title=f"[heading] {e['tid']} - {e['name'] or ''} [/heading]",
-                        border_style="cyan", box=box.ASCII))
+                        border_style="bright_cyan", box=box.ROUNDED))
 
     # -- top sigma rules -------------------------------------------------------
     top_rules = rules[:20]
     if top_rules:
-        rt = Table(box=box.ASCII, show_header=True, header_style="heading",
-                   border_style="dim", padding=(0, 1),
+        rt = Table(box=box.ROUNDED, show_header=True, header_style="bold bright_white on bright_black",
+                   border_style="bright_black", padding=(0, 1),
                    title=f"Top Sigma Rules (showing {len(top_rules)} of {len(rules)})",
                    show_lines=False)
         rt.add_column("level",    min_width=8,  no_wrap=True)
@@ -2008,8 +2056,8 @@ def _render_artifact_detail(e: dict) -> None:
     # -- registry keys ---------------------------------------------------------
     reg_keys = e.get("reg_keys", [])
     if reg_keys:
-        rkt = Table(box=box.ASCII, show_header=True, header_style="heading",
-                    border_style="dim", padding=(0, 1), title="Registry Keys")
+        rkt = Table(box=box.ROUNDED, show_header=True, header_style="bold bright_white on bright_black",
+                    border_style="bright_black", padding=(0, 1), title="Registry Keys")
         rkt.add_column("key", style="warn")
         for k in reg_keys[:15]:
             rkt.add_row(k)
@@ -2020,8 +2068,8 @@ def _render_artifact_detail(e: dict) -> None:
     # -- processes -------------------------------------------------------------
     procs = e.get("processes", [])
     if procs:
-        pt = Table(box=box.ASCII, show_header=True, header_style="heading",
-                   border_style="dim", padding=(0, 1), title="Process Images")
+        pt = Table(box=box.ROUNDED, show_header=True, header_style="bold bright_white on bright_black",
+                   border_style="bright_black", padding=(0, 1), title="Process Images")
         pt.add_column("process", style="cmd")
         for p in procs[:12]:
             pt.add_row(p)
@@ -2032,8 +2080,8 @@ def _render_artifact_detail(e: dict) -> None:
     # -- command line patterns -------------------------------------------------
     cmdlines = e.get("cmdlines", [])
     if cmdlines:
-        ct = Table(box=box.ASCII, show_header=True, header_style="heading",
-                   border_style="dim", padding=(0, 1), title="Command Line Patterns")
+        ct = Table(box=box.ROUNDED, show_header=True, header_style="bold bright_white on bright_black",
+                   border_style="bright_black", padding=(0, 1), title="Command Line Patterns")
         ct.add_column("pattern", style="info")
         for c in cmdlines[:12]:
             ct.add_row(str(c)[:80])
@@ -2059,8 +2107,8 @@ def _render_all_rules(e: dict, level_filter: str | None = None) -> None:
         console.print(f"  [warn][=^..^=] no rules match level '{level_filter}'[/warn]\n")
         return
 
-    rt = Table(box=box.ASCII, show_header=True, header_style="heading",
-               border_style="dim", padding=(0, 1), title=title, show_lines=False)
+    rt = Table(box=box.ROUNDED, show_header=True, header_style="bold bright_white on bright_black",
+               border_style="bright_black", padding=(0, 1), title=title, show_lines=False)
     rt.add_column("#",        style="dim",  min_width=4,  justify="right", no_wrap=True)
     rt.add_column("level",    min_width=8,  no_wrap=True)
     rt.add_column("category", style="info", min_width=16, no_wrap=True)
@@ -2129,8 +2177,8 @@ def run_artifacts() -> None:
         f"  built: {built_at}\n"
         f"  type  help  for commands,  tactics  for tactic list,  back  to return",
         title="[heading] Artifact Map [/heading]",
-        border_style="cyan",
-        box=box.ASCII,
+        border_style="bright_cyan",
+        box=box.ROUNDED,
     ))
     console.print()
 
@@ -2171,7 +2219,7 @@ def run_artifacts() -> None:
 
         # -- stats -------------------------------------------------------------
         elif cmd == "stats":
-            t = Table(box=box.ASCII, show_header=False, border_style="dim",
+            t = Table(box=box.ROUNDED, show_header=False, border_style="bright_black",
                       padding=(0, 2), title="Artifact Map Statistics")
             t.add_column("key",   style="info",    min_width=22)
             t.add_column("value", style="heading", min_width=12, justify="right")
@@ -2187,8 +2235,8 @@ def run_artifacts() -> None:
         # -- tactics ----------------------------------------------------------
         elif cmd == "tactics":
             max_n = max(tactic_counts.values())
-            t = Table(box=box.ASCII, show_header=True, header_style="heading",
-                      border_style="dim", padding=(0, 1), title="Tactics")
+            t = Table(box=box.ROUNDED, show_header=True, header_style="bold bright_white on bright_black",
+                      border_style="bright_black", padding=(0, 1), title="Tactics")
             t.add_column("tactic",     style="cmd",  min_width=26)
             t.add_column("techniques", style="info", min_width=10, justify="right")
             t.add_column("bar",        min_width=34)
@@ -2329,8 +2377,8 @@ LIBRARY_HELP = [
 
 
 def _library_help() -> None:
-    t = Table(box=box.ASCII, show_header=True, header_style="heading",
-              border_style="dim", padding=(0, 1))
+    t = Table(box=box.ROUNDED, show_header=True, header_style="bold bright_white on bright_black",
+              border_style="bright_black", padding=(0, 1))
     t.add_column("command",     style="cmd",  no_wrap=True, min_width=22)
     t.add_column("description", style="info")
     for cmd, desc in LIBRARY_HELP:
@@ -2358,8 +2406,8 @@ def _render_library_table(entries: list[dict], title: str = "Module Library",
     start   = page * LIB_PAGE_SIZE
     chunk   = entries[start:start + LIB_PAGE_SIZE]
 
-    t = Table(box=box.ASCII, show_header=True, header_style="heading",
-              border_style="dim", padding=(0, 1),
+    t = Table(box=box.ROUNDED, show_header=True, header_style="bold bright_white on bright_black",
+              border_style="bright_black", padding=(0, 1),
               title=f"{title}  [{start+1}-{min(start+len(chunk), total)} / {total}]",
               show_lines=False)
     t.add_column("#",        style="dim",  min_width=4,  justify="right", no_wrap=True)
@@ -2409,7 +2457,7 @@ def _render_module_detail(e: dict) -> None:
     console.print()
     console.print(Panel(meta.rstrip(),
                         title=f"[heading] {e['slug']} [/heading]",
-                        border_style="cyan", box=box.ASCII))
+                        border_style="bright_cyan", box=box.ROUNDED))
 
     # source code
     src_text: str | None = None
@@ -2447,12 +2495,12 @@ def _render_module_detail(e: dict) -> None:
             console.print(Panel(syn,
                                 title=f"[heading] {Path(src_path).name if src_path else 'snippet'} "
                                       f"({lang}, {lines} lines) [/heading]",
-                                border_style="dim", box=box.ASCII))
+                                border_style="bright_black", box=box.ROUNDED))
     else:
         console.print(Panel(syn,
                             title=f"[heading] {Path(src_path).name if src_path else 'snippet'} "
                                   f"({lang}, {lines} lines) [/heading]",
-                            border_style="dim", box=box.ASCII))
+                            border_style="bright_black", box=box.ROUNDED))
     console.print()
 
 
@@ -2483,8 +2531,8 @@ def run_library() -> None:
         f"  {len(all_entries)} modules across {len(all_cats)} categories\n"
         f"  type  help  for commands,  cats  for category list,  back  to return",
         title="[heading] Module Library [/heading]",
-        border_style="cyan",
-        box=box.ASCII,
+        border_style="bright_cyan",
+        box=box.ROUNDED,
     ))
     console.print()
 
@@ -2527,8 +2575,8 @@ def run_library() -> None:
 
         # -- cats -------------------------------------------------------------
         elif cmd == "cats":
-            t = Table(box=box.ASCII, show_header=True, header_style="heading",
-                      border_style="dim", padding=(0, 1), title="Categories")
+            t = Table(box=box.ROUNDED, show_header=True, header_style="bold bright_white on bright_black",
+                      border_style="bright_black", padding=(0, 1), title="Categories")
             t.add_column("category",  style="cmd",  min_width=22)
             t.add_column("entries",   style="info", min_width=8, justify="right")
             t.add_column("bar",       min_width=30)
@@ -2651,8 +2699,8 @@ EVASION_HELP = [
 
 
 def _evasion_help() -> None:
-    t = Table(box=box.ASCII, show_header=True, header_style="heading",
-              border_style="dim", padding=(0, 1))
+    t = Table(box=box.ROUNDED, show_header=True, header_style="bold bright_white on bright_black",
+              border_style="bright_black", padding=(0, 1))
     t.add_column("command", style="cmd",  no_wrap=True, min_width=24)
     t.add_column("description", style="info")
     for cmd, desc in EVASION_HELP:
@@ -2694,12 +2742,12 @@ def _render_evasion_results(result: dict) -> None:
         "\n".join(lines),
         title="[heading] Evasion Score [/heading]",
         border_style=ss,
-        box=box.ASCII,
+        box=box.ROUNDED,
     ))
 
     # -- category breakdown ----------------------------------------------------
-    cats = Table(box=box.ASCII, show_header=True, header_style="heading",
-                 border_style="dim", padding=(0, 1), title="Score Breakdown")
+    cats = Table(box=box.ROUNDED, show_header=True, header_style="bold bright_white on bright_black",
+                 border_style="bright_black", padding=(0, 1), title="Score Breakdown")
     cats.add_column("category",  style="info",    min_width=14)
     cats.add_column("score",     style="heading",  min_width=6, justify="right")
     cats.add_column("bar",       min_width=26, no_wrap=True)
@@ -2726,8 +2774,8 @@ def _render_evasion_results(result: dict) -> None:
     # -- findings --------------------------------------------------------------
     findings = [f for f in result["findings"] if f["severity"] != "ok"]
     if findings:
-        ft = Table(box=box.ASCII, show_header=True, header_style="heading",
-                   border_style="dim", padding=(0, 1), title="Findings",
+        ft = Table(box=box.ROUNDED, show_header=True, header_style="bold bright_white on bright_black",
+                   border_style="bright_black", padding=(0, 1), title="Findings",
                    show_lines=True)
         ft.add_column("sev",        min_width=7,  no_wrap=True)
         ft.add_column("category",   style="info", min_width=10, no_wrap=True)
@@ -2750,8 +2798,8 @@ def _render_evasion_results(result: dict) -> None:
     # -- suspicious imports ----------------------------------------------------
     si = result.get("suspicious_imports", [])
     if si:
-        it = Table(box=box.ASCII, show_header=True, header_style="heading",
-                   border_style="dim", padding=(0, 1), title="Flagged Imports")
+        it = Table(box=box.ROUNDED, show_header=True, header_style="bold bright_white on bright_black",
+                   border_style="bright_black", padding=(0, 1), title="Flagged Imports")
         it.add_column("API name",   style="err",  min_width=28)
         it.add_column("reason",     style="dim")
         for imp in si[:12]:
@@ -2761,8 +2809,8 @@ def _render_evasion_results(result: dict) -> None:
     # -- sections --------------------------------------------------------------
     secs = result.get("sections", [])
     if secs:
-        st = Table(box=box.ASCII, show_header=True, header_style="heading",
-                   border_style="dim", padding=(0, 1), title="PE Sections")
+        st = Table(box=box.ROUNDED, show_header=True, header_style="bold bright_white on bright_black",
+                   border_style="bright_black", padding=(0, 1), title="PE Sections")
         st.add_column("name",    style="cmd",   min_width=10)
         st.add_column("entropy", min_width=8,   justify="right")
         st.add_column("size",    style="dim",   min_width=10, justify="right")
@@ -2791,8 +2839,8 @@ def _render_patches_table(patches: list[dict],
     if not patches:
         console.print("[warn][=^..^=] no patches available for this binary[/warn]")
         return
-    t = Table(box=box.ASCII, show_header=True, header_style="heading",
-              border_style="dim", padding=(0, 1), title="Available Patches")
+    t = Table(box=box.ROUNDED, show_header=True, header_style="bold bright_white on bright_black",
+              border_style="bright_black", padding=(0, 1), title="Available Patches")
     t.add_column("sel", min_width=4, no_wrap=True)
     t.add_column("id",             style="cmd",  min_width=22, no_wrap=True)
     t.add_column("label",          style="info", min_width=32)
@@ -2823,8 +2871,8 @@ def run_evasion(ev_mod) -> None:
         "  PE evasion scorer + surgical patch transforms\n"
         "  type  help  for commands,  back  to return",
         title="[heading] Evasion Lab [/heading]",
-        border_style="cyan",
-        box=box.ASCII,
+        border_style="bright_cyan",
+        box=box.ROUNDED,
     ))
     console.print()
 
@@ -2973,8 +3021,8 @@ def run_evasion(ev_mod) -> None:
                 continue
 
             # applied summary table
-            at = Table(box=box.ASCII, show_header=True, header_style="heading",
-                       border_style="ok", padding=(0, 1), title="Patches Applied")
+            at = Table(box=box.ROUNDED, show_header=True, header_style="bold bright_white on bright_black",
+                       border_style="bright_green", padding=(0, 1), title="Patches Applied")
             at.add_column("#",      style="dim",  min_width=3,  justify="right")
             at.add_column("result", style="info")
             for i, desc in enumerate(applied, 1):
@@ -3020,8 +3068,8 @@ def _render_reports(reports: list[dict]) -> None:
         console.print("  [warn][=^..^=] no reports returned[/warn]\n")
         return
 
-    t = Table(box=box.ASCII, show_header=True, header_style="heading",
-              border_style="dim", padding=(0, 1),
+    t = Table(box=box.ROUNDED, show_header=True, header_style="bold bright_white on bright_black",
+              border_style="bright_black", padding=(0, 1),
               title=f"Recent Threat Intel Reports  ({len(reports)})",
               show_lines=True)
     t.add_column("#",        style="dim",  min_width=3,  justify="right", no_wrap=True)
@@ -3063,8 +3111,8 @@ def _render_actors_table(actors: list, title: str = "Threat Actors",
     start = page * MALPEDIA_PAGE_SIZE
     chunk = actors[start:start + MALPEDIA_PAGE_SIZE]
 
-    t = Table(box=box.ASCII, show_header=True, header_style="heading",
-              border_style="dim", padding=(0, 1),
+    t = Table(box=box.ROUNDED, show_header=True, header_style="bold bright_white on bright_black",
+              border_style="bright_black", padding=(0, 1),
               title=f"{title}  [{start+1}-{min(start+len(chunk), total)} / {total}]",
               show_lines=False)
     t.add_column("#",           style="dim",  min_width=4,  justify="right", no_wrap=True)
@@ -3105,8 +3153,8 @@ def _render_families_table(families: list, title: str = "Malware Families",
     start = page * MALPEDIA_PAGE_SIZE
     chunk = families[start:start + MALPEDIA_PAGE_SIZE]
 
-    t = Table(box=box.ASCII, show_header=True, header_style="heading",
-              border_style="dim", padding=(0, 1),
+    t = Table(box=box.ROUNDED, show_header=True, header_style="bold bright_white on bright_black",
+              border_style="bright_black", padding=(0, 1),
               title=f"{title}  [{start+1}-{min(start+len(chunk), total)} / {total}]",
               show_lines=False)
     t.add_column("#",          style="dim",  min_width=4,  justify="right", no_wrap=True)
@@ -3162,7 +3210,7 @@ def _render_actor_detail(a: dict) -> None:
     console.print()
     console.print(Panel(meta.rstrip(),
                         title=f"[heading] Actor: {a.get('name', a['id'])} [/heading]",
-                        border_style="cyan", box=box.ASCII))
+                        border_style="bright_cyan", box=box.ROUNDED))
 
     desc = (a.get("description") or "").strip()
     if desc:
@@ -3175,8 +3223,8 @@ def _render_actor_detail(a: dict) -> None:
 
     fams = a.get("families", [])
     if fams:
-        ft = Table(box=box.ASCII, show_header=True, header_style="heading",
-                   border_style="dim", padding=(0, 1),
+        ft = Table(box=box.ROUNDED, show_header=True, header_style="bold bright_white on bright_black",
+                   border_style="bright_black", padding=(0, 1),
                    title=f"Malware Families ({len(fams)})", show_lines=False)
         ft.add_column("family-id",   style="cmd",  min_width=24, no_wrap=True)
         ft.add_column("report URLs", style="dim",  min_width=4,  justify="right")
@@ -3216,7 +3264,7 @@ def _render_family_detail(f: dict) -> None:
     console.print()
     console.print(Panel(meta.rstrip(),
                         title=f"[heading] Family: {f.get('name', f['id'])} [/heading]",
-                        border_style="cyan", box=box.ASCII))
+                        border_style="bright_cyan", box=box.ROUNDED))
 
     desc = (f.get("description") or "").strip()
     if desc:
@@ -3264,8 +3312,8 @@ def run_malpedia() -> None:
         f"  {len(actor_list)} threat actors  |  {len(family_list)} malware families\n"
         f"  type  help  for commands,  reports  for latest threat intel,  back  to return",
         title="[heading] Malpedia [/heading]",
-        border_style="cyan",
-        box=box.ASCII,
+        border_style="bright_cyan",
+        box=box.ROUNDED,
     ))
     console.print()
 
@@ -3313,7 +3361,7 @@ def run_malpedia() -> None:
             if not st.get("ok"):
                 console.print(f"  [err][=^..^=] {st.get('error')}[/err]\n")
                 continue
-            t = Table(box=box.ASCII, show_header=False, border_style="dim",
+            t = Table(box=box.ROUNDED, show_header=False, border_style="bright_black",
                       padding=(0, 2), title="Malpedia Status")
             t.add_column("key",   style="info",    min_width=20)
             t.add_column("value", style="heading", min_width=16)
@@ -3486,7 +3534,7 @@ def run_malpedia() -> None:
             panel = Panel(
                 syn,
                 title=f"[heading] YARA: {fid}  ({len(all_rules)} rule(s)) [/heading]",
-                border_style="dim", box=box.ASCII,
+                border_style="bright_black", box=box.ROUNDED,
             )
             if n_lines > 40:
                 with console.pager(styles=True):
@@ -3578,12 +3626,12 @@ def _render_yara_meta(result: dict) -> None:
     console.print()
     console.print(Panel(meta.rstrip(),
                         title="[heading] YARA Rule Info [/heading]",
-                        border_style="cyan", box=box.ASCII))
+                        border_style="bright_cyan", box=box.ROUNDED))
 
     secs = result.get("pe_sections", [])
     if secs:
-        t = Table(box=box.ASCII, show_header=True, header_style="heading",
-                  border_style="dim", padding=(0, 1), title="PE Sections")
+        t = Table(box=box.ROUNDED, show_header=True, header_style="bold bright_white on bright_black",
+                  border_style="bright_black", padding=(0, 1), title="PE Sections")
         t.add_column("name",    style="cmd",  min_width=10)
         t.add_column("entropy", min_width=7,  justify="right")
         t.add_column("size",    style="dim",  min_width=10, justify="right")
@@ -3610,7 +3658,7 @@ def _render_yara_rule(rule_text: str) -> None:
                      line_numbers=True, word_wrap=False)
 
     panel = Panel(syn, title="[heading] YARA Rule [/heading]",
-                  border_style="dim", box=box.ASCII)
+                  border_style="bright_black", box=box.ROUNDED)
     if n_lines > 40:
         with console.pager(styles=True):
             console.print(panel)
@@ -3637,8 +3685,8 @@ def run_yara() -> None:
         "  Generate YARA detection rules from PE or raw binary files\n"
         "  type  help  for commands,  back  to return",
         title="[heading] YARA Lab [/heading]",
-        border_style="cyan",
-        box=box.ASCII,
+        border_style="bright_cyan",
+        box=box.ROUNDED,
     ))
     console.print()
 
@@ -3770,11 +3818,11 @@ def run_yara() -> None:
                     f"  Rule      : {yr_result['rule_name']}\n"
                     f"  Matches   : {len(matches)}",
                     title="[ok] MATCH [/ok]",
-                    border_style="ok", box=box.ASCII,
+                    border_style="bright_green", box=box.ROUNDED,
                 ))
                 for m in matches:
-                    mt = Table(box=box.ASCII, show_header=True, header_style="heading",
-                               border_style="dim", padding=(0, 1),
+                    mt = Table(box=box.ROUNDED, show_header=True, header_style="bold bright_white on bright_black",
+                               border_style="bright_black", padding=(0, 1),
                                title=f"Matched Strings: {m.rule}")
                     mt.add_column("variable", style="warn", min_width=10, no_wrap=True)
                     mt.add_column("offset",   style="dim",  min_width=10, justify="right")
@@ -3796,7 +3844,7 @@ def run_yara() -> None:
                     f"  Rule   : {yr_result['rule_name']}\n"
                     f"  Result : no matches",
                     title="[warn] NO MATCH [/warn]",
-                    border_style="warn", box=box.ASCII,
+                    border_style="yellow", box=box.ROUNDED,
                 ))
                 console.print()
 
@@ -3867,12 +3915,12 @@ def _render_sc_analysis(stats: dict, label: str = "Shellcode Analysis") -> None:
     )
     console.print()
     console.print(Panel(meta, title=f"[heading] {label} [/heading]",
-                        border_style="cyan", box=box.ASCII))
+                        border_style="bright_cyan", box=box.ROUNDED))
 
     top = stats.get("top_bytes", [])
     if top:
-        t = Table(box=box.ASCII, show_header=True, header_style="heading",
-                  border_style="dim", padding=(0, 1),
+        t = Table(box=box.ROUNDED, show_header=True, header_style="bold bright_white on bright_black",
+                  border_style="bright_black", padding=(0, 1),
                   title="Byte Distribution (top 6)")
         t.add_column("byte",  style="warn", min_width=6,  no_wrap=True)
         t.add_column("count", style="info", min_width=6,  justify="right", no_wrap=True)
@@ -3921,8 +3969,8 @@ def run_shellcode() -> None:
         "  Parse, analyse, transform and reformat shellcode\n"
         "  type  help  for commands,  formats / transforms  for ID lists,  back  to return",
         title="[heading] Shellcode Lab [/heading]",
-        border_style="cyan",
-        box=box.ASCII,
+        border_style="bright_cyan",
+        box=box.ROUNDED,
     ))
     console.print()
 
@@ -4014,8 +4062,8 @@ def run_shellcode() -> None:
 
         # -- formats ----------------------------------------------------------
         elif cmd == "formats":
-            t = Table(box=box.ASCII, show_header=True, header_style="heading",
-                      border_style="dim", padding=(0, 1), title="Output Formats")
+            t = Table(box=box.ROUNDED, show_header=True, header_style="bold bright_white on bright_black",
+                      border_style="bright_black", padding=(0, 1), title="Output Formats")
             t.add_column("id",          style="cmd",  min_width=12, no_wrap=True)
             t.add_column("description", style="info")
             for fid, desc in _SC_FORMAT_INFO:
@@ -4031,8 +4079,8 @@ def run_shellcode() -> None:
 
         # -- transforms -------------------------------------------------------
         elif cmd == "transforms":
-            t = Table(box=box.ASCII, show_header=True, header_style="heading",
-                      border_style="dim", padding=(0, 1), title="Transforms")
+            t = Table(box=box.ROUNDED, show_header=True, header_style="bold bright_white on bright_black",
+                      border_style="bright_black", padding=(0, 1), title="Transforms")
             t.add_column("id",          style="warn", min_width=18, no_wrap=True)
             t.add_column("description", style="info")
             for xid, desc in _SC_TRANSFORM_INFO:
@@ -4162,13 +4210,13 @@ def run_shellcode() -> None:
                     console.print(Panel(
                         syn,
                         title=f"[heading] {run_fmt}  ({out_s['size']:,} bytes) [/heading]",
-                        border_style="dim", box=box.ASCII,
+                        border_style="bright_black", box=box.ROUNDED,
                     ))
             else:
                 console.print(Panel(
                     syn,
                     title=f"[heading] {run_fmt}  ({out_s['size']:,} bytes) [/heading]",
-                    border_style="dim", box=box.ASCII,
+                    border_style="bright_black", box=box.ROUNDED,
                 ))
             console.print()
 
@@ -4275,13 +4323,13 @@ def _render_pe_header(r: dict) -> None:
         f"  overlay   : {r['overlay'] or 'none'}\n"
         f"  threat    : [{style}]{_pe_score_bar(r['threat_score'])}  {label}[/{style}]",
         title="[heading]PE Header[/heading]",
-        border_style="dim",
+        border_style="bright_black",
     ))
 
 
 def _render_pe_sections(r: dict) -> None:
-    t = Table(box=box.ASCII, show_header=True, header_style="heading",
-              border_style="dim", padding=(0, 1))
+    t = Table(box=box.ROUNDED, show_header=True, header_style="bold bright_white on bright_black",
+              border_style="bright_black", padding=(0, 1))
     t.add_column("Name",       style="cmd",  no_wrap=True)
     t.add_column("Virt Addr",  style="dim",  no_wrap=True)
     t.add_column("Raw Size",   justify="right")
@@ -4311,8 +4359,8 @@ def _render_pe_sections(r: dict) -> None:
 
 
 def _render_pe_imports(r: dict) -> None:
-    t = Table(box=box.ASCII, show_header=True, header_style="heading",
-              border_style="dim", padding=(0, 1))
+    t = Table(box=box.ROUNDED, show_header=True, header_style="bold bright_white on bright_black",
+              border_style="bright_black", padding=(0, 1))
     t.add_column("DLL",          style="cmd",  no_wrap=True)
     t.add_column("Functions",    justify="right")
     t.add_column("Suspicious",   justify="right")
@@ -4352,8 +4400,8 @@ def _render_pe_suspicious(r: dict) -> None:
         "persistence":  "warn",
         "keylog_screen":"warn",
     }
-    t = Table(box=box.ASCII, show_header=True, header_style="heading",
-              border_style="dim", padding=(0, 1))
+    t = Table(box=box.ROUNDED, show_header=True, header_style="bold bright_white on bright_black",
+              border_style="bright_black", padding=(0, 1))
     t.add_column("Category",  no_wrap=True)
     t.add_column("APIs", style="dim")
 
@@ -4375,9 +4423,10 @@ def run_pe() -> None:
     console.print()
     console.print(Panel(
         "  Analyze PE binaries: sections, imports, entropy, threat score\n"
-        "  [dim]commands: analyse <path>  open <path>  sections  imports  suspicious  score  help  back[/dim]",
-        title="[heading]PE Inspector[/heading]",
-        border_style="dim",
+        "  type  help  for commands,  back  to return",
+        title="[heading] PE Inspector [/heading]",
+        border_style="bright_cyan",
+        box=box.ROUNDED,
     ))
     console.print()
 
@@ -4401,7 +4450,7 @@ def run_pe() -> None:
             break
 
         elif cmd == "help":
-            t = Table(box=box.ASCII, show_header=False, border_style="dim", padding=(0, 1))
+            t = Table(box=box.ROUNDED, show_header=False, border_style="bright_black", padding=(0, 1))
             for c, desc in [
                 ("analyse <path>",  "load and fully analyse a PE file"),
                 ("open <path>",     "alias for analyse"),
@@ -4470,7 +4519,7 @@ def run_pe() -> None:
                     f"  overlay         : {'yes' if current['overlay'] else 'no'}\n"
                     f"  total imports   : {current['total_import_fns']}",
                     title="[heading]Threat Score[/heading]",
-                    border_style="dim",
+                    border_style="bright_black",
                 ))
                 console.print()
 
@@ -4508,8 +4557,8 @@ def _render_build_table(entries: list[dict], title: str = "Compilable Modules",
     start  = page * BUILD_PAGE_SIZE
     chunk  = entries[start:start + BUILD_PAGE_SIZE]
 
-    t = Table(box=box.ASCII, show_header=True, header_style="heading",
-              border_style="dim", padding=(0, 1),
+    t = Table(box=box.ROUNDED, show_header=True, header_style="bold bright_white on bright_black",
+              border_style="bright_black", padding=(0, 1),
               title=f"{title}  [{start+1}-{min(start+len(chunk), total)} / {total}]",
               show_lines=False)
     t.add_column("#",         style="dim",  min_width=4,  justify="right", no_wrap=True)
@@ -4549,8 +4598,8 @@ def _render_history_table(builds: list[dict]) -> None:
         console.print("  [dim](no builds yet)[/dim]\n")
         return
 
-    t = Table(box=box.ASCII, show_header=True, header_style="heading",
-              border_style="dim", padding=(0, 1), title=f"Build History ({len(builds)} runs)",
+    t = Table(box=box.ROUNDED, show_header=True, header_style="bold bright_white on bright_black",
+              border_style="bright_black", padding=(0, 1), title=f"Build History ({len(builds)} runs)",
               show_lines=False)
     t.add_column("#",        style="dim",    min_width=4,  justify="right", no_wrap=True)
     t.add_column("build-id", style="cmd",    min_width=14, no_wrap=True)
@@ -4663,7 +4712,7 @@ def _render_build_detail(b: dict) -> None:
     console.print()
     console.print(Panel(meta,
                         title=f"[heading] Build: {b.get('id','?')} [/heading]",
-                        border_style=s_style, box=box.ASCII))
+                        border_style=s_style, box=box.ROUNDED))
 
     log = b.get("output") or b.get("log", "") or ""
     if log:
@@ -4731,8 +4780,8 @@ def _render_ttp_list(rows: list[dict], title: str) -> None:
 
     entries = sorted(by_id.values(), key=_sort_key)
 
-    t = Table(box=box.ASCII, show_header=True, header_style="heading",
-              border_style="dim", padding=(0, 1),
+    t = Table(box=box.ROUNDED, show_header=True, header_style="bold bright_white on bright_black",
+              border_style="bright_black", padding=(0, 1),
               title=f"{title}  ({len(entries)} techniques / {len(rows)} impls)")
     t.add_column("attack_id",  style="cmd",    min_width=12, no_wrap=True)
     t.add_column("technique",  style="info",   min_width=42)
@@ -4779,12 +4828,12 @@ def _render_ttp_show(attack_id: str, rows: list[dict]) -> None:
         f"Compilable: {sum(1 for r in rows if r['meow_slug'])}",
         title=f"[heading] {attack_id} [/heading]",
         border_style=ts,
-        box=box.ASCII,
+        box=box.ROUNDED,
     ))
 
     # implementations table
-    t = Table(box=box.ASCII, show_header=True, header_style="heading",
-              border_style="dim", padding=(0, 1),
+    t = Table(box=box.ROUNDED, show_header=True, header_style="bold bright_white on bright_black",
+              border_style="bright_black", padding=(0, 1),
               title=f"Implementations  ({len(rows)})")
     t.add_column("#",          style="dim",   min_width=3,  justify="right")
     t.add_column("blog_slug",  style="cmd",   min_width=28, no_wrap=True)
@@ -4854,8 +4903,8 @@ def run_ttp() -> None:
         f"  {n_techs} ATT&CK techniques  |  {n_impls} implementations\n"
         f"  type  help  for commands,  list  to browse,  back  to return",
         title="[heading] TTP -> Implementation Map [/heading]",
-        border_style="cyan",
-        box=box.ASCII,
+        border_style="bright_cyan",
+        box=box.ROUNDED,
     ))
     console.print()
 
@@ -4944,8 +4993,8 @@ def run_ttp() -> None:
             if not results:
                 console.print(f"  [warn][=^..^=] no results for '{q}'[/warn]\n")
             else:
-                t = Table(box=box.ASCII, show_header=True, header_style="heading",
-                          border_style="dim", padding=(0, 1),
+                t = Table(box=box.ROUNDED, show_header=True, header_style="bold bright_white on bright_black",
+                          border_style="bright_black", padding=(0, 1),
                           title=f"Search: '{q}'  ({len(results)} results)")
                 t.add_column("attack_id", style="cmd",  min_width=12, no_wrap=True)
                 t.add_column("tactic",    min_width=20, no_wrap=True)
@@ -4999,8 +5048,8 @@ def run_ttp() -> None:
                     f"  [dim]one compilable implementation: {chosen['blog_slug']}[/dim]"
                 )
             else:
-                t = Table(box=box.ASCII, show_header=True, header_style="heading",
-                          border_style="dim", padding=(0, 1),
+                t = Table(box=box.ROUNDED, show_header=True, header_style="bold bright_white on bright_black",
+                          border_style="bright_black", padding=(0, 1),
                           title=f"Compilable implementations of {aid}")
                 t.add_column("#",          style="dim",  min_width=3,  justify="right")
                 t.add_column("blog_slug",  style="cmd",  min_width=28)
@@ -5048,8 +5097,8 @@ def run_ttp() -> None:
                 f"  platform : {chosen['platform']}\n"
                 f"  session  : [dim]{session_id}[/dim]",
                 title="[heading] Build [/heading]",
-                border_style="cyan",
-                box=box.ASCII,
+                border_style="bright_cyan",
+                box=box.ROUNDED,
             ))
             console.print()
 
@@ -5066,15 +5115,15 @@ def run_ttp() -> None:
                     f"  [ok]BUILD OK[/ok]  {out_path.name}  {size_kb} KB  ({elapsed:.1f}s)\n"
                     f"  path: [dim]{out_path}[/dim]",
                     title="[heading] Result [/heading]",
-                    border_style="ok",
-                    box=box.ASCII,
+                    border_style="bright_green",
+                    box=box.ROUNDED,
                 ))
             else:
                 console.print(Panel(
                     f"  [err]BUILD FAILED[/err]  ({elapsed:.1f}s)",
                     title="[heading] Result [/heading]",
                     border_style="err",
-                    box=box.ASCII,
+                    box=box.ROUNDED,
                 ))
 
             _db.save_build({
@@ -5165,8 +5214,8 @@ def run_builder() -> None:
         f"  {len(stealer_names)} stealers  |  {len(pers_names)} persistence mechanisms\n"
         f"  type  help  for commands,  list  to browse,  back  to return",
         title="[heading] Builder [/heading]",
-        border_style="cyan",
-        box=box.ASCII,
+        border_style="bright_cyan",
+        box=box.ROUNDED,
     ))
     console.print()
 
@@ -5207,8 +5256,8 @@ def run_builder() -> None:
             if args:
                 f = args[0].lower()
                 if f == "stealer":
-                    t = Table(box=box.ASCII, show_header=True, header_style="heading",
-                              border_style="dim", padding=(0, 1),
+                    t = Table(box=box.ROUNDED, show_header=True, header_style="bold bright_white on bright_black",
+                              border_style="bright_black", padding=(0, 1),
                               title=f"Stealers  ({len(stealer_names)})")
                     t.add_column("#",       style="dim", min_width=3,  justify="right")
                     t.add_column("name",    style="cmd", min_width=18)
@@ -5222,8 +5271,8 @@ def run_builder() -> None:
                     )
                     continue
                 elif f == "persistence":
-                    t = Table(box=box.ASCII, show_header=True, header_style="heading",
-                              border_style="dim", padding=(0, 1),
+                    t = Table(box=box.ROUNDED, show_header=True, header_style="bold bright_white on bright_black",
+                              border_style="bright_black", padding=(0, 1),
                               title=f"Persistence Mechanisms  ({len(pers_names)})")
                     t.add_column("#",           style="dim",  min_width=3,  justify="right")
                     t.add_column("name",        style="cmd",  min_width=18)
@@ -5267,8 +5316,8 @@ def run_builder() -> None:
             # search stealers
             st_hits = [n for n in stealer_names if q in n]
             if st_hits:
-                t = Table(box=box.ASCII, show_header=True, header_style="heading",
-                          border_style="dim", padding=(0, 1),
+                t = Table(box=box.ROUNDED, show_header=True, header_style="bold bright_white on bright_black",
+                          border_style="bright_black", padding=(0, 1),
                           title=f"Stealer Matches  ({len(st_hits)})")
                 t.add_column("#",    style="dim", min_width=3, justify="right")
                 t.add_column("name", style="cmd", min_width=18)
@@ -5322,8 +5371,8 @@ def run_builder() -> None:
             if slug in stealer_set:
                 console.print()
                 # persistence selection table
-                t = Table(box=box.ASCII, show_header=True, header_style="heading",
-                          border_style="dim", padding=(0, 1),
+                t = Table(box=box.ROUNDED, show_header=True, header_style="bold bright_white on bright_black",
+                          border_style="bright_black", padding=(0, 1),
                           title="Persistence Mechanisms")
                 t.add_column("#",    style="dim", min_width=3, justify="right")
                 t.add_column("name", style="cmd", min_width=18)
@@ -5382,7 +5431,7 @@ def run_builder() -> None:
                     )
                     console.print(Panel(body,
                                         title="[ok] BUILD OK [/ok]",
-                                        border_style="ok", box=box.ASCII))
+                                        border_style="bright_green", box=box.ROUNDED))
                     console.print()
 
                     # deployment instructions
@@ -5403,14 +5452,14 @@ def run_builder() -> None:
                     )
                     console.print(Panel(instr,
                                         title="[heading] Deployment Instructions [/heading]",
-                                        border_style="dim", box=box.ASCII))
+                                        border_style="bright_black", box=box.ROUNDED))
                 else:
                     console.print(Panel(
                         f"  Stealer  : {slug}\n"
                         f"  Elapsed  : {elapsed:.2f}s\n"
                         f"  [dim]Check log above for error details[/dim]",
                         title="[err] BUILD FAILED [/err]",
-                        border_style="err", box=box.ASCII,
+                        border_style="err", box=box.ROUNDED,
                     ))
 
                 console.print()
@@ -5462,7 +5511,7 @@ def run_builder() -> None:
                 f"  Compiler : {mod['compiler']}\n"
                 f"  Source   : {mod['src_path']}",
                 title="[heading] Build: Pre-flight [/heading]",
-                border_style="cyan", box=box.ASCII,
+                border_style="bright_cyan", box=box.ROUNDED,
             ))
             console.print()
 
@@ -5488,7 +5537,7 @@ def run_builder() -> None:
                     f"  Size   : {out_size:,} bytes  ({out_size//1024} KB)\n"
                     f"  Time   : {elapsed:.2f}s",
                     title="[ok] BUILD OK [/ok]",
-                    border_style="ok", box=box.ASCII,
+                    border_style="bright_green", box=box.ROUNDED,
                 ))
             else:
                 console.print(Panel(
@@ -5497,7 +5546,7 @@ def run_builder() -> None:
                     f"  Elapsed  : {elapsed:.2f}s\n"
                     f"  [dim]Check log above for error details[/dim]",
                     title="[err] BUILD FAILED [/err]",
-                    border_style="err", box=box.ASCII,
+                    border_style="err", box=box.ROUNDED,
                 ))
 
             console.print()
