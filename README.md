@@ -23,6 +23,10 @@ Peekaboo is a modular framework designed to safely emulate malware behavior. It 
 - **Malpedia integration** - threat actor and malware family lookup with semantic blog post matching via local LLM embeddings.
 - **AI assistant** - local RAG chatbot (Ollama/qwen3) trained on blog posts and codebase; also supports Claude and Gemini.
 - **APT campaign pipeline** - end-to-end automated pipeline: Malpedia actor -> threat reports -> TTP extraction (Claude API + regex) -> module selection -> binary compile. Full session history stored in SQLite with per-session report links, TTPs, and download access.
+- **YARA rule generator** - auto-generate YARA rules from compiled binaries or uploaded samples; rules can be saved, copied, and downloaded.
+- **VirusTotal scanner** - submit binaries for AV detection scoring; lookup by SHA256; poll analysis results; supports From Build and From Session sources.
+- **Evasion lab** - static evasion scoring (entropy, imports, strings, PE structure, packer detection) with patch suggestions; supports From Build, From Session, and direct upload.
+- **PE inspector** - deep anatomy of PE binaries: DOS / File / Optional / Section headers, imports, exports, Rich header, overlay, packer detection, threat score; supports From Build, From Session, path, and direct upload.
 - **safe by design:** Focuses on telemetry generation (process creation, network connections) rather than actual system damage.      
 
 ## architecture
@@ -64,13 +68,116 @@ cd dashboard && python3 app.py
 | module | description |
 |--------|-------------|
 | **Builder** | Compile payloads and stealers from source templates with live build log streaming |
+| **Build History** | Browse, download, and manage all past builds; per-file download for main binary and persistence binary |
+| **Samples** | Upload and manage captured agent samples (pcap, binaries, etc.) organized by session |
 | **Beacons** | Real-time monitoring of active agents - hostname, OS, IP, check-in time |
-| **C2** | Deliver compiled binaries over Telegram, GitHub, VirusTotal, Bitbucket |
-| **Config** | Inline editor for all API keys and service configs (Telegram, GitHub, Azure, Angelcam, Ollama, Gemini, etc.) |
-| **AI Assistant** | RAG chatbot with support for Claude, Gemini, and local Ollama (qwen3); answers questions about the codebase and blog posts |
+| **C2** | Deliver compiled binaries over Telegram, GitHub Gist, Bitbucket, VT Dead Drop, and Slack; source selector: Upload / From Build / From Session |
+| **YARA** | Auto-generate YARA rules from any binary (From Build, From Session, or Upload); save, copy, and download rules |
+| **VirusTotal** | Submit binaries to VirusTotal for AV detection scoring; lookup by SHA256; poll analysis; From Build and From Session sources |
+| **Evasion Lab** | Static evasion score with category breakdown (entropy, imports, strings, PE structure); patch suggestions; From Build / From Session / Upload |
+| **PE Inspector** | Deep PE anatomy: DOS / File / Optional / Section headers, imports, exports, Rich header, overlay, packer detection, threat score; Path / From Session / From Build / Upload |
 | **APT Campaign** | Fully automated pipeline: actor -> reports -> TTP extraction -> module selection -> binary compile |
 | **MITRE ATT&CK** | Browse 200+ blog posts mapped to ATT&CK techniques with inline source code viewer |
 | **Malpedia** | Threat actor and malware family lookup with semantic blog post matching |
+| **AI Assistant** | RAG chatbot with support for Claude, Gemini, and local Ollama (qwen3); answers questions about the codebase and blog posts |
+| **Config** | Inline editor for all API keys and service configs (Telegram, GitHub, Azure, Angelcam, Ollama, Gemini, etc.) |
+
+### Builder
+
+Select malware type (injection or stealer), injection technique, encryption algorithm, payload, stealer channel, and persistence method. Build output streams live to the UI. On success, the compiled binary and persistence binary (if enabled) are available for immediate download.
+
+### Build History
+
+Every build is persisted to SQLite. The history table shows build ID, status badge, module/stealer name, compiler options, timestamp, and download links for each compiled file (main binary + `persistence.exe` when present). Builds can be cleared individually or in bulk.
+
+### Samples / Sessions
+
+Upload binary samples captured during red team exercises. Each session groups files by actor/host, stores upload time, and provides direct download links. Sessions feed the "From Session" source selector in YARA, VirusTotal, Evasion Lab, PE Inspector, and C2 delivery.
+
+### C2 Panel
+
+#### Channel status
+
+Connectivity check for all configured channels (Telegram, GitHub, Bitbucket, VirusTotal, Slack) with live status indicators.
+
+#### Binary source selector
+
+Three source tabs above the delivery buttons:
+
+| tab | description |
+|-----|-------------|
+| **Upload** | Drag-and-drop or browse a local binary; staged on the server via `POST /api/c2/stage`; staged ID used in all delivery calls |
+| **From Build** | Per-file dropdown populated from build history; selects main binary or `persistence.exe` from any successful build |
+| **From Session** | Session picker + file picker; delivers any sample uploaded to a session |
+
+If no source is selected the backend falls back to the most recently compiled binary.
+
+#### Delivery channels
+
+| channel | MITRE | description |
+|---------|-------|-------------|
+| **Telegram** | T1102 + T1105 | Sends binary as `sendDocument` to configured bot/chat |
+| **GitHub Gist** | T1102.001 + T1105 | Creates private gist with base64-encoded binary + decode instructions |
+| **Bitbucket** | T1102 + T1105 | Commits base64-encoded binary to a Bitbucket repo under `drops/` |
+| **VT Dead Drop** | T1102 + T1102.001 | Uploads binary to VirusTotal for analysis, then stages it as base64 chunks in VT file comments; agent retrieves by SHA256, reassembles binary (technique used by Turla, APT28) |
+| **Slack** | T1102 + T1071.001 | Posts payload metadata notification to Slack incoming webhook |
+
+After a VT Dead Drop delivery the result panel shows the SHA256, chunk count, and analysis link, plus a **Retrieve Binary** button that simulates the agent-side pull and a **Save Binary** button to download the reassembled file.
+
+### YARA Rule Generator
+
+Auto-generates YARA rules from a binary using string extraction, section name heuristics, import pattern matching, and entropy thresholds. Rules can be generated from:
+
+- **From Build** - select any compiled build binary (or persistence binary)
+- **From Session** - select a captured sample
+- **Upload** - drag-and-drop any PE file
+
+Generated rules can be copied to clipboard, downloaded as `.yar` files, and saved to the knowledge base.
+
+### VirusTotal Scanner
+
+Submit binaries directly to VirusTotal for AV engine detection scoring. Features:
+
+- **Upload** tab - submit any binary by file upload
+- **From Build** tab - select any compiled binary from build history
+- **From Session** tab - select a captured sample
+- SHA256 **Lookup** - query existing VT reports without re-uploading
+- **Poll** - check pending analysis status
+
+Results show detection ratio, engine-by-engine breakdown, and file metadata.
+
+### Evasion Lab
+
+Static evasion scoring engine that estimates how detectable a binary is without executing it. Scores 0–100 across five categories:
+
+| category | what is measured |
+|----------|-----------------|
+| **Entropy** | Shannon entropy per section; packed/encrypted sections score higher |
+| **Imports** | Presence of suspicious API calls (VirtualAllocEx, CreateRemoteThread, etc.) |
+| **Strings** | Cleartext IOC strings (IPs, URLs, registry keys, API names) |
+| **PE Structure** | Header anomalies, section name mismatches, unusual characteristics |
+| **Packer** | Known packer section names (UPX, VMProtect, Themida, etc.) |
+
+Patch suggestions are shown for each category. Patches can be applied to the binary directly from the UI. Sources: From Build / From Session / Upload.
+
+### PE Inspector
+
+Deep static analysis of PE binaries. Input sources: **Path**, **From Session**, **From Build**, **Upload**.
+
+Result tabs:
+
+| tab | content |
+|-----|---------|
+| **Overview** | File hashes (MD5 / SHA1 / SHA256), arch, PE type, timestamp, entry point, image base, subsystem, overall entropy, threat score (0–100) |
+| **DOS Header** | All 17 MZ fields (`e_magic` through `e_lfanew`) |
+| **File Header** | COFF fields: machine type, section count, timestamp, symbol table pointer, characteristics with decoded flag names |
+| **Opt Header** | PE32/PE32+ optional header: linker version, code/data sizes, entry point, base addresses, alignment, OS/image/subsystem versions, DLL characteristics with decoded flags |
+| **Sections** | Per-section: name, virtual address, virtual size, raw size, raw offset, characteristics, decoded flags, entropy bar, R/W/X indicators, suspicious flag |
+| **Imports** | DLL-grouped import table with suspicious API highlighting by category (injection, hollowing, anti-debug, anti-vm, network, execution, persistence, credential, keylog) |
+| **Exports** | Exported symbol names, ordinals, and RVAs |
+| **Rich Header** | Decoded Rich header entries: tool ID, tool name, build number, use count |
+| **Overlay** | Overlay detection: offset, size, entropy, SHA256 of appended data |
+| **Packer** | Packer identification by section name signatures (UPX, VMProtect, Themida, MPRESS, ASPack, etc.) |
 
 ### MITRE ATT&CK R&D
 
@@ -130,6 +237,171 @@ Supported providers:
 - **Local (Ollama)** - `qwen3:4b` (or any Ollama model); runs fully offline; thinking mode tokens are filtered before streaming to the UI
 - **Claude** (Anthropic API key required)
 - **Gemini** (Google API key required)    
+
+## CLI (`peekaboo_cli.py`)
+
+The CLI is a rich interactive terminal application (`peekaboo_cli.py`) with a top-level REPL and dedicated sub-REPLs for each module. Uses `prompt_toolkit` for autocompletion and history, and `rich` for tables, panels, and syntax-highlighted output.
+
+```bash
+python3 peekaboo_cli.py
+```
+
+Top-level commands:
+
+| command | description |
+|---------|-------------|
+| `library` | Browse and search the MITRE ATT&CK blog post library |
+| `artifacts` | View and rebuild the Artifact Map (embedding index) |
+| `builder` | Compile payloads and stealers interactively |
+| `shellcode` | Shellcode analysis and XOR encoding tools |
+| `yara` | YARA rule generator sub-REPL |
+| `malpedia` | Threat actor and malware family lookup |
+| `ttp` | Browse MITRE ATT&CK techniques |
+| `pe` | PE binary anatomy sub-REPL |
+| `vtscan` | VirusTotal scanner sub-REPL |
+| `evasion` | Evasion score and patch lab sub-REPL |
+| `help` | Top-level help; `help <module>` for module-specific docs |
+| `exit` / `quit` | Exit the CLI |
+
+### `library` sub-REPL
+
+Browse and search 200+ blog post techniques with inline source code display.
+
+| command | description |
+|---------|-------------|
+| `list [category]` | List all techniques, optionally filtered by category |
+| `search <query>` | Full-text search across technique titles and body |
+| `show <slug>` | Display metadata panel + syntax-highlighted source code |
+| `categories` | List all available categories |
+| `help` | Show all library commands |
+
+Categories include: `analysis`, `android`, `c2`, `credential-access`, `cryptography`, `discovery`, `evasion`, `execution`, `exfiltration`, `injection`, `linux`, `macos`, `persistence`, `privilege-escalation`, `reconnaissance`.
+
+### `builder` sub-REPL
+
+Interactive payload builder with the same options as the dashboard builder.
+
+| command | description |
+|---------|-------------|
+| `build <injection> [options]` | Build an injection binary |
+| `build stealer <name>` | Build a stealer (telegram, github, slack, virustotal, bitbucket, azure, angelcam) |
+| `list injection` | List all injection techniques |
+| `list stealer` | List all stealer modules |
+| `list payload` | List available payloads |
+| `list encryption` | List encryption algorithms |
+| `list persistence` | List persistence methods |
+| `history` | Show build history |
+| `show <build-id>` | Show build metadata and download path |
+| `search <query>` | Search injection techniques by partial name |
+| `help` | Full builder help |
+
+Example:
+```
+peekaboo builder > build virtualallocex -e speck -p meow -r registry
+peekaboo builder > build stealer telegram
+```
+
+### `shellcode` sub-REPL
+
+Shellcode analysis and transformation tools.
+
+| command | description |
+|---------|-------------|
+| `analyse <path>` | Analyse raw shellcode: size, entropy, known pattern detection, hex dump |
+| `encode <path> [key]` | XOR-encode shellcode with a given key (default: random) |
+| `decode <path> [key]` | XOR-decode shellcode |
+| `help` | Show all shellcode commands |
+
+### `yara` sub-REPL
+
+Generate and manage YARA rules from binaries.
+
+| command | description |
+|---------|-------------|
+| `gen <path>` | Generate YARA rule from a PE binary at the given path |
+| `gen-build [id] [fname]` | Generate rule from a compiled build binary |
+| `gen-session <sid> <file>` | Generate rule from a session sample |
+| `builds` | List available compiled builds |
+| `save <path>` | Save the last generated rule to a `.yar` file |
+| `show` | Print the last generated rule |
+| `help` | Show all YARA commands |
+
+### `malpedia` sub-REPL
+
+Threat actor and malware family lookup against the Malpedia REST API with semantic blog post matching.
+
+| command | description |
+|---------|-------------|
+| `actors` | List all threat actors |
+| `families` | List all malware families |
+| `search <query>` | Search actors and families by name, country, or alias |
+| `actor <id>` | Show actor detail + semantically matched blog posts |
+| `family <id>` | Show family detail + semantically matched blog posts |
+| `help` | Show all Malpedia commands |
+
+### `ttp` sub-REPL
+
+Browse MITRE ATT&CK techniques.
+
+| command | description |
+|---------|-------------|
+| `list [tactic]` | List all techniques, optionally filtered by tactic |
+| `search <query>` | Search by technique name or description |
+| `show <T-ID>` | Show full technique detail: tactic, description, detection notes, mapped blog posts |
+| `tactics` | List all ATT&CK tactics |
+| `help` | Show all TTP commands |
+
+### `pe` sub-REPL
+
+Deep static analysis of PE binaries.
+
+| command | description |
+|---------|-------------|
+| `load <path>` | Load and analyse a PE binary from file path |
+| `load-session <sid> <file>` | Load from a captured session sample |
+| `load-build <id> [fname]` | Load from a compiled build binary |
+| `builds` | List available compiled builds |
+| `dos-header` | Print DOS (MZ) header fields |
+| `file-header` | Print COFF file header fields with decoded characteristic flags |
+| `opt-header` | Print optional header fields with DLL characteristic flags |
+| `sections` | Print enriched section table (virt addr, virt size, raw offset, entropy, flags) |
+| `imports` | Print import table grouped by DLL with suspicious API highlighting |
+| `exports` | Print export table |
+| `rich` | Print decoded Rich header entries |
+| `overlay` | Print overlay detection result |
+| `packer` | Print packer identification result |
+| `summary` | Print overview panel (hashes, arch, entry point, threat score) |
+| `help` | Show all PE commands |
+
+### `vtscan` sub-REPL
+
+Submit binaries to VirusTotal and query results.
+
+| command | description |
+|---------|-------------|
+| `scan <path>` | Upload a binary and start analysis |
+| `scan <id> [fname]` | Upload from a compiled build (optionally specify file) |
+| `list` | List available compiled builds with per-file entries |
+| `poll <analysis-id>` | Poll a pending analysis for results |
+| `lookup <sha256>` | Fetch existing VT report by SHA256 |
+| `help` | Show all vtscan commands |
+
+### `evasion` sub-REPL
+
+Static evasion scoring and binary patching.
+
+| command | description |
+|---------|-------------|
+| `load <path>` | Load a binary for evasion analysis |
+| `load-build <id> [fname]` | Load from a compiled build binary |
+| `load-session <sid> <file>` | Load from a session sample |
+| `builds` | List available compiled builds |
+| `analyse` | Run evasion score analysis on the loaded binary |
+| `patches` | List suggested evasion patches |
+| `apply <patch-id>` | Apply a specific patch to the loaded binary |
+| `apply-all` | Apply all suggested patches |
+| `save <path>` | Save patched binary to file |
+| `help` | Show all evasion commands |
 
 ## virus total result:
 02 september 2021
