@@ -5072,22 +5072,38 @@ function c2UpdateSessionFiles(sample) {
 
 async function deliver(channel) {
   const out  = document.getElementById('deliver-output');
+  // disable VT button to prevent double-click / duplicate requests
+  const vtBtn = document.querySelector('[onclick="deliver(\'virustotal\')"]');
+  if (channel === 'virustotal' && vtBtn) {
+    vtBtn.disabled = true;
+    vtBtn.textContent = '⏳ working…';
+  }
   out.style.display = 'block';
-  out.textContent   = `delivering to ${channel}…`;
+  out.textContent   = channel === 'virustotal'
+    ? 'Uploading to VirusTotal and posting resolver comment…\n(please wait ~15–30 s for VT to index the file)'
+    : `delivering to ${channel}…`;
   const body = _c2GetSourceBody();
   const r    = await fetch(`/api/c2/deliver/${channel}`, {
     method:  'POST',
     headers: {'Content-Type': 'application/json'},
     body:    JSON.stringify(body),
   }).then(r=>r.json()).catch(e=>({ok:false,error:String(e)}));
+  if (channel === 'virustotal' && vtBtn) {
+    vtBtn.disabled = false;
+    vtBtn.innerHTML = '<span>🦠</span> VT Dead Drop';
+  }
   if (channel === 'virustotal' && r.ok) {
+    const commentLine = r.comment_posted
+      ? `<span style="color:var(--green)">✓ posted</span>  (waited ${r.waited_secs}s for VT indexing)`
+      : `<span style="color:var(--orange,#e5c07b)">✗ ${escHtml(r.comment_error||'failed')}</span>  — try Retrieve after analysis completes`;
     out.innerHTML =
-      `<span style="color:var(--green)">✓</span> Binary uploaded + staged as VT comments\n` +
+      `<span style="color:var(--green)">✓</span> Binary uploaded to VirusTotal\n` +
       `File    : ${escHtml(r.file||'')}  (${(r.size||0).toLocaleString()} bytes)\n` +
       `SHA256  : <span style="color:var(--blue)">${escHtml(r.sha256||'')}</span>\n` +
-      `Chunks  : ${r.comments_posted}/${r.chunks} base64 comments posted\n` +
+      `Comment : ${commentLine}\n` +
+      `Resolver: ${escHtml(r.descriptor||'')}\n` +
       `Analysis: <a href="${escHtml(r.analysis_url||'')}" target="_blank" style="color:var(--blue)">${escHtml(r.analysis_id||'')}</a>\n` +
-      `MITRE   : ${escHtml(r.technique||'')} - Dead Drop Resolver\n\n` +
+      `MITRE   : ${escHtml(r.technique||'')} – Dead Drop Resolver\n\n` +
       `<button class="btn btn-ghost btn-sm" onclick="retrieveVT('${r.sha256||''}')">🔽 Retrieve Binary</button>`;
   } else {
     out.textContent = JSON.stringify(r, null, 2);

