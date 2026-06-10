@@ -846,8 +846,8 @@ code{font-family:var(--mono);font-size:12px;background:var(--bg4);padding:1px 5p
   <div class="card">
     <div class="card-header">
       <span style="font-size:18px">🕐</span>
-      <div class="card-title">Build History</div>
-      <button class="btn btn-del btn-sm" style="margin-left:auto" onclick="clearBuildHistory()">clear</button>
+      <div><div class="card-title">Build History</div><div class="card-sub">compiled binary records</div></div>
+      <button class="btn btn-del btn-sm" style="margin-left:auto" onclick="clearBuilds()" title="Clear history from DB and delete compiled binaries from disk">clear</button>
     </div>
     <div class="tbl-wrap">
       <table class="tbl">
@@ -2557,10 +2557,15 @@ async function loadBuildFiles(build_id) {
   ).join('');
 }
 
-async function clearBuildHistory() {
-  if (!confirm('Clear all build history?')) return;
-  await fetch('/api/logs', {method:'DELETE'});
+async function clearBuilds() {
+  if (!confirm('Clear build history and delete all compiled binaries from disk?\nThis cannot be undone.')) return;
+  const [, binR] = await Promise.all([
+    fetch('/api/logs', {method:'DELETE'}),
+    fetch('/api/builds/binaries', {method:'DELETE'}).then(r => r.json()).catch(() => ({ok:false, deleted:0})),
+  ]);
+  toast(`Build history cleared · ${binR.deleted} binary file${binR.deleted !== 1 ? 's' : ''} deleted`, 'ok');
   loadBuildHistory();
+  checkBinaryInfo();
 }
 
 async function loadBuildHistory() {
@@ -2586,9 +2591,15 @@ async function loadBuildHistory() {
 // Samples
 // -----------------------------------------------------------------
 async function clearSamples() {
-  if (!confirm('Clear all compiled samples? This will delete the files from disk.')) return;
-  await fetch('/api/samples', {method:'DELETE'});
+  if (!confirm('Clear all samples - delete files from disk and remove from database?\nThis cannot be undone.')) return;
+  const r = await fetch('/api/samples', {method:'DELETE'}).then(res => res.json()).catch(() => ({ok:false}));
+  if (r.ok) {
+    toast('All samples cleared from disk and database', 'ok');
+  } else {
+    toast('Clear failed: ' + (r.error || 'unknown error'), 'error');
+  }
   loadSamples();
+  checkBinaryInfo();
 }
 
 async function loadSamples() {

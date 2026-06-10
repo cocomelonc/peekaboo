@@ -306,6 +306,23 @@ def api_logs_clear():
         return jsonify({"ok": False, "error": str(e)}), 500
 
 
+@app.route("/api/builds/binaries", methods=["DELETE"])
+def api_builds_binaries_clear():
+    """Delete all compiled binaries (peekaboo.exe / persistence.exe) under malware/."""
+    try:
+        deleted = []
+        for pattern in ("peekaboo.exe", "persistence.exe"):
+            for f in MALWARE_DIR.rglob(pattern):
+                try:
+                    f.unlink()
+                    deleted.append(str(f.relative_to(BASE_DIR)))
+                except Exception:
+                    pass
+        return jsonify({"ok": True, "deleted": len(deleted), "files": deleted})
+    except Exception as e:
+        return jsonify({"ok": False, "error": str(e)}), 500
+
+
 _SAFE_CONFIGS = {
     "telegram_config", "github_config", "bitbucket_config", "virustotal_config",
     "anthropic_config", "gemini_config", "malpedia_config",
