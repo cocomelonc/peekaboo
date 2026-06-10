@@ -1544,6 +1544,32 @@ def api_vtscan_upload_raw():
     return jsonify(result)
 
 
+@app.route("/api/vtscan/from-build", methods=["POST"])
+def api_vtscan_from_build():
+    """Upload a compiled build binary directly to VirusTotal."""
+    if not HAS_VTSCAN:
+        return jsonify({"ok": False, "error": "vtscan module not available"}), 503
+    data = request.get_json(force=True) or {}
+    build_id = data.get("build_id", "").strip()
+    if not build_id:
+        return jsonify({"ok": False, "error": "build_id required"}), 400
+    with _lock:
+        job = dict(_builds.get(build_id, {}))
+    if not job:
+        job = _db.get_build(build_id) or {}
+    if not job:
+        return jsonify({"ok": False, "error": "build not found"}), 404
+    if job.get("status") != "success":
+        return jsonify({"ok": False, "error": "build did not succeed"}), 400
+    p = _resolve_build_binary(job)
+    if not p:
+        return jsonify({"ok": False, "error": "binary not found on disk"}), 404
+    result = _vtscan.upload_file(p)
+    result["build_id"] = build_id
+    result["binary"]   = p.name
+    return jsonify(result)
+
+
 # -- YARA rule generator -------------------------------------------------------
 
 try:

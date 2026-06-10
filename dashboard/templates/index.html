@@ -1268,8 +1268,35 @@ code{font-family:var(--mono);font-size:12px;background:var(--bg4);padding:1px 5p
   <!-- source selector tabs -->
   <div class="yara-src-tabs">
     <button class="btn btn-primary btn-sm" id="vt-tab-sample" onclick="vtSetTab('sample')">📦 From Sample</button>
+    <button class="btn btn-ghost btn-sm"   id="vt-tab-build"  onclick="vtSetTab('build')">🔨 From Build</button>
     <button class="btn btn-ghost btn-sm"   id="vt-tab-upload" onclick="vtSetTab('upload')">⬆️ Upload File</button>
     <span class="yara-src-hint">scan any PE binary with 70+ AV/EDR engines via VirusTotal</span>
+  </div>
+
+  <!-- from build -->
+  <div id="vt-src-build" style="display:none">
+    <div class="card mb-16">
+      <div class="card-header">
+        <span style="font-size:20px">🔨</span>
+        <div>
+          <div class="card-title">VirusTotal Scanner</div>
+          <div class="card-sub">pick a compiled binary from build history</div>
+        </div>
+        <button class="btn btn-ghost btn-sm ms-auto" onclick="loadVtBuilds()">↻ Refresh</button>
+      </div>
+      <div class="vt-pick-row">
+        <div class="vt-select vt-drop-wide" id="vt-build-drop" style="flex:1">
+          <div class="vt-select-val" onclick="vtToggleDrop('vt-build-drop')">
+            <span id="vt-build-label" class="vt-ph">- select build -</span>
+            <span class="vt-select-arrow">▼</span>
+          </div>
+          <div class="vt-select-menu" id="vt-build-menu"></div>
+        </div>
+        <button class="btn btn-primary vt-pick-btn" onclick="vtScanFromBuild()" id="vt-build-scan-btn">
+          🔬 Scan
+        </button>
+      </div>
+    </div>
   </div>
 
   <!-- from sample -->
@@ -2607,6 +2634,7 @@ async function loadBuildHistory() {
       binCell = `<div style="display:flex;gap:4px;align-items:center;flex-wrap:wrap">
         <a href="/api/build/${b.id}/binary/${fname}" class="btn btn-green btn-sm" title="Download binary" download>⬇ ${fname}</a>
         <button class="btn btn-ghost btn-sm" title="Generate YARA rule" onclick="yaraFromBuildId('${b.id}','${fname}')">🔰 YARA</button>
+        <button class="btn btn-ghost btn-sm" title="Scan with VirusTotal" onclick="vtFromBuildId('${b.id}','${fname}')">🔬 VT</button>
       </div>`;
     } else if (b.status === 'success') {
       binCell = '<span class="text-dim text-xs">not on disk</span>';
@@ -3518,15 +3546,101 @@ function _vtSetProgress(icon, title, pct, msg) {
   document.getElementById('vt-progress-msg').textContent   = msg;
 }
 
+let _vtSelectedBuild = '';
+
 function vtSetTab(tab) {
   document.getElementById('vt-src-sample').style.display = tab === 'sample' ? '' : 'none';
+  document.getElementById('vt-src-build').style.display  = tab === 'build'  ? '' : 'none';
   document.getElementById('vt-src-upload').style.display = tab === 'upload' ? '' : 'none';
   document.getElementById('vt-tab-sample').className = tab === 'sample' ? 'btn btn-primary btn-sm' : 'btn btn-ghost btn-sm';
+  document.getElementById('vt-tab-build').className  = tab === 'build'  ? 'btn btn-primary btn-sm' : 'btn btn-ghost btn-sm';
   document.getElementById('vt-tab-upload').className = tab === 'upload' ? 'btn btn-primary btn-sm' : 'btn btn-ghost btn-sm';
   document.getElementById('vt-results').style.display  = 'none';
   document.getElementById('vt-empty').style.display    = '';
   document.getElementById('vt-progress').style.display = 'none';
   if (_vtPollTimer) { clearInterval(_vtPollTimer); _vtPollTimer = null; }
+  if (tab === 'build' && !document.getElementById('vt-build-menu').children.length) {
+    loadVtBuilds();
+  }
+}
+
+async function loadVtBuilds() {
+  const builds = await fetch('/api/logs?limit=50').then(r => r.json()).catch(() => []);
+  const menu = document.getElementById('vt-build-menu');
+  menu.innerHTML = '';
+  const available = builds.filter(b => b.status === 'success' && b.binary_available);
+  if (!available.length) {
+    menu.innerHTML = '<div class="vt-select-opt vt-ph">no compiled binaries found</div>';
+    return;
+  }
+  for (const b of available) {
+    const p     = b.params || {};
+    const mod   = p.slug || p.stealer || p.injection || b.id;
+    const fname = b.binary_name || 'peekaboo.exe';
+    const label = `${b.id}  ·  ${mod}  (${fname})  ${b.created?.slice(0,16)||''}`;
+    const div   = document.createElement('div');
+    div.className     = 'vt-select-opt';
+    div.textContent   = label;
+    div.dataset.bid   = b.id;
+    div.dataset.fname = fname;
+    div.onclick = () => {
+      _vtSelectedBuild = b.id;
+      const lbl = document.getElementById('vt-build-label');
+      lbl.textContent = label; lbl.className = '';
+      document.querySelectorAll('#vt-build-menu .vt-select-opt').forEach(o =>
+        o.classList.toggle('vt-selected', o.dataset.bid === b.id));
+      vtCloseDrop('vt-build-drop');
+    };
+    menu.appendChild(div);
+  }
+}
+
+async function vtScanFromBuild() {
+  const bid = _vtSelectedBuild;
+  if (!bid) { toast('Select a build first', 'warn'); return; }
+  if (_vtPollTimer) { clearInterval(_vtPollTimer); _vtPollTimer = null; }
+  document.getElementById('vt-results').style.display  = 'none';
+  document.getElementById('vt-empty').style.display    = 'none';
+  document.getElementById('vt-progress').style.display = '';
+  _vtSetProgress('⏳', 'Uploading build binary…', 10, 'sending to VirusTotal…');
+  document.getElementById('vt-build-scan-btn').disabled = true;
+
+  const r = await fetch('/api/vtscan/from-build', {
+    method: 'POST',
+    headers: {'Content-Type': 'application/json'},
+    body: JSON.stringify({build_id: bid}),
+  }).then(r => r.json()).catch(e => ({ok: false, error: String(e)}));
+
+  document.getElementById('vt-build-scan-btn').disabled = false;
+
+  if (!r.ok) {
+    document.getElementById('vt-progress').style.display = 'none';
+    document.getElementById('vt-empty').style.display    = '';
+    toast('Scan error: ' + r.error, 'error');
+    return;
+  }
+  if (r.cached) {
+    document.getElementById('vt-progress').style.display = 'none';
+    _vtShowResults(r);
+    toast('Loaded cached VT results', 'ok');
+    return;
+  }
+  _vtCurrentScan = {analysis_id: r.analysis_id, sha256: r.sha256};
+  _vtSetProgress('🔬', 'Analyzing…', 40, 'analysis queued - polling (may take 1–3 min)…');
+  _vtPollTimer = setInterval(_vtPollAnalysis, 9000);
+  _vtPollAnalysis();
+}
+
+async function vtFromBuildId(buildId, fname) {
+  showPanel('coverage');
+  vtSetTab('build');
+  await loadVtBuilds();
+  _vtSelectedBuild = buildId;
+  const lbl = document.getElementById('vt-build-label');
+  lbl.textContent = `${buildId}  (${fname})`; lbl.className = '';
+  document.querySelectorAll('#vt-build-menu .vt-select-opt').forEach(o =>
+    o.classList.toggle('vt-selected', o.dataset.bid === buildId));
+  vtScanFromBuild();
 }
 
 function vtHandleFile(file) {

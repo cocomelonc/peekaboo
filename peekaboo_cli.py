@@ -193,6 +193,7 @@ DEFCON Demo Labs Singapore 2026 | by @cocomelonc
 | `yara`      | Generate YARA rules from binaries; scan with yara-python    |
 | `malpedia`  | APT actors, malware families, reports, YARA from Malpedia   |
 | `ttp`       | TTPs, unique ATT&CK sub-techniques implementations from lib |
+| `vtscan`    | Scan compiled binaries or files with VirusTotal (70+ AV)    |
 
 ## Global commands
 
@@ -1825,6 +1826,104 @@ A confirmation prompt is shown before anything is deleted.
     clear
 """,
     },
+
+    # -- vtscan ----------------------------------------------------------------
+    "vtscan": {
+        "_overview": """\
+# VirusTotal Scanner
+
+Scan compiled binaries or any local file with 70+ AV/EDR engines via VirusTotal.
+Requires a VirusTotal API key in `config/virustotal_config.json`.
+
+## Commands
+
+| command              | description                                        |
+|----------------------|----------------------------------------------------|
+| `list`               | show successful builds that have binaries on disk  |
+| `scan <build-id>`    | upload build binary to VirusTotal and show results |
+| `scan-file <path>`   | upload any local PE file to VirusTotal             |
+| `poll <analysis-id>` | check status of a pending analysis                 |
+| `lookup <sha256>`    | fetch existing report from VT by SHA256 hash       |
+| `help [cmd]`         | show this help or docs for a specific command      |
+| `back`               | return to main menu                                |
+
+## Notes
+
+- If VT already has the file (matching SHA256), cached results are shown instantly.
+- New uploads are queued; use `poll` to check when the analysis is done.
+- Results show detection rate and all engine verdicts.
+""",
+        "scan": """\
+## scan
+
+Upload a compiled build binary to VirusTotal by build ID.
+
+**Usage:**
+
+    scan <build-id>
+
+**Examples:**
+
+    scan cli-a1b2c3d4
+    scan 9f3e1a2b
+
+**Notes:**
+
+- Use `list` to find available build IDs with binaries on disk.
+- If VT already has the file, cached results are shown immediately.
+- Otherwise an analysis ID is returned; use `poll <id>` to check status.
+""",
+        "scan-file": """\
+## scan-file
+
+Upload any local file to VirusTotal.
+
+**Usage:**
+
+    scan-file <path>
+
+**Examples:**
+
+    scan-file /tmp/payload.exe
+    scan-file ~/samples/beacon.dll
+
+**Notes:**
+
+- Tab completion works for the path argument.
+- File must be accessible and non-empty.
+""",
+        "poll": """\
+## poll
+
+Check the status of a pending VirusTotal analysis.
+
+**Usage:**
+
+    poll <analysis-id>
+
+**Examples:**
+
+    poll NjI4NGQxZmI...
+
+**Notes:**
+
+- Copy the analysis ID from the output of `scan` or `scan-file`.
+- Returns status (queued / in-progress / completed) and results when done.
+""",
+        "lookup": """\
+## lookup
+
+Fetch an existing VirusTotal file report by SHA256 hash.
+
+**Usage:**
+
+    lookup <sha256>
+
+**Examples:**
+
+    lookup 4b3a2e1f...
+""",
+    },
 }
 
 
@@ -1908,7 +2007,7 @@ def print_banner() -> None:
 # -- top-level commands --------------------------------------------------------
 TOP_COMMANDS = [
     "evasion", "library", "artifacts", "builder", "shellcode", "yara",
-    "malpedia", "ttp", "pe", "help", "exit", "quit",
+    "malpedia", "ttp", "pe", "vtscan", "help", "exit", "quit",
 ]
 
 TOP_HELP = [
@@ -1921,6 +2020,7 @@ TOP_HELP = [
     ("malpedia",  "APT actors, malware families, reports, YARA from Malpedia"),
     ("ttp",       "TTP -> implementation map: browse ATT&CK techniques and compile"),
     ("pe",        "PE Anatomy Inspector -- sections, imports, entropy, threat score"),
+    ("vtscan",    "Scan compiled binaries or files with VirusTotal (70+ AV/EDR)"),
     ("help",      "show this help"),
     ("exit",      "quit peekaboo-cli"),
 ]
@@ -5728,6 +5828,274 @@ def run_builder() -> None:
             )
 
 
+# -- VirusTotal scanner --------------------------------------------------------
+
+VTSCAN_COMMANDS = ["list", "scan", "scan-file", "poll", "lookup", "help", "back"]
+
+VTSCAN_HELP = [
+    ("list",             "list successful builds with binaries available on disk"),
+    ("scan <build-id>",  "upload build binary to VirusTotal and show results"),
+    ("scan-file <path>", "upload any local PE/binary file to VirusTotal"),
+    ("poll <id>",        "check status of a pending analysis by ID"),
+    ("lookup <sha256>",  "fetch existing VT report by SHA256 hash"),
+    ("help",             "show this help"),
+    ("back",             "return to main menu"),
+]
+
+
+def _vtscan_resolve_binary(build: dict) -> Path | None:
+    """Resolve the compiled binary path for a DB build record."""
+    params = build.get("params", {})
+    stored = params.get("out_path", "")
+    if stored:
+        base = Path(__file__).parent
+        p = Path(stored) if Path(stored).is_absolute() else base / stored
+        if p.exists():
+            return p
+    malware_type = params.get("malware", "")
+    base = Path(__file__).parent
+    if malware_type == "stealer":
+        p = base / "malware" / "stealer" / params.get("stealer", "") / "peekaboo.exe"
+    elif "injection" in params or malware_type == "injection":
+        p = base / "malware" / "injection" / params.get("injection", "") / "peekaboo.exe"
+    else:
+        return None
+    return p if p.exists() else None
+
+
+def _vtscan_render_results(r: dict, label: str) -> None:
+    stats = r.get("stats", {})
+    results = r.get("results", {})
+    mal  = stats.get("malicious",   0)
+    sus  = stats.get("suspicious",  0)
+    cln  = stats.get("harmless", 0) + stats.get("clean", 0)
+    undet = stats.get("undetected", 0)
+    total = mal + sus + cln + undet + stats.get("failure", 0) + stats.get("type_unsupported", 0)
+    rate  = round(mal / total * 100) if total > 0 else 0
+    rate_style = "err" if rate > 50 else "warn" if rate > 15 else "ok"
+
+    summary = (
+        f"  [err]Malicious   :[/err]  {mal}\n"
+        f"  [warn]Suspicious  :[/warn]  {sus}\n"
+        f"  [ok]Clean       :[/ok]  {cln}\n"
+        f"  [dim]Undetected  :[/dim]  {undet}\n"
+        f"  [dim]Total engines:[/dim] {total}\n"
+        f"  [{rate_style}]Detection rate: {rate}%[/{rate_style}]"
+    )
+    border = "err" if rate > 50 else "warn" if rate > 15 else "bright_green"
+    console.print()
+    console.print(Panel(summary, title=f"[heading] VT: {label} [/heading]",
+                        border_style=border, box=box.ROUNDED))
+
+    if results:
+        t = Table(box=box.ROUNDED, show_header=True,
+                  header_style="bold bright_white on bright_black",
+                  border_style="bright_black", padding=(0, 1))
+        t.add_column("engine",   style="cmd",  no_wrap=True, min_width=20)
+        t.add_column("category", style="info", min_width=12)
+        t.add_column("result",   style="warn", min_width=20)
+        detections = sorted(
+            ((eng, v) for eng, v in results.items() if v.get("category") in ("malicious", "suspicious")),
+            key=lambda x: x[0].lower()
+        )
+        for eng, v in detections[:40]:
+            cat    = v.get("category", "")
+            result_name = v.get("result") or "-"
+            sty    = "err" if cat == "malicious" else "warn"
+            t.add_row(eng, f"[{sty}]{cat}[/{sty}]", result_name)
+        if detections:
+            console.print()
+            console.print(t)
+    console.print()
+
+
+def run_vtscan() -> None:
+    """Interactive VirusTotal scanner sub-REPL."""
+    try:
+        import vtscan as _vt
+    except ImportError as exc:
+        console.print(f"[err][=^..^=] vtscan module unavailable: {exc}[/err]")
+        return
+    try:
+        import db as _db
+    except ImportError as exc:
+        console.print(f"[err][=^..^=] db module unavailable: {exc}[/err]")
+        return
+
+    builds     = _db.get_builds(limit=200)
+    build_ids  = [b["id"] for b in builds if b.get("status") == "success"]
+    session    = _make_session(VTSCAN_COMMANDS + build_ids,
+                               path_cmds=frozenset({"scan-file"}))
+
+    console.print()
+    console.print(Panel(
+        "  Scan compiled binaries or any local file with 70+ AV/EDR engines\n"
+        "  type  help  for commands,  list  to browse builds,  back  to return",
+        title="[heading] VirusTotal Scanner [/heading]",
+        border_style="bright_cyan",
+        box=box.ROUNDED,
+    ))
+    console.print()
+
+    while True:
+        try:
+            raw = session.prompt("peekaboo [vtscan] > ", style=PT_STYLE).strip()
+        except (KeyboardInterrupt, EOFError):
+            console.print("\n[dim]use  back  to return[/dim]")
+            continue
+
+        if not raw:
+            continue
+
+        parts = raw.split()
+        cmd   = parts[0].lower()
+        args  = parts[1:]
+
+        if cmd in ("back", "exit", "quit"):
+            break
+
+        elif cmd == "help":
+            if args:
+                show_help("vtscan", args[0])
+            else:
+                show_help("vtscan")
+
+        elif cmd == "list":
+            fresh = _db.get_builds(limit=50)
+            t = Table(box=box.ROUNDED, show_header=True,
+                      header_style="bold bright_white on bright_black",
+                      border_style="bright_black", padding=(0, 1))
+            t.add_column("build-id",  style="cmd",  no_wrap=True, min_width=14)
+            t.add_column("type",      style="info",  min_width=10)
+            t.add_column("module",    style="info",  min_width=18)
+            t.add_column("date",      style="dim",   min_width=16)
+            t.add_column("binary",    style="ok",    min_width=12)
+            t.add_column("on disk",   style="dim",   min_width=7, justify="center")
+            shown = 0
+            for b in fresh:
+                if b.get("status") != "success":
+                    continue
+                p = _vtscan_resolve_binary(b)
+                pa = b.get("params", {})
+                mod   = pa.get("slug") or pa.get("stealer") or pa.get("injection") or "?"
+                mtype = "module" if pa.get("slug") else (pa.get("malware") or "-")
+                t.add_row(
+                    b["id"], mtype, mod,
+                    (b.get("created") or "")[:16],
+                    p.name if p else "—",
+                    "[ok]✓[/ok]" if p else "[dim]✗[/dim]",
+                )
+                shown += 1
+            if shown:
+                console.print()
+                console.print(t)
+                console.print()
+            else:
+                console.print("  [dim]no successful builds found[/dim]\n")
+
+        elif cmd == "scan":
+            if not args:
+                console.print("  [warn]usage: scan <build-id>[/warn]\n")
+                continue
+            build_id = args[0]
+            build = _db.get_build(build_id)
+            if not build:
+                console.print(f"  [err][=^..^=] build not found: {build_id}[/err]\n")
+                continue
+            if build.get("status") != "success":
+                console.print(f"  [warn][=^..^=] build status is '{build.get('status')}', not success[/warn]\n")
+                continue
+            p = _vtscan_resolve_binary(build)
+            if not p:
+                console.print(f"  [err][=^..^=] binary not found on disk for build {build_id}[/err]\n")
+                continue
+            console.print(f"  [dim]uploading {p.name} ({p.stat().st_size:,} bytes)…[/dim]")
+            with console.status("[info]contacting VirusTotal…[/info]", spinner="dots"):
+                r = _vt.upload_file(p)
+            if not r.get("ok"):
+                console.print(f"  [err][=^..^=] {r.get('error', 'unknown error')}[/err]\n")
+                continue
+            if r.get("cached"):
+                console.print("  [dim](cached result)[/dim]")
+                _vtscan_render_results(r, p.name)
+            else:
+                aid = r.get("analysis_id", "")
+                console.print(Panel(
+                    f"  File uploaded successfully.\n"
+                    f"  Analysis ID : [cmd]{aid}[/cmd]\n"
+                    f"  SHA256      : [dim]{r.get('sha256', '?')}[/dim]\n\n"
+                    f"  Run  [cmd]poll {aid}[/cmd]  to check when analysis is complete\n"
+                    f"  (VirusTotal typically takes 1–3 minutes)",
+                    title="[heading] Uploaded [/heading]",
+                    border_style="bright_cyan", box=box.ROUNDED,
+                ))
+                console.print()
+
+        elif cmd == "scan-file":
+            if not args:
+                console.print("  [warn]usage: scan-file <path>[/warn]\n")
+                continue
+            fp = Path(args[0]).expanduser()
+            if not fp.exists():
+                console.print(f"  [err][=^..^=] file not found: {fp}[/err]\n")
+                continue
+            console.print(f"  [dim]uploading {fp.name} ({fp.stat().st_size:,} bytes)…[/dim]")
+            with console.status("[info]contacting VirusTotal…[/info]", spinner="dots"):
+                r = _vt.upload_file(fp)
+            if not r.get("ok"):
+                console.print(f"  [err][=^..^=] {r.get('error', 'unknown error')}[/err]\n")
+                continue
+            if r.get("cached"):
+                console.print("  [dim](cached result)[/dim]")
+                _vtscan_render_results(r, fp.name)
+            else:
+                aid = r.get("analysis_id", "")
+                console.print(Panel(
+                    f"  File uploaded successfully.\n"
+                    f"  Analysis ID : [cmd]{aid}[/cmd]\n"
+                    f"  SHA256      : [dim]{r.get('sha256', '?')}[/dim]\n\n"
+                    f"  Run  [cmd]poll {aid}[/cmd]  to check when analysis is complete",
+                    title="[heading] Uploaded [/heading]",
+                    border_style="bright_cyan", box=box.ROUNDED,
+                ))
+                console.print()
+
+        elif cmd == "poll":
+            if not args:
+                console.print("  [warn]usage: poll <analysis-id>[/warn]\n")
+                continue
+            with console.status("[info]polling VirusTotal…[/info]", spinner="dots"):
+                r = _vt.poll_analysis(args[0])
+            if not r.get("ok"):
+                console.print(f"  [err][=^..^=] {r.get('error', 'unknown error')}[/err]\n")
+                continue
+            status = r.get("status", "?")
+            if status == "completed":
+                _vtscan_render_results(r, args[0])
+            else:
+                console.print(
+                    f"  [warn]status: {status}[/warn]  "
+                    f"(analysis still in progress — try again in a moment)\n"
+                )
+
+        elif cmd == "lookup":
+            if not args:
+                console.print("  [warn]usage: lookup <sha256>[/warn]\n")
+                continue
+            with console.status("[info]fetching from VirusTotal…[/info]", spinner="dots"):
+                r = _vt.get_by_hash(args[0])
+            if not r.get("ok"):
+                console.print(f"  [err][=^..^=] {r.get('error', 'unknown error')}[/err]\n")
+                continue
+            _vtscan_render_results(r, r.get("name") or args[0][:16])
+
+        else:
+            console.print(
+                f"  [warn][=^..^=] unknown command: {cmd}  "
+                f"(type  help  for commands)[/warn]\n"
+            )
+
+
 # -- top-level REPL ------------------------------------------------------------
 
 def main() -> None:
@@ -5744,6 +6112,7 @@ def main() -> None:
         "malpedia":  run_malpedia,
         "ttp":       run_ttp,
         "pe":        run_pe,
+        "vtscan":    run_vtscan,
     }
 
     session = _make_session(TOP_COMMANDS)
