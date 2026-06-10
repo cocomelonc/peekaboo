@@ -2847,18 +2847,20 @@ def _load_evasion_module():
 
 
 EVASION_COMMANDS = [
-    "load", "analyse", "patches", "patch", "apply", "info", "help", "back",
+    "load", "load-build", "builds", "analyse", "patches", "patch", "apply", "info", "help", "back",
 ]
 
 EVASION_HELP = [
-    ("load <path>",          "load a PE / binary file for analysis"),
-    ("analyse",              "run evasion score analysis on loaded file"),
-    ("patches",              "list available patch transforms for loaded file"),
-    ("patch <id> [id ...]",  "select patches to apply (space-separated IDs)"),
-    ("apply [output]",       "apply selected patches and save patched binary"),
-    ("info",                 "show loaded file metadata"),
-    ("help",                 "show this help"),
-    ("back",                 "return to main menu"),
+    ("load <path>",                   "load a PE / binary file for analysis"),
+    ("load-build <id> [filename]",    "load a compiled build binary directly (use  builds  to list)"),
+    ("builds",                        "list successful builds with their compiled binaries"),
+    ("analyse",                       "run evasion score analysis on loaded file"),
+    ("patches",                       "list available patch transforms for loaded file"),
+    ("patch <id> [id ...]",           "select patches to apply (space-separated IDs)"),
+    ("apply [output]",                "apply selected patches and save patched binary"),
+    ("info",                          "show loaded file metadata"),
+    ("help",                          "show this help"),
+    ("back",                          "return to main menu"),
 ]
 
 
@@ -3084,6 +3086,96 @@ def run_evasion(ev_mod) -> None:
                 console.print(
                     f"[ok][=^..^=] loaded:[/ok] [cmd]{p.name}[/cmd]  "
                     f"[dim]{len(raw_data)//1024} KB[/dim]"
+                )
+            except Exception as e:
+                console.print(f"[err][=^..^=] read error: {e}[/err]")
+
+        # -- builds ------------------------------------------------------------
+        elif cmd == "builds":
+            try:
+                import db as _db2
+            except ImportError:
+                console.print("[err][=^..^=] db module unavailable[/err]")
+                continue
+            fresh = _db2.get_builds(limit=50)
+            t = Table(box=box.ROUNDED, show_header=True,
+                      header_style="bold bright_white on bright_black",
+                      border_style="bright_black", padding=(0, 1))
+            t.add_column("build-id", style="cmd",  no_wrap=True, min_width=14)
+            t.add_column("type",     style="info",  min_width=10)
+            t.add_column("module",   style="info",  min_width=18)
+            t.add_column("date",     style="dim",   min_width=16)
+            t.add_column("binaries", style="ok",    min_width=30)
+            shown = 0
+            for b in fresh:
+                if b.get("status") != "success":
+                    continue
+                files = _vtscan_resolve_files(b)
+                pa    = b.get("params", {})
+                pa_slug = pa.get("slug")
+                if pa_slug:
+                    mod = pa_slug
+                elif pa.get("malware") == "stealer":
+                    mod = pa.get("stealer") or "?"
+                else:
+                    mod = pa.get("injection") or "?"
+                mtype   = "module" if pa_slug else (pa.get("malware") or "-")
+                bin_txt = "  ".join(n for n, _ in files) if files else "[dim]not on disk[/dim]"
+                t.add_row(b["id"], mtype, mod, (b.get("created") or "")[:16], bin_txt)
+                shown += 1
+            if shown:
+                console.print()
+                console.print(t)
+                console.print()
+            else:
+                console.print("  [dim]no successful builds found[/dim]\n")
+
+        # -- load-build --------------------------------------------------------
+        elif cmd == "load-build":
+            if not args:
+                console.print("[warn][=^..^=] usage: load-build <build-id> [filename][/warn]")
+                continue
+            try:
+                import db as _db2
+            except ImportError:
+                console.print("[err][=^..^=] db module unavailable[/err]")
+                continue
+            build_id = args[0]
+            want_fname = args[1] if len(args) > 1 else None
+            build = _db2.get_build(build_id)
+            if not build:
+                console.print(f"  [err][=^..^=] build not found: {build_id}[/err]")
+                continue
+            if build.get("status") != "success":
+                console.print(f"  [warn][=^..^=] build status is '{build.get('status')}', not success[/warn]")
+                continue
+            files = _vtscan_resolve_files(build)
+            if not files:
+                console.print(f"  [err][=^..^=] no binaries found on disk for build {build_id}[/err]")
+                continue
+            if want_fname:
+                match = [(n, p) for n, p in files if n.lower() == want_fname.lower()]
+                if not match:
+                    avail = "  ".join(n for n, _ in files)
+                    console.print(f"  [err][=^..^=] '{want_fname}' not found; available: {avail}[/err]")
+                    continue
+                chosen = match[0][1]
+            elif len(files) > 1:
+                console.print()
+                for i, (n, fp2) in enumerate(files, 1):
+                    console.print(f"  [{i}] [cmd]{n}[/cmd]  [dim]{fp2.stat().st_size:,} bytes[/dim]")
+                console.print(f"\n  Use  [cmd]load-build {build_id} <filename>[/cmd]  to pick one.\n")
+                continue
+            else:
+                chosen = files[0][1]
+            try:
+                raw_data    = chosen.read_bytes()
+                loaded_path = chosen
+                result      = None
+                selected    = set()
+                console.print(
+                    f"[ok][=^..^=] loaded:[/ok] [cmd]{chosen.name}[/cmd]  "
+                    f"[dim]{len(raw_data)//1024} KB  (build {build_id})[/dim]"
                 )
             except Exception as e:
                 console.print(f"[err][=^..^=] read error: {e}[/err]")
@@ -5845,7 +5937,7 @@ VTSCAN_HELP = [
 
 
 def _vtscan_resolve_binary(build: dict) -> Path | None:
-    """Resolve the compiled binary path for a DB build record."""
+    """Resolve the primary compiled binary path for a DB build record."""
     params = build.get("params", {})
     stored = params.get("out_path", "")
     if stored:
@@ -5862,6 +5954,18 @@ def _vtscan_resolve_binary(build: dict) -> Path | None:
     else:
         return None
     return p if p.exists() else None
+
+
+def _vtscan_resolve_files(build: dict) -> list:
+    """Return list of (name, Path) tuples for all compiled binaries in a build."""
+    p = _vtscan_resolve_binary(build)
+    if not p:
+        return []
+    files = [(p.name, p)]
+    pers = p.parent / "persistence.exe"
+    if pers.exists():
+        files.append(("persistence.exe", pers))
+    return files
 
 
 def _vtscan_render_results(r: dict, label: str) -> None:
@@ -5970,22 +6074,23 @@ def run_vtscan() -> None:
             t.add_column("type",      style="info",  min_width=10)
             t.add_column("module",    style="info",  min_width=18)
             t.add_column("date",      style="dim",   min_width=16)
-            t.add_column("binary",    style="ok",    min_width=12)
-            t.add_column("on disk",   style="dim",   min_width=7, justify="center")
+            t.add_column("binaries",  style="ok",    min_width=30)
             shown = 0
             for b in fresh:
                 if b.get("status") != "success":
                     continue
-                p = _vtscan_resolve_binary(b)
-                pa = b.get("params", {})
-                mod   = pa.get("slug") or pa.get("stealer") or pa.get("injection") or "?"
-                mtype = "module" if pa.get("slug") else (pa.get("malware") or "-")
-                t.add_row(
-                    b["id"], mtype, mod,
-                    (b.get("created") or "")[:16],
-                    p.name if p else "—",
-                    "[ok]✓[/ok]" if p else "[dim]✗[/dim]",
-                )
+                files = _vtscan_resolve_files(b)
+                pa    = b.get("params", {})
+                pa_slug = pa.get("slug")
+                if pa_slug:
+                    mod = pa_slug
+                elif pa.get("malware") == "stealer":
+                    mod = pa.get("stealer") or "?"
+                else:
+                    mod = pa.get("injection") or "?"
+                mtype   = "module" if pa_slug else (pa.get("malware") or "-")
+                bin_txt = "  ".join(n for n, _ in files) if files else "[dim]not on disk[/dim]"
+                t.add_row(b["id"], mtype, mod, (b.get("created") or "")[:16], bin_txt)
                 shown += 1
             if shown:
                 console.print()
@@ -5996,9 +6101,10 @@ def run_vtscan() -> None:
 
         elif cmd == "scan":
             if not args:
-                console.print("  [warn]usage: scan <build-id>[/warn]\n")
+                console.print("  [warn]usage: scan <build-id> [filename][/warn]\n")
                 continue
             build_id = args[0]
+            want_fname = args[1] if len(args) > 1 else None
             build = _db.get_build(build_id)
             if not build:
                 console.print(f"  [err][=^..^=] build not found: {build_id}[/err]\n")
@@ -6006,10 +6112,27 @@ def run_vtscan() -> None:
             if build.get("status") != "success":
                 console.print(f"  [warn][=^..^=] build status is '{build.get('status')}', not success[/warn]\n")
                 continue
-            p = _vtscan_resolve_binary(build)
-            if not p:
-                console.print(f"  [err][=^..^=] binary not found on disk for build {build_id}[/err]\n")
+            files = _vtscan_resolve_files(build)
+            if not files:
+                console.print(f"  [err][=^..^=] no binaries found on disk for build {build_id}[/err]\n")
                 continue
+            if want_fname:
+                # exact filename match (case-insensitive)
+                match = [(n, p) for n, p in files if n.lower() == want_fname.lower()]
+                if not match:
+                    avail = "  ".join(n for n, _ in files)
+                    console.print(f"  [err][=^..^=] '{want_fname}' not found; available: {avail}[/err]\n")
+                    continue
+                p = match[0][1]
+            elif len(files) > 1:
+                # multiple binaries — show list and ask user to specify
+                console.print()
+                for i, (n, fp2) in enumerate(files, 1):
+                    console.print(f"  [{i}] [cmd]{n}[/cmd]  [dim]{fp2.stat().st_size:,} bytes[/dim]")
+                console.print(f"\n  Use  [cmd]scan {build_id} <filename>[/cmd]  to pick one.\n")
+                continue
+            else:
+                p = files[0][1]
             console.print(f"  [dim]uploading {p.name} ({p.stat().st_size:,} bytes)…[/dim]")
             with console.status("[info]contacting VirusTotal…[/info]", spinner="dots"):
                 r = _vt.upload_file(p)
@@ -6076,7 +6199,7 @@ def run_vtscan() -> None:
             else:
                 console.print(
                     f"  [warn]status: {status}[/warn]  "
-                    f"(analysis still in progress — try again in a moment)\n"
+                    f"(analysis still in progress - try again in a moment)\n"
                 )
 
         elif cmd == "lookup":

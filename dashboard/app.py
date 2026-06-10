@@ -1571,6 +1571,14 @@ def api_vtscan_from_build():
     p = _resolve_build_binary(job)
     if not p:
         return jsonify({"ok": False, "error": "binary not found on disk"}), 404
+    fname = data.get("fname", "").strip()
+    if fname and fname != p.name:
+        if "/" in fname or "\\" in fname or not fname.lower().endswith(".exe"):
+            return jsonify({"ok": False, "error": "invalid fname"}), 400
+        alt = p.parent / fname
+        if not alt.exists():
+            return jsonify({"ok": False, "error": f"{fname} not found on disk"}), 404
+        p = alt
     result = _vtscan.upload_file(p)
     result["build_id"] = build_id
     result["binary"]   = p.name
@@ -1646,6 +1654,14 @@ def api_yara_from_build():
     p = _resolve_build_binary(job)
     if not p:
         return jsonify({"ok": False, "error": "binary not found on disk"}), 404
+    fname = data.get("fname", "").strip()
+    if fname and fname != p.name:
+        if "/" in fname or "\\" in fname or not fname.lower().endswith(".exe"):
+            return jsonify({"ok": False, "error": "invalid fname"}), 400
+        alt = p.parent / fname
+        if not alt.exists():
+            return jsonify({"ok": False, "error": f"{fname} not found on disk"}), 404
+        p = alt
     result = _yaragen.generate_rule(p)
     result["rule_name"] = re.sub(r'[^a-zA-Z0-9_]', '_', p.stem) or result.get("rule_name", "build")
     result["build_id"]  = build_id
@@ -1723,6 +1739,29 @@ def api_evasion_analyse():
     if not HAS_EVASION:
         return jsonify({"ok": False, "error": "evasion module not available"}), 503
     data = request.get_json(force=True) or {}
+
+    build_id = data.get("build_id", "").strip()
+    if build_id:
+        with _lock:
+            job = dict(_builds.get(build_id, {}))
+        if not job:
+            job = _db.get_build(build_id) or {}
+        if not job or job.get("status") != "success":
+            return jsonify({"ok": False, "error": "build not found or not successful"}), 404
+        p = _resolve_build_binary(job)
+        if not p:
+            return jsonify({"ok": False, "error": "binary not found on disk"}), 404
+        fname = data.get("fname", "").strip()
+        if fname and fname != p.name:
+            if "/" in fname or "\\" in fname or not fname.lower().endswith(".exe"):
+                return jsonify({"ok": False, "error": "invalid fname"}), 400
+            alt = p.parent / fname
+            if not alt.exists():
+                return jsonify({"ok": False, "error": f"{fname} not found on disk"}), 404
+            p = alt
+        result = _evasion.analyse(p.read_bytes(), p.name)
+        return jsonify(result)
+
     session_id = data.get("session_id", "").strip()
     filename   = data.get("filename", "").strip()
     if not session_id or not filename:
@@ -1773,10 +1812,27 @@ def api_evasion_patch():
             patch_ids = []
     else:
         data = request.get_json(force=True) or {}
-        patch_ids = data.get("patches", [])
+        patch_ids  = data.get("patches", [])
+        build_id   = data.get("build_id", "").strip()
         session_id = data.get("session_id", "").strip()
         filename   = data.get("filename", "").strip()
-        if session_id and filename:
+        if build_id:
+            with _lock:
+                job = dict(_builds.get(build_id, {}))
+            if not job:
+                job = _db.get_build(build_id) or {}
+            if job and job.get("status") == "success":
+                p = _resolve_build_binary(job)
+                if p:
+                    fname = data.get("fname", "").strip()
+                    if fname and fname != p.name:
+                        if "/" not in fname and "\\" not in fname and fname.lower().endswith(".exe"):
+                            alt = p.parent / fname
+                            if alt.exists():
+                                p = alt
+                    raw = p.read_bytes()
+                    out_name = "patched_" + p.name
+        elif session_id and filename:
             filepath = (SAMPLES_DIR / session_id / filename).resolve()
             if not str(filepath).startswith(str(SAMPLES_DIR.resolve())):
                 return jsonify({"ok": False, "error": "invalid path"}), 400

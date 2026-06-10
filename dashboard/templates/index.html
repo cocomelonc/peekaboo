@@ -986,6 +986,7 @@ code{font-family:var(--mono);font-size:12px;background:var(--bg4);padding:1px 5p
   <!-- source tabs -->
   <div class="filter-bar" style="margin-bottom:16px">
     <button class="btn btn-primary btn-sm" id="ev-tab-sample-btn" onclick="evSetTab('sample')">From Sample</button>
+    <button class="btn btn-ghost btn-sm"   id="ev-tab-build-btn"  onclick="evSetTab('build')">🔨 From Build</button>
     <button class="btn btn-ghost btn-sm"   id="ev-tab-upload-btn" onclick="evSetTab('upload')">Upload File</button>
     <span style="margin-left:auto;font-size:12px;color:var(--dim)">entropy &bull; imports &bull; strings &bull; PE structure &bull; surgical patch transforms</span>
   </div>
@@ -1014,6 +1015,27 @@ code{font-family:var(--mono);font-size:12px;background:var(--bg4);padding:1px 5p
           <div class="vt-select-menu" id="ev-file-menu"></div>
         </div>
         <button class="btn btn-primary vt-pick-btn" id="ev-analyse-btn" onclick="evAnalyse()" disabled>⚡ Analyse</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- FROM BUILD -->
+  <div id="ev-src-build" style="display:none">
+    <div class="card mb-16">
+      <div class="card-header">
+        <span style="font-size:20px">😈</span>
+        <div><div class="card-title">Evasion Score Analyser</div><div class="card-sub">select a compiled build binary to score</div></div>
+        <button class="btn btn-ghost btn-sm" style="margin-left:auto" onclick="loadEvBuilds()">↻ Refresh</button>
+      </div>
+      <div class="vt-pick-row">
+        <div class="vt-select vt-drop-wide" id="ev-build-drop">
+          <div class="vt-select-val" onclick="vtToggleDrop('ev-build-drop')">
+            <span id="ev-build-label" class="vt-ph">- select build binary -</span>
+            <span class="vt-select-arrow">▼</span>
+          </div>
+          <div class="vt-select-menu" id="ev-build-menu"></div>
+        </div>
+        <button class="btn btn-primary vt-pick-btn" id="ev-build-analyse-btn" onclick="evAnalyse()" disabled>⚡ Analyse</button>
       </div>
     </div>
   </div>
@@ -2659,12 +2681,12 @@ async function yaraFromBuildId(buildId, fname) {
   showPanel('yara');
   yaraSetTab('build');
   await loadYaraBuilds();
-  // pre-select this build
   _yaraSelectedBuild = buildId;
+  _yaraSelectedFname = fname;
   const lbl = document.getElementById('yara-build-label');
   lbl.textContent = `${buildId}  (${fname})`; lbl.className = '';
   document.querySelectorAll('#yara-build-menu .vt-select-opt').forEach(o =>
-    o.classList.toggle('vt-selected', o.dataset.bid === buildId));
+    o.classList.toggle('vt-selected', o.dataset.bid === buildId && o.dataset.fname === fname));
   yaraGenerateFromBuild();
 }
 
@@ -3551,6 +3573,7 @@ function _vtSetProgress(icon, title, pct, msg) {
 }
 
 let _vtSelectedBuild = '';
+let _vtSelectedFname = '';
 
 function vtSetTab(tab) {
   document.getElementById('vt-src-sample').style.display = tab === 'sample' ? '' : 'none';
@@ -3584,22 +3607,24 @@ async function loadVtBuilds() {
     else if (p.malware === 'stealer') mod = p.stealer || b.id;
     else if (p.malware === 'ttp')     mod = p.meow_slug || p.attack_id || b.id;
     else                               mod = p.injection || b.id;
-    const fname = b.binary_files[0].name;
-    const label = `${b.id}  ·  ${mod}  (${fname})  ${b.created?.slice(0,16)||''}`;
-    const div   = document.createElement('div');
-    div.className     = 'vt-select-opt';
-    div.textContent   = label;
-    div.dataset.bid   = b.id;
-    div.dataset.fname = fname;
-    div.onclick = () => {
-      _vtSelectedBuild = b.id;
-      const lbl = document.getElementById('vt-build-label');
-      lbl.textContent = label; lbl.className = '';
-      document.querySelectorAll('#vt-build-menu .vt-select-opt').forEach(o =>
-        o.classList.toggle('vt-selected', o.dataset.bid === b.id));
-      vtCloseDrop('vt-build-drop');
-    };
-    menu.appendChild(div);
+    for (const f of b.binary_files) {
+      const label = `${b.id}  ·  ${mod}  (${f.name})  ${b.created?.slice(0,16)||''}`;
+      const div   = document.createElement('div');
+      div.className     = 'vt-select-opt';
+      div.textContent   = label;
+      div.dataset.bid   = b.id;
+      div.dataset.fname = f.name;
+      div.onclick = () => {
+        _vtSelectedBuild = b.id;
+        _vtSelectedFname = f.name;
+        const lbl = document.getElementById('vt-build-label');
+        lbl.textContent = label; lbl.className = '';
+        document.querySelectorAll('#vt-build-menu .vt-select-opt').forEach(o =>
+          o.classList.toggle('vt-selected', o.dataset.bid === b.id && o.dataset.fname === f.name));
+        vtCloseDrop('vt-build-drop');
+      };
+      menu.appendChild(div);
+    }
   }
 }
 
@@ -3616,7 +3641,7 @@ async function vtScanFromBuild() {
   const r = await fetch('/api/vtscan/from-build', {
     method: 'POST',
     headers: {'Content-Type': 'application/json'},
-    body: JSON.stringify({build_id: bid}),
+    body: JSON.stringify({build_id: bid, fname: _vtSelectedFname || undefined}),
   }).then(r => r.json()).catch(e => ({ok: false, error: String(e)}));
 
   document.getElementById('vt-build-scan-btn').disabled = false;
@@ -3644,10 +3669,11 @@ async function vtFromBuildId(buildId, fname) {
   vtSetTab('build');
   await loadVtBuilds();
   _vtSelectedBuild = buildId;
+  _vtSelectedFname = fname;
   const lbl = document.getElementById('vt-build-label');
   lbl.textContent = `${buildId}  (${fname})`; lbl.className = '';
   document.querySelectorAll('#vt-build-menu .vt-select-opt').forEach(o =>
-    o.classList.toggle('vt-selected', o.dataset.bid === buildId));
+    o.classList.toggle('vt-selected', o.dataset.bid === buildId && o.dataset.fname === fname));
   vtScanFromBuild();
 }
 
@@ -3774,6 +3800,7 @@ let _yaraCurrentRule     = '';
 let _yaraCurrentName     = '';
 
 let _yaraSelectedBuild = '';
+let _yaraSelectedFname = '';
 
 function yaraSetTab(tab) {
   document.getElementById('yara-src-sample').style.display = tab === 'sample' ? '' : 'none';
@@ -3803,22 +3830,24 @@ async function loadYaraBuilds() {
     else if (p.malware === 'stealer') mod = p.stealer || b.id;
     else if (p.malware === 'ttp')     mod = p.meow_slug || p.attack_id || b.id;
     else                               mod = p.injection || b.id;
-    const fname = b.binary_files[0].name;
-    const label = `${b.id}  ·  ${mod}  (${fname})  ${b.created?.slice(0,16)||''}`;
-    const div   = document.createElement('div');
-    div.className   = 'vt-select-opt';
-    div.textContent = label;
-    div.dataset.bid = b.id;
-    div.dataset.fname = fname;
-    div.onclick = () => {
-      _yaraSelectedBuild = b.id;
-      const lbl = document.getElementById('yara-build-label');
-      lbl.textContent = label; lbl.className = '';
-      document.querySelectorAll('#yara-build-menu .vt-select-opt').forEach(o =>
-        o.classList.toggle('vt-selected', o.dataset.bid === b.id));
-      vtCloseDrop('yara-build-drop');
-    };
-    menu.appendChild(div);
+    for (const f of b.binary_files) {
+      const label = `${b.id}  ·  ${mod}  (${f.name})  ${b.created?.slice(0,16)||''}`;
+      const div   = document.createElement('div');
+      div.className   = 'vt-select-opt';
+      div.textContent = label;
+      div.dataset.bid = b.id;
+      div.dataset.fname = f.name;
+      div.onclick = () => {
+        _yaraSelectedBuild = b.id;
+        _yaraSelectedFname = f.name;
+        const lbl = document.getElementById('yara-build-label');
+        lbl.textContent = label; lbl.className = '';
+        document.querySelectorAll('#yara-build-menu .vt-select-opt').forEach(o =>
+          o.classList.toggle('vt-selected', o.dataset.bid === b.id && o.dataset.fname === f.name));
+        vtCloseDrop('yara-build-drop');
+      };
+      menu.appendChild(div);
+    }
   }
 }
 
@@ -3836,7 +3865,7 @@ async function yaraGenerateFromBuild() {
   const r = await fetch('/api/yara/from-build', {
     method: 'POST',
     headers: {'Content-Type': 'application/json'},
-    body: JSON.stringify({build_id: bid}),
+    body: JSON.stringify({build_id: bid, fname: _yaraSelectedFname || undefined}),
   }).then(r => r.json()).catch(e => ({ok: false, error: String(e)}));
 
   document.getElementById('yara-progress').style.display = 'none';
@@ -5094,20 +5123,65 @@ function _esc(s) {
 // Evasion Lab
 // =============================================================
 
-let _evSession = null;
-let _evFile    = null;
-let _evResult  = null;
-let _evTab     = 'sample';
+let _evSession    = null;
+let _evFile       = null;
+let _evResult     = null;
+let _evTab        = 'sample';
 let _evUploadData = null;  // {raw: ArrayBuffer, name: string} for upload tab
+let _evBuildId    = null;
+let _evBuildFname = null;
 
 function evSetTab(tab) {
   _evTab = tab;
   document.getElementById('ev-src-sample').style.display = tab === 'sample' ? '' : 'none';
+  document.getElementById('ev-src-build').style.display  = tab === 'build'  ? '' : 'none';
   document.getElementById('ev-src-upload').style.display = tab === 'upload' ? '' : 'none';
   document.getElementById('ev-tab-sample-btn').className = 'btn btn-sm ' + (tab === 'sample' ? 'btn-primary' : 'btn-ghost');
+  document.getElementById('ev-tab-build-btn').className  = 'btn btn-sm ' + (tab === 'build'  ? 'btn-primary' : 'btn-ghost');
   document.getElementById('ev-tab-upload-btn').className = 'btn btn-sm ' + (tab === 'upload' ? 'btn-primary' : 'btn-ghost');
   document.getElementById('ev-results').style.display = 'none';
   document.getElementById('ev-empty').style.display = '';
+  if (tab === 'build' && !document.getElementById('ev-build-menu').children.length) {
+    loadEvBuilds();
+  }
+}
+
+async function loadEvBuilds() {
+  const builds = await fetch('/api/logs?limit=50').then(r => r.json()).catch(() => []);
+  const menu = document.getElementById('ev-build-menu');
+  menu.innerHTML = '';
+  const available = builds.filter(b => b.status === 'success' && b.binary_files?.length);
+  if (!available.length) {
+    menu.innerHTML = '<div class="vt-select-opt vt-ph">no compiled binaries found</div>';
+    return;
+  }
+  for (const b of available) {
+    const p = b.params || {};
+    let mod;
+    if (p.slug)                       mod = p.slug;
+    else if (p.malware === 'stealer') mod = p.stealer || b.id;
+    else if (p.malware === 'ttp')     mod = p.meow_slug || p.attack_id || b.id;
+    else                               mod = p.injection || b.id;
+    for (const f of b.binary_files) {
+      const label = `${b.id}  ·  ${mod}  (${f.name})  ${b.created?.slice(0,16)||''}`;
+      const div   = document.createElement('div');
+      div.className     = 'vt-select-opt';
+      div.textContent   = label;
+      div.dataset.bid   = b.id;
+      div.dataset.fname = f.name;
+      div.onclick = () => {
+        _evBuildId    = b.id;
+        _evBuildFname = f.name;
+        const lbl = document.getElementById('ev-build-label');
+        lbl.textContent = label; lbl.className = '';
+        document.querySelectorAll('#ev-build-menu .vt-select-opt').forEach(o =>
+          o.classList.toggle('vt-selected', o.dataset.bid === b.id && o.dataset.fname === f.name));
+        vtCloseDrop('ev-build-drop');
+        document.getElementById('ev-build-analyse-btn').disabled = false;
+      };
+      menu.appendChild(div);
+    }
+  }
 }
 
 async function loadEvasionScanner() {
@@ -5161,19 +5235,26 @@ function evUpdateFileList(sample) {
 }
 
 async function evAnalyse() {
-  if (!_evSession || !_evFile) return;
   _evShowLoading();
   try {
+    let body;
+    if (_evTab === 'build') {
+      if (!_evBuildId) { toast('Select a build binary first', 'warn'); _evShowEmpty(); return; }
+      body = JSON.stringify({build_id: _evBuildId, fname: _evBuildFname || undefined});
+    } else {
+      if (!_evSession || !_evFile) { _evShowEmpty(); return; }
+      body = JSON.stringify({session_id: _evSession, filename: _evFile});
+    }
     const r = await fetch('/api/evasion/analyse', {
       method: 'POST',
       headers: {'Content-Type': 'application/json'},
-      body: JSON.stringify({session_id: _evSession, filename: _evFile}),
+      body,
     });
     const d = await r.json();
-    if (!d.ok) { toast(d.error, 'err'); return; }
+    if (!d.ok) { toast(d.error, 'err'); _evShowEmpty(); return; }
     _evResult = d;
     _evRenderResults(d);
-  } catch(e) { toast('Analysis failed: ' + e.message, 'err'); }
+  } catch(e) { toast('Analysis failed: ' + e.message, 'err'); _evShowEmpty(); }
 }
 
 function evHandleDrop(ev) {
@@ -5347,6 +5428,12 @@ async function evApplyPatches() {
       fd.append('file', _evUploadData.file);
       fd.append('patches', JSON.stringify(checked));
       resp = await fetch('/api/evasion/patch', {method:'POST', body: fd});
+    } else if (_evTab === 'build') {
+      resp = await fetch('/api/evasion/patch', {
+        method: 'POST',
+        headers: {'Content-Type': 'application/json'},
+        body: JSON.stringify({build_id: _evBuildId, fname: _evBuildFname || undefined, patches: checked}),
+      });
     } else {
       resp = await fetch('/api/evasion/patch', {
         method: 'POST',
