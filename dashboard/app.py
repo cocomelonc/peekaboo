@@ -2020,5 +2020,56 @@ def api_pe_analyse_path():
         return jsonify({"error": str(e)}), 500
 
 
+@app.route("/api/pe/analyse/session", methods=["POST"])
+def api_pe_analyse_session():
+    """Analyse a PE from a compiled session sample."""
+    data = request.get_json(force=True) or {}
+    session_id = data.get("session_id", "").strip()
+    filename   = data.get("filename",   "").strip()
+    if not session_id or not filename:
+        return jsonify({"ok": False, "error": "session_id and filename required"}), 400
+    filepath = (SAMPLES_DIR / session_id / filename).resolve()
+    if not str(filepath).startswith(str(SAMPLES_DIR.resolve())):
+        return jsonify({"ok": False, "error": "invalid path"}), 400
+    if not filepath.exists():
+        return jsonify({"ok": False, "error": "file not found"}), 404
+    try:
+        from pe_inspector import analyze as _pe_analyze
+        return jsonify(_pe_analyze(filepath))
+    except Exception as e:
+        return jsonify({"ok": False, "error": str(e)}), 500
+
+
+@app.route("/api/pe/analyse/build", methods=["POST"])
+def api_pe_analyse_build():
+    """Analyse a PE from a compiled build binary."""
+    data     = request.get_json(force=True) or {}
+    build_id = data.get("build_id", "").strip()
+    if not build_id:
+        return jsonify({"ok": False, "error": "build_id required"}), 400
+    with _lock:
+        job = dict(_builds.get(build_id, {}))
+    if not job:
+        job = _db.get_build(build_id) or {}
+    if not job or job.get("status") != "success":
+        return jsonify({"ok": False, "error": "build not found or not successful"}), 404
+    p = _resolve_build_binary(job)
+    if not p:
+        return jsonify({"ok": False, "error": "binary not found on disk"}), 404
+    fname = data.get("fname", "").strip()
+    if fname and fname != p.name:
+        if "/" in fname or "\\" in fname or not fname.lower().endswith(".exe"):
+            return jsonify({"ok": False, "error": "invalid fname"}), 400
+        alt = p.parent / fname
+        if not alt.exists():
+            return jsonify({"ok": False, "error": f"{fname} not found on disk"}), 404
+        p = alt
+    try:
+        from pe_inspector import analyze as _pe_analyze
+        return jsonify(_pe_analyze(p))
+    except Exception as e:
+        return jsonify({"ok": False, "error": str(e)}), 500
+
+
 if __name__ == "__main__":
     app.run(debug=True, host="0.0.0.0", port=5000)

@@ -1555,28 +1555,98 @@ code{font-family:var(--mono);font-size:12px;background:var(--bg4);padding:1px 5p
 <!-- ════════ PE INSPECTOR ════════ -->
 <div id="panel-pe" class="panel">
 
-  <!-- input card -->
-  <div class="card mb-16">
-    <div class="card-header">
-      <span style="font-size:20px">🔬</span>
-      <div>
-        <div class="card-title">PE Inspector</div>
-        <div class="card-sub">analyse PE binaries - sections, imports, entropy, threat scoring</div>
+  <!-- source tabs -->
+  <div class="filter-bar" style="margin-bottom:16px">
+    <button class="btn btn-primary btn-sm" id="pe-tab-path-btn"    onclick="peSetTab('path')">Path</button>
+    <button class="btn btn-ghost btn-sm"   id="pe-tab-session-btn" onclick="peSetTab('session')">From Session</button>
+    <button class="btn btn-ghost btn-sm"   id="pe-tab-build-btn"   onclick="peSetTab('build')">🔨 From Build</button>
+    <button class="btn btn-ghost btn-sm"   id="pe-tab-upload-btn"  onclick="peSetTab('upload')">Upload</button>
+    <span id="pe-status" class="text-dim" style="font-size:12px;margin-left:auto;flex-shrink:0"></span>
+  </div>
+
+  <!-- PATH -->
+  <div id="pe-src-path">
+    <div class="card mb-16">
+      <div class="card-header">
+        <span style="font-size:20px">🔬</span>
+        <div>
+          <div class="card-title">PE Inspector</div>
+          <div class="card-sub">analyse PE binaries - sections, imports, entropy, threat scoring</div>
+        </div>
+      </div>
+      <div class="filter-bar" style="margin-bottom:0">
+        <input type="text" id="pe-path"
+               placeholder="Path to PE on server  (e.g. samples/abc123/file.exe)"
+               style="flex:1;min-width:0"
+               onkeydown="if(event.key==='Enter')peAnalysePath()">
+        <button class="btn btn-primary btn-sm" onclick="peAnalysePath()">Analyse</button>
       </div>
     </div>
-    <div class="filter-bar" style="margin-bottom:0">
-      <input type="text" id="pe-path"
-             placeholder="Path to PE on server  (e.g. samples/abc123/file.exe)"
-             style="flex:1;min-width:0"
-             onkeydown="if(event.key==='Enter')peAnalysePath()">
-      <button class="btn btn-primary btn-sm" onclick="peAnalysePath()">Analyse</button>
-      <span style="color:var(--dim);font-size:12px;flex-shrink:0">or</span>
-      <label class="btn btn-ghost btn-sm" style="cursor:pointer;flex-shrink:0">
-        Upload PE
-        <input type="file" id="pe-upload" accept=".exe,.dll,.sys,.ocx"
-               style="display:none" onchange="peAnalyseUpload(this)">
-      </label>
-      <span id="pe-status" class="text-dim" style="font-size:12px;flex-shrink:0"></span>
+  </div>
+
+  <!-- FROM SESSION -->
+  <div id="pe-src-session" style="display:none">
+    <div class="card mb-16">
+      <div class="card-header">
+        <span style="font-size:20px">🔬</span>
+        <div><div class="card-title">PE Inspector</div><div class="card-sub">select a compiled session file to inspect</div></div>
+        <button class="btn btn-ghost btn-sm" style="margin-left:auto" onclick="loadPeSessionList()">↻ Refresh</button>
+      </div>
+      <div class="vt-pick-row">
+        <div class="vt-select vt-drop-wide" id="pe-session-drop">
+          <div class="vt-select-val" onclick="vtToggleDrop('pe-session-drop')">
+            <span id="pe-session-label" class="vt-ph">- select session -</span>
+            <span class="vt-select-arrow">▼</span>
+          </div>
+          <div class="vt-select-menu" id="pe-session-menu"></div>
+        </div>
+        <div class="vt-select vt-drop-narrow" id="pe-sfile-drop">
+          <div class="vt-select-val" onclick="vtToggleDrop('pe-sfile-drop')">
+            <span id="pe-sfile-label" class="vt-ph">- select file -</span>
+            <span class="vt-select-arrow">▼</span>
+          </div>
+          <div class="vt-select-menu" id="pe-sfile-menu"></div>
+        </div>
+        <button class="btn btn-primary vt-pick-btn" id="pe-session-analyse-btn" onclick="peAnalyseSession()" disabled>⚡ Analyse</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- FROM BUILD -->
+  <div id="pe-src-build" style="display:none">
+    <div class="card mb-16">
+      <div class="card-header">
+        <span style="font-size:20px">🔬</span>
+        <div><div class="card-title">PE Inspector</div><div class="card-sub">select a compiled build binary to inspect</div></div>
+        <button class="btn btn-ghost btn-sm" style="margin-left:auto" onclick="loadPeBuilds()">↻ Refresh</button>
+      </div>
+      <div class="vt-pick-row">
+        <div class="vt-select vt-drop-wide" id="pe-build-drop">
+          <div class="vt-select-val" onclick="vtToggleDrop('pe-build-drop')">
+            <span id="pe-build-label" class="vt-ph">- select build binary -</span>
+            <span class="vt-select-arrow">▼</span>
+          </div>
+          <div class="vt-select-menu" id="pe-build-menu"></div>
+        </div>
+        <button class="btn btn-primary vt-pick-btn" id="pe-build-analyse-btn" onclick="peAnalyseBuild()" disabled>⚡ Analyse</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- UPLOAD -->
+  <div id="pe-src-upload" style="display:none">
+    <div class="card mb-16">
+      <div class="card-header">
+        <span style="font-size:20px">🔬</span>
+        <div><div class="card-title">PE Inspector</div><div class="card-sub">upload any PE binary to inspect</div></div>
+      </div>
+      <div style="padding:4px 0">
+        <label class="btn btn-primary" style="cursor:pointer">
+          Choose PE file
+          <input type="file" id="pe-upload" accept=".exe,.dll,.sys,.ocx"
+                 style="display:none" onchange="peAnalyseUpload(this)">
+        </label>
+      </div>
     </div>
   </div>
 
@@ -3214,8 +3284,132 @@ function vtSelectFile(fname, label) {
 // PE Inspector
 // -----------------------------------------------------------------
 
-let _peData = null;
+let _peData      = null;
 let _peActiveTab = 'overview';
+let _peSrcTab    = 'path';
+let _peSession   = null;
+let _peFile      = null;
+let _peBuildId   = null;
+let _peBuildFname = null;
+
+function peSetTab(tab) {
+  _peSrcTab = tab;
+  ['path','session','build','upload'].forEach(t => {
+    document.getElementById('pe-src-' + t).style.display       = t === tab ? '' : 'none';
+    document.getElementById('pe-tab-' + t + '-btn').className  =
+      'btn btn-sm ' + (t === tab ? 'btn-primary' : 'btn-ghost');
+  });
+  document.getElementById('pe-results').style.display = 'none';
+  document.getElementById('pe-status').textContent    = '';
+  if (tab === 'session' && !document.getElementById('pe-session-menu').children.length) {
+    loadPeSessionList();
+  }
+  if (tab === 'build' && !document.getElementById('pe-build-menu').children.length) {
+    loadPeBuilds();
+  }
+}
+
+async function loadPeSessionList() {
+  const samples = await fetch('/api/samples').then(r => r.json()).catch(() => []);
+  const menu = document.getElementById('pe-session-menu');
+  menu.innerHTML = '';
+  if (!samples.length) {
+    menu.innerHTML = '<div class="vt-select-opt vt-ph">no samples yet</div>';
+    return;
+  }
+  samples.forEach(s => {
+    const d = document.createElement('div');
+    d.className   = 'vt-select-opt';
+    d.textContent = `${s.session_id} · ${s.actor || 'unknown'} · ${s.files?.length || 0} file(s)`;
+    d.onclick = () => {
+      _peSession = s.session_id;
+      document.getElementById('pe-session-label').textContent = `${s.session_id} (${s.actor || 'no actor'})`;
+      document.getElementById('pe-session-label').classList.remove('vt-ph');
+      document.getElementById('pe-session-drop').classList.remove('vt-open');
+      _peUpdateFileList(s);
+    };
+    menu.appendChild(d);
+  });
+}
+
+function _peUpdateFileList(sample) {
+  const menu  = document.getElementById('pe-sfile-menu');
+  const label = document.getElementById('pe-sfile-label');
+  _peFile = null;
+  label.textContent = '- select file -';
+  label.classList.add('vt-ph');
+  document.getElementById('pe-session-analyse-btn').disabled = true;
+  menu.innerHTML = '';
+  (sample.files || []).forEach(f => {
+    const d = document.createElement('div');
+    d.className   = 'vt-select-opt';
+    d.textContent = `${f.name} (${(f.size / 1024).toFixed(1)} KB)`;
+    d.onclick = () => {
+      _peFile = f.name;
+      label.textContent = f.name;
+      label.classList.remove('vt-ph');
+      document.getElementById('pe-sfile-drop').classList.remove('vt-open');
+      document.getElementById('pe-session-analyse-btn').disabled = false;
+    };
+    menu.appendChild(d);
+  });
+}
+
+async function loadPeBuilds() {
+  const builds = await fetch('/api/logs?limit=50').then(r => r.json()).catch(() => []);
+  const menu   = document.getElementById('pe-build-menu');
+  menu.innerHTML = '';
+  const available = builds.filter(b => b.status === 'success' && b.binary_files?.length);
+  if (!available.length) {
+    menu.innerHTML = '<div class="vt-select-opt vt-ph">no compiled binaries found</div>';
+    return;
+  }
+  for (const b of available) {
+    const p = b.params || {};
+    let mod;
+    if (p.slug)                       mod = p.slug;
+    else if (p.malware === 'stealer') mod = p.stealer || b.id;
+    else if (p.malware === 'ttp')     mod = p.meow_slug || p.attack_id || b.id;
+    else                               mod = p.injection || b.id;
+    for (const f of b.binary_files) {
+      const label = `${b.id}  ·  ${mod}  (${f.name})  ${b.created?.slice(0,16)||''}`;
+      const div   = document.createElement('div');
+      div.className     = 'vt-select-opt';
+      div.textContent   = label;
+      div.dataset.bid   = b.id;
+      div.dataset.fname = f.name;
+      div.onclick = () => {
+        _peBuildId    = b.id;
+        _peBuildFname = f.name;
+        const lbl = document.getElementById('pe-build-label');
+        lbl.textContent = label; lbl.className = '';
+        document.querySelectorAll('#pe-build-menu .vt-select-opt').forEach(o =>
+          o.classList.toggle('vt-selected', o.dataset.bid === b.id && o.dataset.fname === f.name));
+        vtCloseDrop('pe-build-drop');
+        document.getElementById('pe-build-analyse-btn').disabled = false;
+      };
+      menu.appendChild(div);
+    }
+  }
+}
+
+async function peAnalyseSession() {
+  if (!_peSession || !_peFile) return;
+  _peRun(() => fetch('/api/pe/analyse/session', {
+    method: 'POST',
+    headers: {'Content-Type': 'application/json'},
+    body: JSON.stringify({session_id: _peSession, filename: _peFile}),
+  }).then(r => r.json()));
+}
+
+async function peAnalyseBuild() {
+  if (!_peBuildId) return;
+  _peRun(() => fetch('/api/pe/analyse/build', {
+    method: 'POST',
+    headers: {'Content-Type': 'application/json'},
+    body: JSON.stringify({build_id: _peBuildId, fname: _peBuildFname || undefined}),
+  }).then(r => r.json()));
+}
 
 const _THREAT_COLOR = {low:'var(--green)', medium:'var(--yellow)', high:'var(--red)', critical:'var(--red)'};
 const _CAT_STYLE = {

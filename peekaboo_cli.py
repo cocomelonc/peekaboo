@@ -6269,7 +6269,7 @@ def run_vtscan() -> None:
                     continue
                 p = match[0][1]
             elif len(files) > 1:
-                # multiple binaries — show list and ask user to specify
+                # multiple binaries - show list and ask user to specify
                 console.print()
                 for i, (n, fp2) in enumerate(files, 1):
                     console.print(f"  [{i}] [cmd]{n}[/cmd]  [dim]{fp2.stat().st_size:,} bytes[/dim]")
