@@ -33,6 +33,8 @@ from rich import box
 from prompt_toolkit import PromptSession
 from prompt_toolkit.history import InMemoryHistory
 from prompt_toolkit.completion import WordCompleter, PathCompleter, Completer, Completion
+from prompt_toolkit.key_binding import KeyBindings
+from prompt_toolkit.filters import has_completions
 from prompt_toolkit.styles import Style as PtStyle
 
 # -- cyberpunk color theme (xterm-256 + true-color; degrades gracefully) -------
@@ -115,7 +117,7 @@ class CmdPathCompleter(Completer):
         if len(parts) == 0 or (len(parts) == 1 and not text.endswith(" ")):
             yield from self._word.get_completions(document, complete_event)
             return
-        # first word is a path command — hand PathCompleter just the path fragment
+        # first word is a path command - hand PathCompleter just the path fragment
         if parts[0].lower() in self._path_cmds:
             # find where the argument starts (after the command word + whitespace)
             after_cmd = text[len(parts[0]):].lstrip()
@@ -126,16 +128,41 @@ class CmdPathCompleter(Completer):
         yield from self._word.get_completions(document, complete_event)
 
 
+# Key bindings for sessions that include path completion.
+# Problem: prompt_toolkit's default Enter both selects the highlighted completion
+# AND submits the line, so picking a directory immediately triggers an error.
+# Fix: when the completion menu is open, Enter only applies the current selection
+# (closing the menu) without submitting.  A second Enter then submits normally.
+def _make_path_kb() -> KeyBindings:
+    kb = KeyBindings()
+
+    @kb.add("enter", filter=has_completions)
+    def _enter_selects(event):
+        buf = event.current_buffer
+        state = buf.complete_state
+        if state and state.current_completion is not None:
+            buf.apply_completion(state.current_completion)
+        buf.cancel_completion()
+
+    return kb
+
+
+_PATH_KB = _make_path_kb()
+
+
 def _make_session(words: list[str],
                   path_cmds: frozenset[str] | None = None) -> PromptSession:
     completer: Completer
     if path_cmds:
         completer = CmdPathCompleter(words, path_cmds)
+        kb = _PATH_KB
     else:
         completer = WordCompleter(words, ignore_case=True)
+        kb = None
     return PromptSession(
         history=InMemoryHistory(),
         completer=completer,
+        key_bindings=kb,
         style=PT_STYLE,
     )
 
