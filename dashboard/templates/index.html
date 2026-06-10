@@ -634,7 +634,7 @@ code{font-family:var(--mono);font-size:12px;background:var(--bg4);padding:1px 5p
 .pe-tab:hover{color:var(--text);background:rgba(234,230,255,.04)}
 .pe-tab.active{color:var(--purple);border-bottom-color:var(--purple);background:var(--bg2)}
 .pe-tab-body{padding:20px;overflow:hidden}
-/* stats grid – score card + 2×2 mini grid side by side */
+/* stats grid - score card + 2×2 mini grid side by side */
 .pe-stats-grid{display:grid;grid-template-columns:1fr 1fr;gap:14px;align-items:stretch;margin-bottom:16px}
 @media(max-width:900px){.pe-stats-grid{grid-template-columns:1fr}}
 .pe-stats-grid > .card{display:flex;flex-direction:column;justify-content:center}
@@ -1955,10 +1955,69 @@ code{font-family:var(--mono);font-size:12px;background:var(--bg4);padding:1px 5p
     <div class="card">
       <div class="card-header">
         <span style="font-size:18px">🎯</span>
-        <div><div class="card-title">Binary Delivery</div><div class="card-sub" id="c2-binary-info">no binary loaded</div></div>
-        <button class="btn btn-ghost btn-sm ms-auto" onclick="checkBinaryInfo()">Refresh</button>
+        <div><div class="card-title">Binary Delivery</div><div class="card-sub">choose a source binary then deliver</div></div>
       </div>
-      <div class="c2-deliver-grid">
+
+      <!-- source tabs -->
+      <div style="display:flex;gap:6px;margin-bottom:12px;flex-wrap:wrap;align-items:center">
+        <button id="c2-tab-upload-btn"  class="btn btn-primary btn-sm" onclick="c2SetTab('upload')">📁 Upload</button>
+        <button id="c2-tab-build-btn"   class="btn btn-ghost btn-sm"   onclick="c2SetTab('build')">🔨 From Build</button>
+        <button id="c2-tab-session-btn" class="btn btn-ghost btn-sm"   onclick="c2SetTab('session')">📦 From Session</button>
+        <span id="c2-source-label" class="ms-auto" style="font-size:12px;color:var(--dim);font-style:italic">no file selected</span>
+      </div>
+
+      <!-- Upload -->
+      <div id="c2-src-upload">
+        <div class="ev-upload-zone" id="c2-drop-zone"
+             onclick="document.getElementById('c2-file-input').click()"
+             ondragover="event.preventDefault();this.classList.add('drag-over')"
+             ondragleave="this.classList.remove('drag-over')"
+             ondrop="c2HandleDrop(event)">
+          <div style="font-size:28px;margin-bottom:6px">📁</div>
+          <div style="font-size:13px;font-weight:600;margin-bottom:4px">Drop binary here or click to browse</div>
+          <div style="font-size:12px;color:var(--dim)">.exe / .dll / .sys / .bin</div>
+        </div>
+        <input type="file" id="c2-file-input" style="display:none" accept=".exe,.dll,.sys,.bin" onchange="c2HandleFile(this)">
+        <div id="c2-upload-info" style="font-size:12px;color:var(--dim);margin-top:8px"></div>
+      </div>
+
+      <!-- From Build -->
+      <div id="c2-src-build" style="display:none">
+        <div style="display:flex;align-items:center;gap:8px">
+          <div class="vt-select vt-drop-wide" id="c2-build-drop" style="flex:1">
+            <div class="vt-select-val" onclick="vtToggleDrop('c2-build-drop')">
+              <span id="c2-build-label" class="vt-ph">- select build binary -</span>
+              <span class="vt-select-arrow">▼</span>
+            </div>
+            <div class="vt-select-menu" id="c2-build-menu"></div>
+          </div>
+          <button class="btn btn-ghost btn-sm" onclick="loadC2Builds()">↻</button>
+        </div>
+      </div>
+
+      <!-- From Session -->
+      <div id="c2-src-session" style="display:none">
+        <div class="vt-pick-row">
+          <div class="vt-select vt-drop-wide" id="c2-session-drop">
+            <div class="vt-select-val" onclick="vtToggleDrop('c2-session-drop')">
+              <span id="c2-session-label" class="vt-ph">- select session -</span>
+              <span class="vt-select-arrow">▼</span>
+            </div>
+            <div class="vt-select-menu" id="c2-session-menu"></div>
+          </div>
+          <div class="vt-select vt-drop-narrow" id="c2-sfile-drop">
+            <div class="vt-select-val" onclick="vtToggleDrop('c2-sfile-drop')">
+              <span id="c2-sfile-label" class="vt-ph">- select file -</span>
+              <span class="vt-select-arrow">▼</span>
+            </div>
+            <div class="vt-select-menu" id="c2-sfile-menu"></div>
+          </div>
+          <button class="btn btn-ghost btn-sm vt-pick-btn" onclick="loadC2SessionList()">↻</button>
+        </div>
+      </div>
+
+      <!-- channel buttons -->
+      <div class="c2-deliver-grid" style="margin-top:12px">
         <button class="btn btn-ghost" onclick="deliver('telegram')"><span>📨</span> Telegram</button>
         <button class="btn btn-ghost" onclick="deliver('github')"><span>🐙</span> GitHub Gist</button>
         <button class="btn btn-ghost" onclick="deliver('bitbucket')"><span>🪣</span> Bitbucket</button>
@@ -2199,7 +2258,7 @@ function showPanel(id) {
   if (id === 'mitre')     initMitrePanel();
   if (id === 'settings')  loadSettings();
   if (id === 'chat')      loadChatStatus();
-  if (id === 'c2')        { checkC2Status(); checkBinaryInfo(); }
+  if (id === 'c2')        { checkC2Status(); }
 }
 
 function refreshCurrent() { showPanel(currentPanel); }
@@ -3845,7 +3904,7 @@ async function vtStartScan() {
 
   // start polling
   _vtCurrentScan = {analysis_id: r.analysis_id, sha256: r.sha256};
-  _vtSetProgress('🔬', 'Analyzing…', 40, 'analysis queued - polling (may take 1–3 min)…');
+  _vtSetProgress('🔬', 'Analyzing…', 40, 'analysis queued - polling (may take 1-3 min)…');
   _vtPollTimer = setInterval(_vtPollAnalysis, 9000);
   _vtPollAnalysis();
 }
@@ -3976,7 +4035,7 @@ async function vtScanFromBuild() {
     return;
   }
   _vtCurrentScan = {analysis_id: r.analysis_id, sha256: r.sha256};
-  _vtSetProgress('🔬', 'Analyzing…', 40, 'analysis queued - polling (may take 1–3 min)…');
+  _vtSetProgress('🔬', 'Analyzing…', 40, 'analysis queued - polling (may take 1-3 min)…');
   _vtPollTimer = setInterval(_vtPollAnalysis, 9000);
   _vtPollAnalysis();
 }
@@ -4033,7 +4092,7 @@ async function vtScanFromUpload(file) {
     return;
   }
   _vtCurrentScan = {analysis_id: r.analysis_id, sha256: r.sha256};
-  _vtSetProgress('🔬', 'Analyzing…', 40, 'analysis queued - polling (may take 1–3 min)…');
+  _vtSetProgress('🔬', 'Analyzing…', 40, 'analysis queued - polling (may take 1-3 min)…');
   _vtPollTimer = setInterval(_vtPollAnalysis, 9000);
   _vtPollAnalysis();
 }
@@ -4842,21 +4901,185 @@ async function checkC2Status() {
   }).join('');
 }
 
-async function checkBinaryInfo() {
-  const d = await fetch('/api/c2/binary_info').then(r=>r.json()).catch(()=>({}));
-  const el = document.getElementById('c2-binary-info');
-  if (d.found) {
-    el.textContent = `${d.name} - ${(d.size/1024).toFixed(1)} KB - ${d.modified?.slice(0,16)}`;
+function checkBinaryInfo() { /* replaced by c2 source selector */ }
+
+// -----------------------------------------------------------------
+// C2 binary source selector
+// -----------------------------------------------------------------
+let _c2SrcTab      = 'upload';
+let _c2StagedId    = null;
+let _c2StagedName  = null;
+let _c2BuildId     = null;
+let _c2BuildFname  = null;
+let _c2SessionId   = null;
+let _c2SessionFname = null;
+
+function c2SetTab(tab) {
+  _c2SrcTab = tab;
+  ['upload','build','session'].forEach(t => {
+    document.getElementById('c2-src-' + t).style.display     = t === tab ? '' : 'none';
+    document.getElementById('c2-tab-' + t + '-btn').className =
+      'btn btn-sm ' + (t === tab ? 'btn-primary' : 'btn-ghost');
+  });
+  document.getElementById('deliver-output').style.display = 'none';
+  if (tab === 'build'   && !document.getElementById('c2-build-menu').children.length)   loadC2Builds();
+  if (tab === 'session' && !document.getElementById('c2-session-menu').children.length) loadC2SessionList();
+}
+
+function _c2UpdateLabel() {
+  const lbl = document.getElementById('c2-source-label');
+  if (_c2SrcTab === 'upload' && _c2StagedName) {
+    lbl.textContent = `staged: ${_c2StagedName}`;
+    lbl.style.color = 'var(--green)';
+  } else if (_c2SrcTab === 'build' && _c2BuildId) {
+    lbl.textContent = `build: ${_c2BuildFname || 'peekaboo.exe'}`;
+    lbl.style.color = 'var(--green)';
+  } else if (_c2SrcTab === 'session' && _c2SessionId && _c2SessionFname) {
+    lbl.textContent = `session: ${_c2SessionFname}`;
+    lbl.style.color = 'var(--green)';
   } else {
-    el.textContent = 'no binary built yet';
+    lbl.textContent = _c2SrcTab === 'upload' ? 'no file staged' : 'no file selected';
+    lbl.style.color = 'var(--dim)';
+    lbl.style.fontStyle = 'italic';
   }
 }
 
+function _c2GetSourceBody() {
+  if (_c2SrcTab === 'upload'  && _c2StagedId)
+    return {source: 'staged',  staged_id: _c2StagedId};
+  if (_c2SrcTab === 'build'   && _c2BuildId)
+    return {source: 'build',   build_id: _c2BuildId, fname: _c2BuildFname || undefined};
+  if (_c2SrcTab === 'session' && _c2SessionId && _c2SessionFname)
+    return {source: 'session', session_id: _c2SessionId, filename: _c2SessionFname};
+  return {};   // fallback → latest build
+}
+
+function c2HandleDrop(event) {
+  event.preventDefault();
+  document.getElementById('c2-drop-zone').classList.remove('drag-over');
+  const f = event.dataTransfer.files[0];
+  if (f) c2StageFile(f);
+}
+function c2HandleFile(input) {
+  const f = input.files[0];
+  if (f) c2StageFile(f);
+}
+async function c2StageFile(file) {
+  const info = document.getElementById('c2-upload-info');
+  info.textContent  = `staging ${file.name}…`;
+  info.style.color  = 'var(--dim)';
+  const fd = new FormData();
+  fd.append('file', file);
+  const r = await fetch('/api/c2/stage', {method:'POST', body:fd})
+              .then(r=>r.json()).catch(e=>({ok:false,error:String(e)}));
+  if (r.ok) {
+    _c2StagedId   = r.staged_id;
+    _c2StagedName = r.name;
+    info.textContent = `✓ staged: ${r.name}  (${(r.size/1024).toFixed(1)} KB)`;
+    info.style.color = 'var(--green)';
+    _c2UpdateLabel();
+    toast('File staged for delivery', 'ok');
+  } else {
+    info.textContent = `✗ ${r.error || 'stage failed'}`;
+    info.style.color = 'var(--red,#ff5555)';
+    toast('Stage failed: ' + r.error, 'err');
+  }
+}
+
+async function loadC2Builds() {
+  const builds    = await fetch('/api/logs?limit=50').then(r=>r.json()).catch(()=>[]);
+  const menu      = document.getElementById('c2-build-menu');
+  menu.innerHTML  = '';
+  const available = builds.filter(b => b.status === 'success' && b.binary_files?.length);
+  if (!available.length) {
+    menu.innerHTML = '<div class="vt-select-opt vt-ph">no compiled binaries found</div>';
+    return;
+  }
+  for (const b of available) {
+    const p = b.params || {};
+    let mod;
+    if (p.slug)                       mod = p.slug;
+    else if (p.malware === 'stealer') mod = p.stealer || b.id;
+    else if (p.malware === 'ttp')     mod = p.meow_slug || p.attack_id || b.id;
+    else                               mod = p.injection || b.id;
+    for (const f of b.binary_files) {
+      const label = `${b.id}  ·  ${mod}  (${f.name})  ${b.created?.slice(0,16)||''}`;
+      const div   = document.createElement('div');
+      div.className     = 'vt-select-opt';
+      div.textContent   = label;
+      div.dataset.bid   = b.id;
+      div.dataset.fname = f.name;
+      div.onclick = () => {
+        _c2BuildId    = b.id;
+        _c2BuildFname = f.name;
+        const lbl = document.getElementById('c2-build-label');
+        lbl.textContent = label; lbl.className = '';
+        document.querySelectorAll('#c2-build-menu .vt-select-opt').forEach(o =>
+          o.classList.toggle('vt-selected', o.dataset.bid === b.id && o.dataset.fname === f.name));
+        vtCloseDrop('c2-build-drop');
+        _c2UpdateLabel();
+      };
+      menu.appendChild(div);
+    }
+  }
+}
+
+async function loadC2SessionList() {
+  const samples  = await fetch('/api/samples').then(r=>r.json()).catch(()=>[]);
+  const menu     = document.getElementById('c2-session-menu');
+  menu.innerHTML = '';
+  if (!samples.length) {
+    menu.innerHTML = '<div class="vt-select-opt vt-ph">no samples yet</div>';
+    return;
+  }
+  samples.forEach(s => {
+    const d       = document.createElement('div');
+    d.className   = 'vt-select-opt';
+    d.textContent = `${s.session_id} · ${s.actor || 'unknown'} · ${s.files?.length || 0} file(s)`;
+    d.onclick = () => {
+      _c2SessionId = s.session_id;
+      document.getElementById('c2-session-label').textContent =
+        `${s.session_id} (${s.actor || 'no actor'})`;
+      document.getElementById('c2-session-label').classList.remove('vt-ph');
+      vtCloseDrop('c2-session-drop');
+      c2UpdateSessionFiles(s);
+    };
+    menu.appendChild(d);
+  });
+}
+
+function c2UpdateSessionFiles(sample) {
+  const menu  = document.getElementById('c2-sfile-menu');
+  const label = document.getElementById('c2-sfile-label');
+  _c2SessionFname = null;
+  label.textContent = '- select file -';
+  label.classList.add('vt-ph');
+  menu.innerHTML = '';
+  (sample.files || []).forEach(f => {
+    const d       = document.createElement('div');
+    d.className   = 'vt-select-opt';
+    d.textContent = `${f.name} (${(f.size/1024).toFixed(1)} KB)`;
+    d.onclick = () => {
+      _c2SessionFname = f.name;
+      label.textContent = f.name;
+      label.classList.remove('vt-ph');
+      vtCloseDrop('c2-sfile-drop');
+      _c2UpdateLabel();
+    };
+    menu.appendChild(d);
+  });
+}
+
 async function deliver(channel) {
-  const out = document.getElementById('deliver-output');
+  const out  = document.getElementById('deliver-output');
   out.style.display = 'block';
-  out.textContent = `delivering to ${channel}…`;
-  const r = await fetch(`/api/c2/deliver/${channel}`, {method:'POST', headers:{'Content-Type':'application/json'}, body:'{}'}).then(r=>r.json()).catch(e=>({ok:false,error:String(e)}));
+  out.textContent   = `delivering to ${channel}…`;
+  const body = _c2GetSourceBody();
+  const r    = await fetch(`/api/c2/deliver/${channel}`, {
+    method:  'POST',
+    headers: {'Content-Type': 'application/json'},
+    body:    JSON.stringify(body),
+  }).then(r=>r.json()).catch(e=>({ok:false,error:String(e)}));
   if (channel === 'virustotal' && r.ok) {
     out.innerHTML =
       `<span style="color:var(--green)">✓</span> Binary uploaded + staged as VT comments\n` +
@@ -4864,7 +5087,7 @@ async function deliver(channel) {
       `SHA256  : <span style="color:var(--blue)">${escHtml(r.sha256||'')}</span>\n` +
       `Chunks  : ${r.comments_posted}/${r.chunks} base64 comments posted\n` +
       `Analysis: <a href="${escHtml(r.analysis_url||'')}" target="_blank" style="color:var(--blue)">${escHtml(r.analysis_id||'')}</a>\n` +
-      `MITRE   : ${escHtml(r.technique||'')} – Dead Drop Resolver\n\n` +
+      `MITRE   : ${escHtml(r.technique||'')} - Dead Drop Resolver\n\n` +
       `<button class="btn btn-ghost btn-sm" onclick="retrieveVT('${r.sha256||''}')">🔽 Retrieve Binary</button>`;
   } else {
     out.textContent = JSON.stringify(r, null, 2);
@@ -4887,7 +5110,7 @@ async function retrieveVT(sha256) {
       `<span style="color:var(--green)">✓</span> Binary retrieved from VT dead drop\n` +
       `SHA256  : <span style="color:var(--blue)">${escHtml(sha256)}</span>\n` +
       `Size    : ${(r.size||0).toLocaleString()} bytes  (${r.chunks} chunks reassembled)\n` +
-      `MITRE   : T1102.001 – Dead Drop Resolver\n\n` +
+      `MITRE   : T1102.001 - Dead Drop Resolver\n\n` +
       `<button class="btn btn-ghost btn-sm" onclick="downloadRetrievedVT()">💾 Save Binary</button>`;
   } else {
     out.textContent = `retrieve failed: ${r.error||'unknown error'}\n${JSON.stringify(r,null,2)}`;
