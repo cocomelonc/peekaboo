@@ -32,7 +32,7 @@ from rich import box
 # -- prompt_toolkit ------------------------------------------------------------
 from prompt_toolkit import PromptSession
 from prompt_toolkit.history import InMemoryHistory
-from prompt_toolkit.completion import WordCompleter
+from prompt_toolkit.completion import WordCompleter, PathCompleter, Completer, Completion
 from prompt_toolkit.styles import Style as PtStyle
 
 # -- cyberpunk color theme (xterm-256 + true-color; degrades gracefully) -------
@@ -95,10 +95,47 @@ PT_STYLE = PtStyle.from_dict({
 })
 
 
-def _make_session(words: list[str]) -> PromptSession:
+_PATH_COMPLETER = PathCompleter(expanduser=True)
+
+
+class CmdPathCompleter(Completer):
+    """
+    Completes command words at position 0; switches to filesystem path
+    completion when the first token is a command that takes a path argument.
+    """
+    def __init__(self, words: list[str], path_cmds: frozenset[str]) -> None:
+        self._word = WordCompleter(words, ignore_case=True)
+        self._path_cmds = path_cmds
+
+    def get_completions(self, document, complete_event):
+        from prompt_toolkit.document import Document as _Doc
+        text = document.text_before_cursor.lstrip()
+        parts = text.split()
+        # still typing the first word, or nothing typed yet
+        if len(parts) == 0 or (len(parts) == 1 and not text.endswith(" ")):
+            yield from self._word.get_completions(document, complete_event)
+            return
+        # first word is a path command — hand PathCompleter just the path fragment
+        if parts[0].lower() in self._path_cmds:
+            # find where the argument starts (after the command word + whitespace)
+            after_cmd = text[len(parts[0]):].lstrip()
+            path_doc = _Doc(after_cmd, len(after_cmd))
+            yield from _PATH_COMPLETER.get_completions(path_doc, complete_event)
+            return
+        # otherwise word-complete (catches sub-commands, slugs, etc.)
+        yield from self._word.get_completions(document, complete_event)
+
+
+def _make_session(words: list[str],
+                  path_cmds: frozenset[str] | None = None) -> PromptSession:
+    completer: Completer
+    if path_cmds:
+        completer = CmdPathCompleter(words, path_cmds)
+    else:
+        completer = WordCompleter(words, ignore_case=True)
     return PromptSession(
         history=InMemoryHistory(),
-        completer=WordCompleter(words, ignore_case=True),
+        completer=completer,
         style=PT_STYLE,
     )
 
@@ -2864,7 +2901,8 @@ def run_evasion(ev_mod) -> None:
     result:      dict  | None = None
     selected:    set[str]     = set()
 
-    session = _make_session(EVASION_COMMANDS)
+    session = _make_session(EVASION_COMMANDS,
+                           path_cmds=frozenset({"load", "apply"}))
 
     console.print()
     console.print(Panel(
@@ -3678,7 +3716,8 @@ def run_yara() -> None:
 
     yr_result: dict | None = None
 
-    session = _make_session(YARA_COMMANDS)
+    session = _make_session(YARA_COMMANDS,
+                           path_cmds=frozenset({"gen", "scan", "save", "load"}))
 
     console.print()
     console.print(Panel(
@@ -3962,7 +4001,8 @@ def run_shellcode() -> None:
     all_fmt_ids   = [f[0] for f in _SC_FORMAT_INFO]
     all_xform_ids = [f[0] for f in _SC_TRANSFORM_INFO]
 
-    session = _make_session(SHELLCODE_COMMANDS + all_fmt_ids + all_xform_ids)
+    session = _make_session(SHELLCODE_COMMANDS + all_fmt_ids + all_xform_ids,
+                           path_cmds=frozenset({"load", "save"}))
 
     console.print()
     console.print(Panel(
@@ -4417,7 +4457,8 @@ def _render_pe_suspicious(r: dict) -> None:
 
 def run_pe() -> None:
     """Interactive PE Anatomy Inspector sub-REPL."""
-    session = _make_session(PE_COMMANDS)
+    session = _make_session(PE_COMMANDS,
+                           path_cmds=frozenset({"analyse", "open"}))
     current: dict | None = None
 
     console.print()
