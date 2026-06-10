@@ -1296,11 +1296,13 @@ The generator extracts:
 
 ## Workflow
 
-    gen <path>          -- generate YARA rule from a file
-    show                -- display the last generated rule
-    save <path>         -- save rule to a .yar file
-    info                -- metadata for last generated rule (hashes, sections)
-    scan <path>         -- scan a target file against the current rule
+    gen <path>                    -- generate YARA rule from a file
+    gen-build <id> [filename]     -- generate from a compiled build binary
+    builds                        -- list successful builds with their binaries
+    show                          -- display the last generated rule
+    save <path>                   -- save rule to a .yar file
+    info                          -- metadata for last generated rule (hashes, sections)
+    scan <path>                   -- scan a target file against the current rule
 
 ## Condition logic
 
@@ -1423,6 +1425,49 @@ Scan a file against the last generated YARA rule.
 
 - MATCH or NO MATCH result
 - For each match: rule name and matched strings with file offsets
+""",
+        "gen-build": """\
+## gen-build
+
+Generate a YARA rule directly from a compiled build binary.
+
+**Usage:**
+
+    gen-build <build-id> [filename]
+
+**Parameters:**
+
+- `build-id` -- ID from the build history (use  builds  to list)
+- `filename`  -- optional; pick a specific binary when the build produced
+                 multiple files (e.g. `persistence.exe`)
+
+**Examples:**
+
+    gen-build a1b2c3d4
+    gen-build a1b2c3d4 persistence.exe
+
+**Notes:**
+
+- When a build has exactly one binary the filename is inferred automatically
+- When a build produced two files (main + persistence) and no filename is
+  given, both are listed and you are prompted to specify one
+- After generation the rule is available via  show / save / scan  as usual
+""",
+        "builds": """\
+## builds
+
+List all successful builds together with their compiled binaries.
+
+**Usage:**
+
+    builds
+
+**Output:**
+
+A table with columns: build-id, type, module, date, binaries.
+The binaries column shows every file on disk for that build
+(e.g. `peekaboo.exe  persistence.exe`).
+Use the build-id with  gen-build  to generate a YARA rule.
 """,
     },
 
@@ -3858,7 +3903,7 @@ def run_malpedia() -> None:
 
 # -- yara lab ------------------------------------------------------------------
 
-YARA_COMMANDS = ["gen", "show", "save", "info", "scan", "help", "back"]
+YARA_COMMANDS = ["gen", "gen-build", "builds", "show", "save", "info", "scan", "help", "back"]
 
 
 def _render_yara_meta(result: dict) -> None:
@@ -3995,6 +4040,105 @@ def run_yara() -> None:
                 continue
 
             result["_filepath"] = str(p)
+            yr_result = result
+
+            _render_yara_meta(yr_result)
+            _render_yara_rule(yr_result["rule"])
+            console.print(
+                f"  [dim]use  save <path>  to write the rule to a file\n"
+                f"  use  scan <path>  to test it against another binary[/dim]\n"
+            )
+
+        # -- builds -----------------------------------------------------------
+        elif cmd == "builds":
+            try:
+                import db as _db_yr
+            except ImportError:
+                console.print("[err][=^..^=] db module unavailable[/err]")
+                continue
+            fresh = _db_yr.get_builds(limit=50)
+            t = Table(box=box.ROUNDED, show_header=True,
+                      header_style="bold bright_white on bright_black",
+                      border_style="bright_black", padding=(0, 1))
+            t.add_column("build-id", style="cmd",  no_wrap=True, min_width=14)
+            t.add_column("type",     style="info",  min_width=10)
+            t.add_column("module",   style="info",  min_width=18)
+            t.add_column("date",     style="dim",   min_width=16)
+            t.add_column("binaries", style="ok",    min_width=30)
+            shown = 0
+            for b in fresh:
+                if b.get("status") != "success":
+                    continue
+                files = _vtscan_resolve_files(b)
+                pa    = b.get("params", {})
+                pa_slug = pa.get("slug")
+                if pa_slug:
+                    mod = pa_slug
+                elif pa.get("malware") == "stealer":
+                    mod = pa.get("stealer") or "?"
+                else:
+                    mod = pa.get("injection") or "?"
+                mtype   = "module" if pa_slug else (pa.get("malware") or "-")
+                bin_txt = "  ".join(n for n, _ in files) if files else "[dim]not on disk[/dim]"
+                t.add_row(b["id"], mtype, mod, (b.get("created") or "")[:16], bin_txt)
+                shown += 1
+            if shown:
+                console.print()
+                console.print(t)
+                console.print()
+            else:
+                console.print("  [dim]no successful builds found[/dim]\n")
+
+        # -- gen-build --------------------------------------------------------
+        elif cmd == "gen-build":
+            if not args:
+                console.print("[warn][=^..^=] usage: gen-build <build-id> [filename][/warn]")
+                continue
+            try:
+                import db as _db_yr
+            except ImportError:
+                console.print("[err][=^..^=] db module unavailable[/err]")
+                continue
+            build_id   = args[0]
+            want_fname = args[1] if len(args) > 1 else None
+            build = _db_yr.get_build(build_id)
+            if not build:
+                console.print(f"  [err][=^..^=] build not found: {build_id}[/err]")
+                continue
+            if build.get("status") != "success":
+                console.print(f"  [warn][=^..^=] build status is '{build.get('status')}', not success[/warn]")
+                continue
+            files = _vtscan_resolve_files(build)
+            if not files:
+                console.print(f"  [err][=^..^=] no binaries found on disk for build {build_id}[/err]")
+                continue
+            if want_fname:
+                match = [(n, p) for n, p in files if n.lower() == want_fname.lower()]
+                if not match:
+                    avail = "  ".join(n for n, _ in files)
+                    console.print(f"  [err][=^..^=] '{want_fname}' not found; available: {avail}[/err]")
+                    continue
+                chosen = match[0][1]
+            elif len(files) > 1:
+                console.print()
+                for i, (n, fp2) in enumerate(files, 1):
+                    console.print(f"  [{i}] [cmd]{n}[/cmd]  [dim]{fp2.stat().st_size:,} bytes[/dim]")
+                console.print(f"\n  Use  [cmd]gen-build {build_id} <filename>[/cmd]  to pick one.\n")
+                continue
+            else:
+                chosen = files[0][1]
+
+            with console.status(
+                f"[info]generating YARA rule for {chosen.name}  (build {build_id})...[/info]",
+                spinner="dots"
+            ):
+                result = _yg.generate_rule(chosen)
+
+            if not result.get("ok"):
+                console.print(f"  [err][=^..^=] {result.get('error','failed')}[/err]\n")
+                continue
+
+            result["_filepath"] = str(chosen)
             yr_result = result
 
             _render_yara_meta(yr_result)
