@@ -2291,26 +2291,6 @@ def api_pe_analyse():
         return jsonify({"error": str(e)}), 500
 
 
-@app.route("/api/pe/analyse/path", methods=["POST"])
-def api_pe_analyse_path():
-    """Analyse a PE by path on the server (from samples dir)."""
-    data = request.get_json(silent=True) or {}
-    path = data.get("path", "").strip()
-    if not path:
-        return jsonify({"error": "path required"}), 400
-    from pathlib import Path as _Path
-    p = _Path(path)
-    if not p.is_absolute():
-        p = BASE_DIR.parent / "samples" / path
-    if not p.exists():
-        return jsonify({"error": f"file not found: {p}"}), 404
-    try:
-        from pe_inspector import analyze as _pe_analyze
-        return jsonify(_pe_analyze(p))
-    except Exception as e:
-        return jsonify({"error": str(e)}), 500
-
-
 @app.route("/api/pe/analyse/session", methods=["POST"])
 def api_pe_analyse_session():
     """Analyse a PE from a compiled session sample."""
