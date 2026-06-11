@@ -1,5 +1,5 @@
 """
-hellsgate.py – Hell's Gate / Direct Syscall SSN extractor
+hellsgate.py - Hell's Gate / Direct Syscall SSN extractor
 ==========================================================
 Parses a Windows ntdll.dll (PE format, runs on Linux via pefile) to:
   - Extract System Service Numbers for all Nt*/Zw* stubs
@@ -9,10 +9,10 @@ Parses a Windows ntdll.dll (PE format, runs on Linux via pefile) to:
   - Generate NASM x64 or C __declspec(naked) direct-syscall stubs
 
 References:
-  Hell's Gate       – am0nsec / smelly__vx  (VX-Underground)
-  Halo's Gate       – trickster0 / Alice Climent-Monde
-  Tartarus Gate     – trickster0
-  SysWhispers3      – klezVirus
+  Hell's Gate       - am0nsec / smelly__vx  (VX-Underground)
+  Halo's Gate       - trickster0 / Alice Climent-Monde
+  Tartarus Gate     - trickster0
+  SysWhispers3      - klezVirus
 """
 from __future__ import annotations
 
@@ -27,7 +27,7 @@ def scan(ntdll_path: Path) -> dict:
     """
     Parse ntdll_path (a Windows ntdll.dll) and return a dict:
       ok       : bool
-      total    : int  – Nt*/Zw* exports found
+      total    : int  - Nt*/Zw* exports found
       clean    : int
       hooked   : int
       entries  : list[EntryDict]
@@ -35,7 +35,7 @@ def scan(ntdll_path: Path) -> dict:
     try:
         import pefile
     except ImportError:
-        return {"ok": False, "error": "pefile not installed – run: pip install pefile"}
+        return {"ok": False, "error": "pefile not installed - run: pip install pefile"}
 
     try:
         pe = pefile.PE(str(ntdll_path), fast_load=False)
@@ -46,7 +46,7 @@ def scan(ntdll_path: Path) -> dict:
         return {"ok": False, "error": str(exc)}
 
     if not hasattr(pe, "DIRECTORY_ENTRY_EXPORT"):
-        return {"ok": False, "error": "no export directory – is this really ntdll.dll?"}
+        return {"ok": False, "error": "no export directory - is this really ntdll.dll?"}
 
     try:
         raw = bytearray(pe.get_memory_mapped_image())
@@ -140,7 +140,7 @@ def _analyze_stub(name: str, rva: int, stub: bytes) -> dict:
         entry["hook_type"] = "clean"
         return entry
 
-    # --- JMP rel32 (E9) – most common EDR inline hook -----------------------
+    # --- JMP rel32 (E9) - most common EDR inline hook -----------------------
     if stub[0] == 0xE9 and len(stub) >= 5:
         raw_rel = int.from_bytes(stub[1:5], "little", signed=False)
         signed_rel = struct.unpack_from("<i", stub, 1)[0]
@@ -162,7 +162,7 @@ def _analyze_stub(name: str, rva: int, stub: bytes) -> dict:
             entry["ssn_method"] = "tartarus_gate"
         return entry
 
-    # --- INT3 breakpoint (CC) – some AV/AMSI hooks --------------------------
+    # --- INT3 breakpoint (CC) - some AV/AMSI hooks --------------------------
     if stub[0] == 0xCC:
         entry["hook_type"] = "int3_hook"
         return entry
@@ -277,7 +277,7 @@ def _disasm(stub: bytes) -> list[str]:
 
 _NASM_HEADER = """\
 ; =============================================================
-;  Direct Syscall Stubs – peekaboo Hell's Gate Lab
+;  Direct Syscall Stubs - peekaboo Hell's Gate Lab
 ;  Target  : Windows x64
 ;  Assemble: nasm -f win64 syscalls.asm -o syscalls.obj
 ;            link syscalls.obj into your project
@@ -292,7 +292,7 @@ section .text
 
 _C_HEADER = """\
 /*
- * Direct Syscall Stubs – peekaboo Hell's Gate Lab
+ * Direct Syscall Stubs - peekaboo Hell's Gate Lab
  * Target  : Windows x64 (MSVC or MinGW with naked-function support)
  * Usage   : #include "syscalls.h"
  */
@@ -318,7 +318,7 @@ def _gen_nasm(functions: list[dict]) -> str:
         hook   = fn.get("hook_type", "clean")
 
         if ssn is None:
-            lines += [f"; {name}  — SSN unknown (hook recovery failed), skipped", ""]
+            lines += [f"; {name}  - SSN unknown (hook recovery failed), skipped", ""]
             continue
 
         tail = ""
@@ -347,12 +347,12 @@ def _gen_c(functions: list[dict]) -> str:
         method = fn.get("ssn_method", "direct")
 
         if ssn is None:
-            lines += [f"/* {name}  — SSN unknown, skipped */", ""]
+            lines += [f"/* {name}  - SSN unknown, skipped */", ""]
             continue
 
         note = f"/* SSN 0x{ssn:04X}"
         if hook != "clean":
-            note += f"  — recovered via {method}, original hook: {hook}"
+            note += f"  - recovered via {method}, original hook: {hook}"
         note += " */"
 
         lines += [

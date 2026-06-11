@@ -1768,7 +1768,7 @@ code{font-family:var(--mono);font-size:12px;background:var(--bg4);padding:1px 5p
     <div class="card-header">
       <span style="font-size:22px">⚡</span>
       <div>
-        <div class="card-title">Hell's Gate — Direct Syscall Lab</div>
+        <div class="card-title">Hell's Gate - Direct Syscall Lab</div>
         <div class="card-sub">Extract SSNs from ntdll.dll · detect EDR hooks · generate NASM / C stubs</div>
       </div>
       <div style="margin-left:auto;display:flex;gap:8px;align-items:center">
@@ -1784,13 +1784,13 @@ code{font-family:var(--mono);font-size:12px;background:var(--bg4);padding:1px 5p
     <div class="hg-hint" style="padding:0 4px 4px">
       Upload a copy of <strong>ntdll.dll</strong> from a Windows target or VM
       (<code>C:\Windows\System32\ntdll.dll</code>). Parsed entirely in Python on the server
-      — no execution. SSNs for all <code>Nt*</code>/<code>Zw*</code> exports are extracted,
+      - no execution. SSNs for all <code>Nt*</code>/<code>Zw*</code> exports are extracted,
       EDR inline hooks detected, and hooked SSNs recovered via
       <em>Halo's Gate</em> (neighbour inference) or <em>Tartarus Gate</em> (forward scan).
     </div>
   </div>
 
-  <!-- stats row — hidden until scan -->
+  <!-- stats row - hidden until scan -->
   <div id="hg-stats-row" style="display:none" class="hg-stats-row">
     <div class="hg-stat hg-stat-total">
       <div class="hg-stat-n" id="hg-s-total">0</div>
@@ -1810,7 +1810,7 @@ code{font-family:var(--mono);font-size:12px;background:var(--bg4);padding:1px 5p
     </div>
   </div>
 
-  <!-- results section — hidden until scan -->
+  <!-- results section - hidden until scan -->
   <div id="hg-results" style="display:none">
 
     <!-- filter + selection bar -->
@@ -5219,7 +5219,7 @@ async function deliver(channel) {
   }
   out.style.display = 'block';
   out.textContent   = channel === 'virustotal'
-    ? 'Uploading to VirusTotal and posting resolver comment…\n(please wait ~15–30 s for VT to index the file)'
+    ? 'Uploading to VirusTotal and posting resolver comment…\n(please wait ~15-30 s for VT to index the file)'
     : `delivering to ${channel}…`;
   const body = _c2GetSourceBody();
   const r    = await fetch(`/api/c2/deliver/${channel}`, {
@@ -5234,7 +5234,7 @@ async function deliver(channel) {
   if (channel === 'virustotal' && r.ok) {
     const commentLine = r.comment_posted
       ? `<span style="color:var(--green)">✓ posted</span>  (waited ${r.waited_secs}s for VT indexing)`
-      : `<span style="color:var(--orange,#e5c07b)">✗ ${escHtml(r.comment_error||'failed')}</span>  — try Retrieve after analysis completes`;
+      : `<span style="color:var(--orange,#e5c07b)">✗ ${escHtml(r.comment_error||'failed')}</span>  - try Retrieve after analysis completes`;
     out.innerHTML =
       `<span style="color:var(--green)">✓</span> Binary uploaded to VirusTotal\n` +
       `File    : ${escHtml(r.file||'')}  (${(r.size||0).toLocaleString()} bytes)\n` +
@@ -5242,7 +5242,7 @@ async function deliver(channel) {
       `Comment : ${commentLine}\n` +
       `Resolver: ${escHtml(r.descriptor||'')}\n` +
       `Analysis: <a href="${escHtml(r.analysis_url||'')}" target="_blank" style="color:var(--blue)">${escHtml(r.analysis_id||'')}</a>\n` +
-      `MITRE   : ${escHtml(r.technique||'')} – Dead Drop Resolver\n\n` +
+      `MITRE   : ${escHtml(r.technique||'')} - Dead Drop Resolver\n\n` +
       `<button class="btn btn-ghost btn-sm" onclick="retrieveVT('${r.sha256||''}')">🔽 Retrieve Binary</button>`;
   } else {
     out.textContent = JSON.stringify(r, null, 2);
@@ -6301,7 +6301,7 @@ function artRebuild() {
 }
 
 // =============================================================
-// Hell's Gate — Direct Syscall Lab
+// Hell's Gate - Direct Syscall Lab
 // =============================================================
 
 let _hgEntries  = [];     // full scan result from server
@@ -6403,7 +6403,7 @@ function hgRenderTable() {
 
 function _hgSsnCell(e) {
   if (e.ssn === null || e.ssn === undefined)
-    return '<span class="hg-ssn hg-ssn-unknown">—</span>';
+    return '<span class="hg-ssn hg-ssn-unknown">-</span>';
   const cls = e.ssn_method === 'halos_gate'    ? 'hg-ssn hg-ssn-halos'
             : e.ssn_method === 'tartarus_gate' ? 'hg-ssn hg-ssn-tartarus'
             :                                    'hg-ssn';
@@ -6411,7 +6411,7 @@ function _hgSsnCell(e) {
 }
 
 function _hgMethodLabel(m) {
-  return {direct:'direct', halos_gate:"Halo's Gate", tartarus_gate:'Tartarus Gate'}[m] || m || '—';
+  return {direct:'direct', halos_gate:"Halo's Gate", tartarus_gate:'Tartarus Gate'}[m] || m || '-';
 }
 
 function _hgHookBadge(t) {

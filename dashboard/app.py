@@ -884,10 +884,10 @@ def c2_deliver_virustotal():
             "descriptor":     descriptor,
             "waited_secs":    waited_secs,
             "note":           (
-                "Resolver comment posted — agent reads VT comment, resolves descriptor, fetches binary."
+                "Resolver comment posted - agent reads VT comment, resolves descriptor, fetches binary."
                 if comment_posted else
                 f"Upload OK but resolver comment failed: {comment_error}. "
-                "Try Retrieve anyway — comment may appear after analysis completes."
+                "Try Retrieve anyway - comment may appear after analysis completes."
             ),
         })
     except Exception as e:
@@ -2360,7 +2360,7 @@ def api_hellsgate_scan():
         f.save(str(ntdll_path))
     elif not ntdll_path.exists():
         return jsonify({"ok": False,
-                        "error": "no ntdll.dll on server – upload one first"}), 400
+                        "error": "no ntdll.dll on server - upload one first"}), 400
 
     try:
         from hellsgate import scan as _hg_scan
