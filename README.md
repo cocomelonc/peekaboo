@@ -572,17 +572,16 @@ Parse `ntdll.dll` to extract SSNs, detect EDR hooks, recover hooked SSNs, and ge
 | command | description |
 |---------|-------------|
 | `scan <path>` | Load and parse ntdll.dll from a file path |
-| `scan-build <id> [fname]` | Load ntdll.dll from a compiled build binary |
-| `scan-session <sid> <file>` | Load ntdll.dll from a session sample |
 | `filter <all\|clean\|hooked>` | Filter SSN table by hook status |
-| `search <query>` | Search by function name prefix |
-| `show <name>` | Show stub detail: SSN, bytes, hook type, recovery method |
-| `select <name>` | Toggle a function for code generation |
+| `search <query>` | Search by function name substring |
+| `show [page]` | Show current SSN table (paginated) |
+| `select <name…>` | Toggle functions for code generation |
+| `select-all` | Select all currently filtered functions |
 | `select-hooked` | Select all hooked stubs at once |
 | `select-common` | Select preset list of 19 common injection APIs |
+| `deselect-all` | Clear selection |
 | `generate <nasm\|c>` | Generate NASM x64 or C `__declspec(naked)` stubs for selected functions |
 | `save <path>` | Save generated stubs to file |
-| `builds` | List available compiled builds |
 | `help` | Show all hellsgate commands |
 
 ### `scemu` sub-REPL

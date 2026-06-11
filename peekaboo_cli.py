@@ -7,6 +7,7 @@ Usage:
     /home/cocomelonc/hacking/peekaboo/py3/bin/python3 peekaboo_cli.py
 """
 from __future__ import annotations
+import re
 import sys
 import uuid
 from collections import Counter, defaultdict
@@ -2015,8 +2016,6 @@ generate ready-to-compile direct-syscall stubs.
 | command                   | description                                              |
 |---------------------------|----------------------------------------------------------|
 | `scan <path>`             | parse ntdll.dll and extract SSN table                    |
-| `scan-build <id> [fname]` | load ntdll.dll from a compiled build binary              |
-| `scan-session <sid> <f>`  | load ntdll.dll from a session sample                     |
 | `filter all|clean|hooked` | filter SSN table by hook status                          |
 | `search <name>`           | filter by function name substring                        |
 | `show [page]`             | show current SSN table (paginated)                       |
@@ -2027,7 +2026,6 @@ generate ready-to-compile direct-syscall stubs.
 | `deselect-all`            | clear selection                                          |
 | `generate nasm|c`         | emit NASM x64 or C `__declspec(naked)` stubs             |
 | `save <path>`             | save last generated code to file                         |
-| `builds`                  | list available compiled builds                           |
 | `help [cmd]`              | show this help or docs for a specific command            |
 | `back`                    | return to main menu                                      |
 
@@ -7386,7 +7384,7 @@ def run_hellsgate() -> None:
             break
 
         elif cmd == "help":
-            show_help("hellsgate", args[0] if args else None)
+            show_help("hellsgate", arg or None)
 
         elif cmd == "scan":
             if not arg:
@@ -7590,7 +7588,7 @@ def run_scemu() -> None:
             break
 
         elif cmd == "help":
-            show_help("scemu", args[0] if args else None)
+            show_help("scemu", arg or None)
 
         elif cmd == "arch":
             if arg not in ("x64", "x86"):
@@ -7633,9 +7631,8 @@ def run_scemu() -> None:
                 console.print("  [warn]usage: hex <\\xNN\\xNN…>[/warn]\n")
                 continue
             # parse: \xNN, 0xNN, or bare hex
-            import re as _re
             cleaned = arg.strip().strip('"\'')
-            tokens  = _re.findall(r'[0-9a-fA-F]{2}',
+            tokens  = re.findall(r'[0-9a-fA-F]{2}',
                                   cleaned.replace("\\x", "").replace("0x", "").replace(",", "").replace(" ", ""))
             if not tokens:
                 console.print("  [err][=^..^=] could not parse hex bytes[/err]\n")
@@ -7927,7 +7924,7 @@ def run_antianalysis() -> None:
             break
 
         elif cmd == "help":
-            show_help("antianalysis", args[0] if args else None)
+            show_help("antianalysis", arg or None)
 
         elif cmd == "arch":
             if arg not in ("auto", "x64", "x86"):
@@ -8157,7 +8154,6 @@ def run_rop() -> None:
     _filter  = "all"
     _search  = ""
     _page    = 0
-    _lang    = "c"
 
     console.print()
     console.print(Panel(
@@ -8204,7 +8200,7 @@ def run_rop() -> None:
             break
 
         elif cmd == "help":
-            show_help("rop", args[0] if args else None)
+            show_help("rop", arg or None)
 
         elif cmd == "arch":
             if arg not in ("auto", "x64", "x86"):
@@ -8392,7 +8388,6 @@ def run_rop() -> None:
                 console.print("  [warn]chain is empty - add gadgets first[/warn]\n")
                 continue
             lang = arg.lower() if arg in ("c", "py") else "c"
-            _lang = lang
             fname = result.get("file_name", "") if result else ""
             arch_out = result.get("arch", "x64") if result else _arch
 
