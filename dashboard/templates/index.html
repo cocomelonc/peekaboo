@@ -1557,35 +1557,14 @@ code{font-family:var(--mono);font-size:12px;background:var(--bg4);padding:1px 5p
 
   <!-- source tabs -->
   <div class="filter-bar" style="margin-bottom:16px">
-    <button class="btn btn-primary btn-sm" id="pe-tab-path-btn"    onclick="peSetTab('path')">Path</button>
-    <button class="btn btn-ghost btn-sm"   id="pe-tab-session-btn" onclick="peSetTab('session')">From Session</button>
+    <button class="btn btn-primary btn-sm" id="pe-tab-session-btn" onclick="peSetTab('session')">From Session</button>
     <button class="btn btn-ghost btn-sm"   id="pe-tab-build-btn"   onclick="peSetTab('build')">🔨 From Build</button>
     <button class="btn btn-ghost btn-sm"   id="pe-tab-upload-btn"  onclick="peSetTab('upload')">Upload</button>
     <span id="pe-status" class="text-dim" style="font-size:12px;margin-left:auto;flex-shrink:0"></span>
   </div>
 
-  <!-- PATH -->
-  <div id="pe-src-path">
-    <div class="card mb-16">
-      <div class="card-header">
-        <span style="font-size:20px">🔬</span>
-        <div>
-          <div class="card-title">PE Inspector</div>
-          <div class="card-sub">analyse PE binaries - sections, imports, entropy, threat scoring</div>
-        </div>
-      </div>
-      <div class="filter-bar" style="margin-bottom:0">
-        <input type="text" id="pe-path"
-               placeholder="Path to PE on server  (e.g. samples/abc123/file.exe)"
-               style="flex:1;min-width:0"
-               onkeydown="if(event.key==='Enter')peAnalysePath()">
-        <button class="btn btn-primary btn-sm" onclick="peAnalysePath()">Analyse</button>
-      </div>
-    </div>
-  </div>
-
   <!-- FROM SESSION -->
-  <div id="pe-src-session" style="display:none">
+  <div id="pe-src-session">
     <div class="card mb-16">
       <div class="card-header">
         <span style="font-size:20px">🔬</span>
@@ -2246,6 +2225,7 @@ function showPanel(id) {
   document.getElementById('topbar-sub').textContent = sub;
   currentPanel = id;
 
+  if (id === 'pe' && !document.getElementById('pe-session-menu').children.length) loadPeSessionList();
   if (id === 'evasion')   loadEvasionScanner();
   if (id === 'library' && libModules.length === 0) loadLibrary();
   if (id === 'samples')   loadSamples();
@@ -3369,7 +3349,7 @@ function vtSelectFile(fname, label) {
 
 let _peData      = null;
 let _peActiveTab = 'overview';
-let _peSrcTab    = 'path';
+let _peSrcTab    = 'session';
 let _peSession   = null;
 let _peFile      = null;
 let _peBuildId   = null;
@@ -3377,7 +3357,7 @@ let _peBuildFname = null;
 
 function peSetTab(tab) {
   _peSrcTab = tab;
-  ['path','session','build','upload'].forEach(t => {
+  ['session','build','upload'].forEach(t => {
     document.getElementById('pe-src-' + t).style.display       = t === tab ? '' : 'none';
     document.getElementById('pe-tab-' + t + '-btn').className  =
       'btn btn-sm ' + (t === tab ? 'btn-primary' : 'btn-ghost');
@@ -3520,19 +3500,6 @@ function switchPeTab(tab) {
     document.getElementById('petab-' + t)?.classList.toggle('active', t === tab);
     const s = document.getElementById('pe-section-' + t);
     if (s) s.style.display = t === tab ? '' : 'none';
-  });
-}
-
-async function peAnalysePath() {
-  const path = document.getElementById('pe-path').value.trim();
-  if (!path) return;
-  _peRun(async () => {
-    const r = await fetch('/api/pe/analyse/path', {
-      method: 'POST',
-      headers: {'Content-Type':'application/json'},
-      body: JSON.stringify({path}),
-    }).then(r => r.json());
-    return r;
   });
 }
 
