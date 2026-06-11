@@ -183,17 +183,22 @@ DEFCON Demo Labs Singapore 2026 | by @cocomelonc
 
 ## Modules
 
-| module      | description                                                 |
-|-------------|-------------------------------------------------------------|
-| `evasion`   | PE evasion scorer and surgical patch transforms             |
-| `library`   | MITRE ATT&CK module library -- browse, search, view code    |
-| `artifacts` | Artifact map: 410 techniques mapped to 4799 Sigma rules     |
-| `builder`   | Compile malware research modules; browse build history      |
-| `shellcode` | Parse, analyse, transform and reformat shellcode            |
-| `yara`      | Generate YARA rules from binaries; scan with yara-python    |
-| `malpedia`  | APT actors, malware families, reports, YARA from Malpedia   |
-| `ttp`       | TTPs, unique ATT&CK sub-techniques implementations from lib |
-| `vtscan`    | Scan compiled binaries or files with VirusTotal (70+ AV)    |
+| module          | description                                                        |
+|-----------------|--------------------------------------------------------------------|
+| `evasion`       | PE evasion scorer and surgical patch transforms                    |
+| `library`       | MITRE ATT&CK module library -- browse, search, view code           |
+| `artifacts`     | Artifact map: 410 techniques mapped to 4799 Sigma rules            |
+| `builder`       | Compile malware research modules; browse build history             |
+| `shellcode`     | Parse, analyse, transform and reformat shellcode                   |
+| `yara`          | Generate YARA rules from binaries; scan with yara-python           |
+| `malpedia`      | APT actors, malware families, reports, YARA from Malpedia          |
+| `ttp`           | TTPs, unique ATT&CK sub-techniques implementations from lib        |
+| `pe`            | PE Anatomy Inspector -- sections, imports, entropy, threat score   |
+| `vtscan`        | Scan compiled binaries or files with VirusTotal (70+ AV)           |
+| `hellsgate`     | Hell's Gate -- SSN extraction, EDR hook detection, stub gen        |
+| `scemu`         | Shellcode Emulator -- Unicorn Engine, trace, API intercept, SMC    |
+| `antianalysis`  | Anti-Analysis Scanner -- anti-debug/anti-VM patterns, MITRE map    |
+| `rop`           | ROP Chain Builder -- gadget finder, chain assembly, C/Python gen   |
 
 ## Global commands
 
@@ -248,6 +253,32 @@ DEFCON Demo Labs Singapore 2026 | by @cocomelonc
     peekaboo [ttp] > search APC injection
     peekaboo [ttp] > build T1055.004
     peekaboo [ttp] > refresh
+
+    peekaboo > hellsgate
+    peekaboo [hellsgate] > scan /mnt/win/ntdll.dll
+    peekaboo [hellsgate] > filter hooked
+    peekaboo [hellsgate] > select-common
+    peekaboo [hellsgate] > generate nasm
+
+    peekaboo > scemu
+    peekaboo [scemu] > arch x64
+    peekaboo [scemu] > run /tmp/payload.bin
+    peekaboo [scemu] > trace
+    peekaboo [scemu] > strings
+
+    peekaboo > antianalysis
+    peekaboo [antianalysis] > scan /tmp/sample.exe
+    peekaboo [antianalysis] > filter anti_debug
+    peekaboo [antianalysis] > list
+    peekaboo [antianalysis] > export /tmp/findings.json
+
+    peekaboo > rop
+    peekaboo [rop] > scan /tmp/ntdll.dll
+    peekaboo [rop] > filter reg_load
+    peekaboo [rop] > list
+    peekaboo [rop] > chain-add 3
+    peekaboo [rop] > chain-arg 0 0x0000000000000001
+    peekaboo [rop] > generate c
 """,
     },
 
@@ -1967,6 +1998,507 @@ Fetch an existing VirusTotal file report by SHA256 hash.
 **Examples:**
 
     lookup 4b3a2e1f...
+""",
+    },
+
+    # -- hellsgate -------------------------------------------------------------
+    "hellsgate": {
+        "_overview": """\
+# Hell's Gate / Halo's Gate / Tartarus Gate
+
+Parse a Windows `ntdll.dll` to extract System Service Numbers (SSNs) for all
+`Nt*` / `Zw*` exports, detect EDR inline hooks, recover hooked SSNs, and
+generate ready-to-compile direct-syscall stubs.
+
+## Commands
+
+| command                   | description                                              |
+|---------------------------|----------------------------------------------------------|
+| `scan <path>`             | parse ntdll.dll and extract SSN table                    |
+| `scan-build <id> [fname]` | load ntdll.dll from a compiled build binary              |
+| `scan-session <sid> <f>`  | load ntdll.dll from a session sample                     |
+| `filter all|clean|hooked` | filter SSN table by hook status                          |
+| `search <name>`           | filter by function name substring                        |
+| `show [page]`             | show current SSN table (paginated)                       |
+| `select <name…>`          | toggle functions for code generation                     |
+| `select-all`              | select all currently filtered functions                  |
+| `select-hooked`           | select all hooked / patched functions                    |
+| `select-common`           | select 19 common injection APIs                          |
+| `deselect-all`            | clear selection                                          |
+| `generate nasm|c`         | emit NASM x64 or C `__declspec(naked)` stubs             |
+| `save <path>`             | save last generated code to file                         |
+| `builds`                  | list available compiled builds                           |
+| `help [cmd]`              | show this help or docs for a specific command            |
+| `back`                    | return to main menu                                      |
+
+## Hook types detected
+
+| type          | bytes           | description                       |
+|---------------|-----------------|-----------------------------------|
+| `jmp_rel32`   | E9 xx xx xx xx  | relative JMP trampoline           |
+| `jmp_abs`     | FF 25 ...       | indirect JMP via pointer          |
+| `int3`        | CC              | INT3 breakpoint                   |
+| `push_ret`    | 68 ... C3       | PUSH addr / RET trampoline        |
+| `partial`     | partial prologue| prologue bytes overwritten        |
+
+## SSN recovery methods
+
+- **Halo's Gate** -- finds nearest clean neighbour in RVA order; SSNs are contiguous in ntdll's EAT.
+- **Tartarus Gate** -- forward-scans the stub for a `B8 xx xx xx xx` sequence with a value < 0x600.
+
+## Quick start
+
+    peekaboo > hellsgate
+    peekaboo [hellsgate] > scan /mnt/win/ntdll.dll
+    peekaboo [hellsgate] > filter hooked
+    peekaboo [hellsgate] > select-common
+    peekaboo [hellsgate] > generate nasm
+    peekaboo [hellsgate] > save /tmp/syscalls.asm
+""",
+        "scan": """\
+## scan
+
+Parse a ntdll.dll binary and extract the SSN table.
+
+**Usage:**
+
+    scan <path>
+
+**Examples:**
+
+    scan /mnt/win/ntdll.dll
+    scan ~/samples/ntdll_edr.dll
+
+**Notes:**
+
+- Architecture is auto-detected from the PE Machine field.
+- Use `filter hooked` after scanning to focus on patched stubs.
+""",
+        "generate": """\
+## generate
+
+Emit direct-syscall stubs for all selected functions.
+
+**Usage:**
+
+    generate nasm
+    generate c
+
+**Examples:**
+
+    generate nasm    # NASM x64 .asm file
+    generate c       # C __declspec(naked) stubs
+
+**Notes:**
+
+- Select functions first with `select`, `select-common`, or `select-hooked`.
+- Use `save <path>` to write the output to disk.
+""",
+        "select-common": """\
+## select-common
+
+Select a preset list of 19 commonly used injection / execution APIs:
+
+    NtAllocateVirtualMemory  NtWriteVirtualMemory   NtProtectVirtualMemory
+    NtCreateThreadEx         NtOpenProcess           NtReadVirtualMemory
+    NtFreeVirtualMemory      NtClose                 NtQuerySystemInformation
+    NtQueryInformationProcess NtSetInformationThread NtCreateSection
+    NtMapViewOfSection       NtUnmapViewOfSection    NtQueueApcThread
+    NtResumeThread           NtSuspendThread         NtTerminateProcess
+    NtFlushInstructionCache
+""",
+    },
+
+    # -- scemu -----------------------------------------------------------------
+    "scemu": {
+        "_overview": """\
+# Shellcode Emulator
+
+x86/x64 shellcode emulator powered by Unicorn Engine with Capstone disassembly.
+Runs shellcode in an isolated virtual CPU -- no kernel interaction.
+
+## Commands
+
+| command              | description                                               |
+|----------------------|-----------------------------------------------------------|
+| `run <path>`         | emulate a raw shellcode binary file                       |
+| `hex <hex_string>`   | emulate shellcode from hex (`\\xNN`, `0xNN,`, raw hex)    |
+| `disasm <path>`      | disassemble-only mode (no CPU execution)                  |
+| `arch x64|x86`       | set architecture for next run (default: x64)              |
+| `maxinsns <N>`       | set instruction count limit (default: 10 000, max: 50 000)|
+| `trace`              | show per-instruction execution trace                      |
+| `regs`               | show final register state                                 |
+| `mem`                | show memory read/write log                                |
+| `api`                | show intercepted API calls                                |
+| `strings`            | show extracted strings from emulated memory               |
+| `smc`                | show self-modifying code detection result                 |
+| `help [cmd]`         | show this help or docs for a specific command             |
+| `back`               | return to main menu                                       |
+
+## Memory layout
+
+| region    | address      | size   |
+|-----------|--------------|--------|
+| shellcode | 0x00400000   | 1 MB   |
+| stack     | 0x00200000   | 512 KB |
+| heap      | 0x00600000   | 512 KB |
+
+## Stop conditions
+
+- Instruction count limit reached
+- Wall-clock timeout (10 s)
+- Clean `ret` to sentinel address
+- CPU exception
+
+## Quick start
+
+    peekaboo > scemu
+    peekaboo [scemu] > arch x64
+    peekaboo [scemu] > run /tmp/payload.bin
+    peekaboo [scemu] > trace
+    peekaboo [scemu] > api
+    peekaboo [scemu] > strings
+""",
+        "run": """\
+## run
+
+Load and emulate a raw shellcode binary file.
+
+**Usage:**
+
+    run <path>
+
+**Examples:**
+
+    run /tmp/payload.bin
+    run ~/samples/beacon.raw
+
+**Notes:**
+
+- File is loaded as raw bytes at the shellcode base address (0x00400000).
+- Use `trace`, `regs`, `mem`, `api`, `strings`, `smc` to inspect results.
+""",
+        "hex": """\
+## hex
+
+Emulate shellcode supplied as a hex string inline.
+
+**Usage:**
+
+    hex <hex_string>
+
+**Accepted formats:**
+
+    hex \\x48\\x31\\xc0\\xc3
+    hex 0x48, 0x31, 0xc0, 0xc3
+    hex 4831c0c3
+
+**Notes:**
+
+- All three formats are parsed identically.
+- Prefix and separator characters are stripped automatically.
+""",
+        "arch": """\
+## arch
+
+Set the CPU architecture for the next emulation run.
+
+**Usage:**
+
+    arch x64
+    arch x86
+
+**Notes:**
+
+- Default is x64.
+- Must be set before `run` or `hex`.
+""",
+        "maxinsns": """\
+## maxinsns
+
+Set the maximum instruction count before emulation stops.
+
+**Usage:**
+
+    maxinsns <N>
+
+**Examples:**
+
+    maxinsns 5000
+    maxinsns 50000
+
+**Notes:**
+
+- Default: 10 000. Hard cap: 50 000.
+- Use lower values for faster analysis of known-short shellcode.
+""",
+    },
+
+    # -- antianalysis ----------------------------------------------------------
+    "antianalysis": {
+        "_overview": """\
+# Anti-Analysis Pattern Scanner
+
+Static Capstone scanner for anti-debug, anti-VM, timing, and sandbox-evasion
+techniques. Disassembles all executable sections; no code is executed.
+
+## Commands
+
+| command                                           | description                                  |
+|---------------------------------------------------|----------------------------------------------|
+| `scan <path>`                                     | scan a PE binary or raw shellcode file       |
+| `scan-build [id] [fname]`                         | scan a compiled build binary                 |
+| `scan-session <sid> <file>`                       | scan a session sample                        |
+| `arch auto|x64|x86`                               | set architecture (default: auto from PE)     |
+| `filter all|anti_debug|anti_vm|timing|evasion`    | filter findings by category                  |
+| `list [page]`                                     | show findings table (paginated)              |
+| `export <path>`                                   | export findings as JSON                      |
+| `builds`                                          | list available compiled builds               |
+| `help [cmd]`                                      | show this help or docs for a specific command|
+| `back`                                            | return to main menu                          |
+
+## Pattern catalog
+
+| ID         | Technique                              | Category    | MITRE       | Sev    |
+|------------|----------------------------------------|-------------|-------------|--------|
+| RDTSC      | Read timestamp counter                 | Timing      | T1497.003   | High   |
+| CPUID      | Hypervisor bit / vendor string probe   | Anti-VM     | T1497.001   | Medium |
+| INT2D      | INT 2D kernel debug interrupt          | Anti-Debug  | T1622       | High   |
+| INT3_AA    | Inline INT 3 breakpoint trap           | Anti-Debug  | T1622       | Medium |
+| IN_DX      | VMware I/O backdoor (port 0x5658)      | Anti-VM     | T1497.001   | High   |
+| SIDT       | IDT location probe (Red Pill)          | Anti-VM     | T1497.001   | High   |
+| SGDT       | GDT base fingerprint                   | Anti-VM     | T1497.001   | High   |
+| SLDT       | LDT selector check                     | Anti-VM     | T1497.001   | Medium |
+| STR_REG    | Task Register selector (VMware = 0x40) | Anti-VM     | T1497.001   | Medium |
+| RDPMC      | Performance counter timing side-channel| Timing      | T1497.003   | Medium |
+| PEB_READ   | PEB.BeingDebugged via FS:[30h]/GS:[60h]| Anti-Debug  | T1622       | High   |
+| NOP_SLED   | ≥8 consecutive NOPs (emulator stall)   | Evasion     | T1497.003   | Low    |
+| PUSHFD     | PUSHFD/POPFD Trap Flag probe           | Anti-Debug  | T1622       | High   |
+| VPC_MAGIC  | VPC/Hyper-V magic bytes (0F 3F 07 0B)  | Anti-VM     | T1497.001   | High   |
+| DIV_ZERO   | DIV/IDIV register -- SEH trap          | Anti-Debug  | T1622       | Medium |
+
+## Quick start
+
+    peekaboo > antianalysis
+    peekaboo [antianalysis] > scan /tmp/sample.exe
+    peekaboo [antianalysis] > filter anti_debug
+    peekaboo [antianalysis] > list
+    peekaboo [antianalysis] > export /tmp/findings.json
+""",
+        "scan": """\
+## scan
+
+Scan a PE binary or raw shellcode file for anti-analysis patterns.
+
+**Usage:**
+
+    scan <path>
+
+**Examples:**
+
+    scan /tmp/sample.exe
+    scan ~/samples/loader.dll
+
+**Notes:**
+
+- Architecture is auto-detected from the PE header; override with `arch`.
+- All executable sections are scanned (IMAGE_SCN_MEM_EXECUTE).
+- If the file is not a valid PE, it is treated as raw shellcode.
+""",
+        "filter": """\
+## filter
+
+Filter the findings table by category.
+
+**Usage:**
+
+    filter all
+    filter anti_debug
+    filter anti_vm
+    filter timing
+    filter evasion
+
+**Notes:**
+
+- `all` resets the filter and shows everything.
+- Use `list` after filtering to see the narrowed results.
+""",
+        "export": """\
+## export
+
+Export the current findings to a JSON file.
+
+**Usage:**
+
+    export <path>
+
+**Examples:**
+
+    export /tmp/findings.json
+    export ~/reports/sample_antianalysis.json
+
+**Notes:**
+
+- Exports all findings from the last scan (ignores active filter).
+- File is created or overwritten.
+""",
+    },
+
+    # -- rop -------------------------------------------------------------------
+    "rop": {
+        "_overview": """\
+# ROP Chain Builder
+
+Find Return-Oriented Programming gadgets in Windows PE / DLL / SYS binaries
+(x64 and x86), build exploit chains, and generate C or Python payloads.
+
+## Commands
+
+| command                        | description                                          |
+|--------------------------------|------------------------------------------------------|
+| `scan <path>`                  | scan a PE/DLL/SYS binary for ROP gadgets             |
+| `scan-build [id] [fname]`      | scan a compiled build binary                         |
+| `scan-session <sid> <file>`    | scan a session sample                                |
+| `arch auto|x64|x86`            | set architecture (default: auto from PE header)      |
+| `base <hex>`                   | override image base (e.g. `base 0x180000000`)        |
+| `filter <semantic>`            | filter by semantic class                             |
+| `search <keyword>`             | text search across mnemonics / address / semantic    |
+| `list [page]`                  | show gadget table (paginated, 20/page)               |
+| `chain-add <#>`                | add gadget by table row number to chain              |
+| `chain-add-addr <addr>`        | add gadget by hex address to chain                   |
+| `chain-arg <slot> <value>`     | set stack argument for a chain slot                  |
+| `chain-show`                   | print current chain                                  |
+| `chain-clear`                  | clear the chain                                      |
+| `generate c|py`                | generate C ULONG_PTR array or Python payload         |
+| `save <path>`                  | save last generated code to file                     |
+| `builds`                       | list available compiled builds                       |
+| `help [cmd]`                   | show this help or docs for a specific command        |
+| `back`                         | return to main menu                                  |
+
+## Semantic classes
+
+| class        | pattern                                      |
+|--------------|----------------------------------------------|
+| `ret_only`   | bare ret (no preceding instructions)         |
+| `reg_load`   | pop reg; ret                                 |
+| `multi_pop`  | multiple consecutive pop instructions        |
+| `stack_pivot`| xchg rsp / mov rsp / leave                  |
+| `syscall`    | syscall / sysenter / int 0x2e; ret           |
+| `reg_mov`    | mov reg, reg; ret                            |
+| `mem_write`  | mov [reg…], reg; ret                         |
+| `mem_read`   | mov reg, [reg…]; ret                         |
+| `arithmetic` | add/sub/xor/and/or/neg/shl/shr/ror/rol; ret  |
+| `nop_ret`    | all-NOP body + ret                           |
+| `misc`       | anything else ending in ret                  |
+
+## Gadget limits
+
+- Max instructions before terminator: 6
+- Max raw bytes per gadget: 24
+- Hard cap per binary: 4 000 gadgets
+
+## Quick start
+
+    peekaboo > rop
+    peekaboo [rop] > scan /tmp/ntdll.dll
+    peekaboo [rop] > filter reg_load
+    peekaboo [rop] > list
+    peekaboo [rop] > chain-add 3
+    peekaboo [rop] > chain-add 7
+    peekaboo [rop] > chain-arg 0 0x0000000000000001
+    peekaboo [rop chain:2] > generate c
+    peekaboo [rop chain:2] > save /tmp/rop_chain.c
+""",
+        "scan": """\
+## scan
+
+Find ROP gadgets in a PE binary, DLL, or SYS driver.
+
+**Usage:**
+
+    scan <path>
+
+**Examples:**
+
+    scan /tmp/ntdll.dll
+    scan ~/samples/kernel32.dll
+
+**Notes:**
+
+- Only executable sections (IMAGE_SCN_MEM_EXECUTE) are scanned.
+- Architecture and image base are read from the PE header automatically.
+- Override arch with `arch` and base with `base` before scanning.
+""",
+        "filter": """\
+## filter
+
+Filter the gadget list by semantic class.
+
+**Usage:**
+
+    filter <semantic>
+    filter all
+
+**Valid classes:**
+
+    all  ret_only  reg_load  multi_pop  stack_pivot  syscall
+    reg_mov  mem_write  mem_read  arithmetic  nop_ret  misc
+
+**Examples:**
+
+    filter reg_load
+    filter stack_pivot
+    filter all
+""",
+        "chain-add": """\
+## chain-add
+
+Append a gadget to the chain by its row number in the current `list` view.
+
+**Usage:**
+
+    chain-add <row_number>
+
+**Examples:**
+
+    chain-add 3
+    chain-add 12
+
+**Notes:**
+
+- Row numbers start at 1 (as shown in the `list` output).
+- Use `chain-show` to review the chain after adding.
+- Alternatively use `chain-add-addr <hex_address>` to add by address.
+""",
+        "generate": """\
+## generate
+
+Generate an exploit chain payload from the current chain.
+
+**Usage:**
+
+    generate c
+    generate py
+
+**Output (C):**
+
+    ULONG_PTR rop_chain[] = {
+        0x7ffb12340000ULL,  /* pop rax; ret */
+        0x0000000000000001ULL,  /* arg */
+        ...
+    };
+
+**Output (Python):**
+
+    import struct
+    rop = b""
+    rop += struct.pack("<Q", 0x7ffb12340000)  # pop rax; ret
+    rop += struct.pack("<Q", 0x0000000000000001)  # arg
+
+**Notes:**
+
+- Build the chain first with `chain-add` / `chain-arg`.
+- Use `save <path>` to write to disk.
 """,
     },
 }
@@ -6854,27 +7386,7 @@ def run_hellsgate() -> None:
             break
 
         elif cmd == "help":
-            t = Table(box=box.ROUNDED, show_header=False,
-                      border_style="bright_black", padding=(0, 1))
-            for c, d in [
-                ("scan <ntdll.dll>",     "parse ntdll.dll - extract SSNs, detect EDR hooks"),
-                ("filter all|clean|hooked","filter the SSN table"),
-                ("search <name>",        "filter by function name substring"),
-                ("show [page]",          "show current SSN table (paginated)"),
-                ("select <name…>",       "select functions for code generation"),
-                ("select-all",           "select all currently filtered functions"),
-                ("select-hooked",        "select all hooked/patched functions"),
-                ("select-common",        "select 19 common injection APIs"),
-                ("deselect-all",         "clear selection"),
-                ("generate nasm|c",      "generate direct-syscall stubs for selected"),
-                ("save <path>",          "save last generated code to file"),
-                ("help",                 "show this help"),
-                ("back",                 "return to main menu"),
-            ]:
-                t.add_row(f"[cmd]{c}[/cmd]", d)
-            console.print()
-            console.print(t)
-            console.print()
+            show_help("hellsgate", args[0] if args else None)
 
         elif cmd == "scan":
             if not arg:
@@ -7078,27 +7590,7 @@ def run_scemu() -> None:
             break
 
         elif cmd == "help":
-            t = Table(box=box.ROUNDED, show_header=False,
-                      border_style="bright_black", padding=(0, 1))
-            for c, d in [
-                ("run <path>",       "emulate a raw shellcode binary file"),
-                ("hex <hex_string>", "emulate hex-encoded shellcode (\\xNN or 0xNN,… or raw hex)"),
-                ("disasm <path>",    "disassemble a file with Capstone (no CPU execution)"),
-                ("arch x64|x86",     "set architecture for next run (default: x64)"),
-                ("maxinsns <n>",     "set max instructions limit (default: 10000, max: 50000)"),
-                ("trace",            "show per-instruction execution trace"),
-                ("regs",             "show final register state"),
-                ("mem",              "show memory read/write log"),
-                ("api",              "show intercepted API calls"),
-                ("strings",          "show extracted strings from emulated memory"),
-                ("smc",              "show self-modifying code detection result"),
-                ("help",             "show this help"),
-                ("back",             "return to main menu"),
-            ]:
-                t.add_row(f"[cmd]{c}[/cmd]", d)
-            console.print()
-            console.print(t)
-            console.print()
+            show_help("scemu", args[0] if args else None)
 
         elif cmd == "arch":
             if arg not in ("x64", "x86"):
@@ -7435,24 +7927,7 @@ def run_antianalysis() -> None:
             break
 
         elif cmd == "help":
-            t = Table(box=box.ROUNDED, show_header=False,
-                      border_style="bright_black", padding=(0, 1))
-            for c, d in [
-                ("scan <path>",                "scan a PE binary or raw shellcode"),
-                ("scan-build <id> [fname]",    "scan a compiled build binary"),
-                ("scan-session <sid> <file>",  "scan a session sample"),
-                ("arch auto|x64|x86",          "set architecture (default: auto from PE header)"),
-                ("filter all|anti_debug|anti_vm|timing|evasion", "filter findings"),
-                ("list [page]",                "show findings table (paginated)"),
-                ("builds",                     "list available compiled builds"),
-                ("export <path>",              "export findings as JSON"),
-                ("help",                       "show this help"),
-                ("back",                       "return to main menu"),
-            ]:
-                t.add_row(f"[cmd]{c}[/cmd]", d)
-            console.print()
-            console.print(t)
-            console.print()
+            show_help("antianalysis", args[0] if args else None)
 
         elif cmd == "arch":
             if arg not in ("auto", "x64", "x86"):
@@ -7729,32 +8204,7 @@ def run_rop() -> None:
             break
 
         elif cmd == "help":
-            t = Table(box=box.ROUNDED, show_header=False,
-                      border_style="bright_black", padding=(0, 1))
-            for c, d in [
-                ("scan <path>",                    "find gadgets in a PE / DLL / raw binary"),
-                ("scan-build <id> [fname]",        "scan a compiled build binary"),
-                ("scan-session <sid> <file>",      "scan a session sample"),
-                ("arch auto|x64|x86",              "set architecture (default: auto from PE header)"),
-                ("base <hex>",                     "override image base address (e.g. 0x180001000)"),
-                ("filter <semantic>",              "filter by semantic: reg_load stack_pivot syscall arithmetic …"),
-                ("search <query>",                 "text search across mnemonics, address, semantic"),
-                ("list [page]",                    "show gadget table (paginated, 20/page)"),
-                ("chain-add <#>",                  "add gadget by table row number to chain"),
-                ("chain-add-addr <addr>",          "add gadget by hex address to chain"),
-                ("chain-arg <chain-idx> <value>",  "set stack argument for a pop/load gadget in chain"),
-                ("chain-show",                     "print current chain"),
-                ("chain-clear",                    "clear the chain"),
-                ("generate c|py",                  "generate C ULONG_PTR array or Python payload"),
-                ("save <path>",                    "save last generated code to file"),
-                ("builds",                         "list available compiled builds"),
-                ("help",                           "show this help"),
-                ("back",                           "return to main menu"),
-            ]:
-                t.add_row(f"[cmd]{c}[/cmd]", d)
-            console.print()
-            console.print(t)
-            console.print()
+            show_help("rop", args[0] if args else None)
 
         elif cmd == "arch":
             if arg not in ("auto", "x64", "x86"):
