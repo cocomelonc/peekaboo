@@ -26,7 +26,10 @@ Peekaboo is a modular framework designed to safely emulate malware behavior. It 
 - **YARA rule generator** - auto-generate YARA rules from compiled binaries or uploaded samples; rules can be saved, copied, and downloaded.
 - **VirusTotal scanner** - submit binaries for AV detection scoring; lookup by SHA256; poll analysis results; supports From Build and From Session sources.
 - **Evasion lab** - static evasion scoring (entropy, imports, strings, PE structure, packer detection) with patch suggestions; supports From Build, From Session, and direct upload.
-- **PE inspector** - deep anatomy of PE binaries: DOS / File / Optional / Section headers, imports, exports, Rich header, overlay, packer detection, threat score; supports From Build, From Session, path, and direct upload.
+- **PE inspector** - deep anatomy of PE binaries: DOS / File / Optional / Section headers, imports, exports, Rich header, overlay, packer detection, threat score; supports From Build, From Session, and direct upload.
+- **Hell's Gate / Direct Syscall Lab** - parse `ntdll.dll` to extract System Service Numbers for all `Nt*`/`Zw*` exports; detect EDR inline hooks (JMP rel32, FF25, INT3, PUSH/RET trampoline); recover hooked SSNs via Halo's Gate (nearest-clean-neighbour inference) and Tartarus Gate (forward byte scan); generate ready-to-compile NASM x64 or C `__declspec(naked)` direct-syscall stubs.
+- **Shellcode Emulator** - x86/x64 CPU emulation via Unicorn Engine with per-instruction disassembly trace (Capstone), memory read/write log, self-modifying code detection, API interception at unmapped call targets, extracted string identification, and standalone disassembly-only mode.
+- **Anti-Analysis Pattern Scanner** - static Capstone scan of PE executables or raw shellcode for 15 anti-debug, anti-VM, timing, and sandbox-evasion patterns (RDTSC, CPUID, INT 2D, PEB FS/GS reads, SIDT/SGDT/SLDT, IN EAX/DX VMware backdoor, NOP sleds, PUSHFD Trap Flag probe, VPC magic bytes, and more); findings mapped to MITRE ATT&CK T1622, T1497.001, T1497.003.
 - **safe by design:** Focuses on telemetry generation (process creation, network connections) rather than actual system damage.      
 
 ## architecture
@@ -61,7 +64,11 @@ The dashboard is a Flask-based web UI that combines C2 monitoring, malware build
 cd dashboard && python3 app.py
 ```
 
-![img](./screenshots/2026-04-28_23-40.png)
+![img](./screenshots/2026-06-11_09-51_1.png)    
+
+![img](./screenshots/2026-06-11_09-49.png)    
+
+![img](./screenshots/2026-06-11_09-51.png)    
 
 ### modules
 
@@ -75,7 +82,10 @@ cd dashboard && python3 app.py
 | **YARA** | Auto-generate YARA rules from any binary (From Build, From Session, or Upload); save, copy, and download rules |
 | **VirusTotal** | Submit binaries to VirusTotal for AV detection scoring; lookup by SHA256; poll analysis; From Build and From Session sources |
 | **Evasion Lab** | Static evasion score with category breakdown (entropy, imports, strings, PE structure); patch suggestions; From Build / From Session / Upload |
-| **PE Inspector** | Deep PE anatomy: DOS / File / Optional / Section headers, imports, exports, Rich header, overlay, packer detection, threat score; Path / From Session / From Build / Upload |
+| **PE Inspector** | Deep PE anatomy: DOS / File / Optional / Section headers, imports, exports, Rich header, overlay, packer detection, threat score; From Session / From Build / Upload |
+| **Hell's Gate** | SSN extractor for all `Nt*`/`Zw*` exports; EDR hook detection; Halo's Gate + Tartarus Gate SSN recovery; NASM / C direct-syscall stub generator |
+| **SC Emulator** | x86/x64 Unicorn Engine emulation with per-instruction trace, memory log, SMC detection, API interception, string extraction, and disasm-only mode |
+| **Anti-Analysis** | Static Capstone scan for 15 anti-debug/anti-VM/timing/evasion patterns; MITRE ATT&CK T1622/T1497 mapping; From Session / From Build / Upload |
 | **APT Campaign** | Fully automated pipeline: actor -> reports -> TTP extraction -> module selection -> binary compile |
 | **MITRE ATT&CK** | Browse 200+ blog posts mapped to ATT&CK techniques with inline source code viewer |
 | **Malpedia** | Threat actor and malware family lookup with semantic blog post matching |
@@ -162,7 +172,7 @@ Patch suggestions are shown for each category. Patches can be applied to the bin
 
 ### PE Inspector
 
-Deep static analysis of PE binaries. Input sources: **Path**, **From Session**, **From Build**, **Upload**.
+Deep static analysis of PE binaries. Input sources: **From Session**, **From Build**, **Upload**.
 
 Result tabs:
 
@@ -178,6 +188,78 @@ Result tabs:
 | **Rich Header** | Decoded Rich header entries: tool ID, tool name, build number, use count |
 | **Overlay** | Overlay detection: offset, size, entropy, SHA256 of appended data |
 | **Packer** | Packer identification by section name signatures (UPX, VMProtect, Themida, MPRESS, ASPack, etc.) |
+
+### Hell's Gate / Direct Syscall Lab
+
+Extracts System Service Numbers (SSNs) directly from a Windows `ntdll.dll` without touching the Win32 API - the core primitive behind Hell's Gate, Halo's Gate, and Tartarus Gate. Upload a copy of `C:\Windows\System32\ntdll.dll` from any Windows target or VM; all parsing runs in Python on the server with no code execution.
+
+**What it does:**
+
+| stage | description |
+|-------|-------------|
+| **SSN extraction** | Walks the ntdll.dll Export Address Table, collects all `Nt*`/`Zw*` stubs, and reads the `mov eax, <SSN>` immediate from the canonical `4C 8B D1 B8 xx xx xx xx` prologue |
+| **EDR hook detection** | Identifies inline hooks at stub entry: JMP rel32 (`E9`), indirect JMP (`FF 25`), INT3 (`CC`), PUSH/RET trampoline (`68 ... C3`), and partial/deep hooks |
+| **Halo's Gate recovery** | For every hooked stub, infers the correct SSN by finding the nearest clean neighbour in RVA order (SSNs are contiguous in ntdll's EAT) |
+| **Tartarus Gate recovery** | Forward-scans hooked stubs for a `B8 xx xx xx xx` (`mov eax, imm32`) sequence with a value in the plausible SSN range (< 0x600) |
+| **Code generation** | Emits ready-to-compile NASM x64 or C `__declspec(naked)` stubs with recovery annotations |
+
+The SSN table is fully filterable (All / Clean / Hooked), searchable by function name, and supports per-row checkbox selection. Shortcut buttons select all hooked stubs or a preset list of 19 common injection APIs (`NtAllocateVirtualMemory`, `NtWriteVirtualMemory`, `NtCreateThreadEx`, `NtProtectVirtualMemory`, etc.).
+
+**References:** Hell's Gate (am0nsec / smelly\_\_vx, VX-Underground) · Halo's Gate (trickster0 / Alice Climent-Monde) · Tartarus Gate (trickster0) · SysWhispers3 (klezVirus)
+
+### SC Emulator
+
+x86/x64 shellcode emulator powered by **Unicorn Engine** with **Capstone** disassembly. Runs shellcode in an isolated virtual CPU with no kernel interaction - safe for analysis of unknown or hostile samples.
+
+**Input modes:**
+
+| mode | description |
+|------|-------------|
+| **Hex / Paste** | Paste shellcode as `\xNN` escape sequences, `0xNN` comma-separated, or raw hex strings |
+| **Upload binary** | Upload a raw `.bin` or `.raw` shellcode file |
+| **Disasm only** | Pure Capstone disassembly without execution - instant, no CPU state |
+
+**Emulation features:**
+
+| feature | detail |
+|---------|--------|
+| **Per-instruction trace** | Address, raw bytes, mnemonic, operands, and live register snapshot for every instruction (up to 500 trace entries shown) |
+| **Memory access log** | Every read and write: address, size, value - distinguishes code from data region access |
+| **Self-modifying code detection** | Fires when a write lands within the shellcode's own code region; SMC banner shown with the first triggering address |
+| **API interception** | Calls to unmapped addresses are caught, recorded with caller address and API hash guess (12 pre-loaded common Win32 hashes), and gracefully redirected - emulation continues past the call |
+| **String extraction** | Printable ASCII/UTF-16 strings of 4+ characters assembled from emulated memory writes |
+| **Register dump** | Final state of all general-purpose and flags registers on exit |
+| **Stop conditions** | Instruction count limit (configurable, max 50 000), wall-clock timeout (10 s), clean `ret` to sentinel address, or CPU exception |
+
+Memory layout: shellcode at `0x00400000`, stack at `0x00200000`, scratch heap at `0x00600000`.
+
+### Anti-Analysis Pattern Scanner
+
+Static disassembly-based scanner that detects anti-debug, anti-VM, timing, and sandbox-evasion techniques in PE binaries or raw shellcode. Uses **Capstone** to disassemble all executable sections and matches 15 pattern rules - no code is executed.
+
+Input sources: **Upload**, **From Session**, **From Build**. Architecture: **Auto** (detected from PE header), **x64**, or **x86**.
+
+**Pattern catalog:**
+
+| ID | Technique | Category | MITRE | Severity |
+|----|-----------|----------|-------|----------|
+| `RDTSC` | Read timestamp counter | Timing | T1497.003 | High |
+| `CPUID` | Hypervisor bit / vendor string probe | Anti-VM | T1497.001 | Medium |
+| `INT2D` | INT 2D kernel debug interrupt | Anti-Debug | T1622 | High |
+| `INT3_AA` | Inline INT 3 breakpoint trap | Anti-Debug | T1622 | Medium |
+| `IN_DX` | VMware I/O backdoor (port 0x5658) | Anti-VM | T1497.001 | High |
+| `SIDT` | IDT location probe - Red Pill | Anti-VM | T1497.001 | High |
+| `SGDT` | GDT base fingerprint | Anti-VM | T1497.001 | High |
+| `SLDT` | LDT selector check | Anti-VM | T1497.001 | Medium |
+| `STR_REG` | Task Register selector (VMware = 0x40) | Anti-VM | T1497.001 | Medium |
+| `RDPMC` | Performance counter timing side-channel | Timing | T1497.003 | Medium |
+| `PEB_READ` | PEB.BeingDebugged via FS:[30h] / GS:[60h] | Anti-Debug | T1622 | High |
+| `NOP_SLED` | ≥8 consecutive NOPs (emulator stall) | Evasion | T1497.003 | Low |
+| `PUSHFD` | PUSHFD/POPFD Trap Flag probe | Anti-Debug | T1622 | High |
+| `VPC_MAGIC` | VPC/Hyper-V magic bytes (0F 3F 07 0B) | Anti-VM | T1497.001 | High |
+| `DIV_ZERO` | DIV/IDIV register - SEH trap | Anti-Debug | T1622 | Medium |
+
+Results include: per-category counts, MITRE ATT&CK coverage chips (T1622 / T1497.001 / T1497.003), and a filterable table showing severity badge, technique name, category, MITRE ID, section name, file offset + VA, raw bytes, and description. Findings can be exported as JSON.
 
 ### MITRE ATT&CK R&D
 
