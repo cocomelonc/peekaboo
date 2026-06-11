@@ -667,6 +667,56 @@ code{font-family:var(--mono);font-size:12px;background:var(--bg4);padding:1px 5p
 .page-bar .pg-btn.active{background:rgba(181,123,255,.2);border-color:var(--purple);color:var(--purple);font-weight:600}
 .page-bar .pg-btn:disabled{opacity:.35;cursor:default}
 .page-bar .pg-info{font-size:11px;color:var(--dim);margin-left:auto}
+
+/* -- Hell's Gate panel -- */
+.hg-stats-row{display:flex;gap:10px;margin-bottom:16px;flex-wrap:wrap}
+.hg-stat{flex:1;min-width:110px;background:var(--bg2);border:1px solid var(--sep);border-radius:8px;padding:12px 16px;text-align:center}
+.hg-stat .hg-stat-n{font-size:26px;font-weight:700;line-height:1}
+.hg-stat .hg-stat-l{font-size:11px;color:var(--text2);margin-top:4px;text-transform:uppercase;letter-spacing:.5px}
+.hg-stat-clean  .hg-stat-n{color:var(--green)}
+.hg-stat-hooked .hg-stat-n{color:var(--red)}
+.hg-stat-total  .hg-stat-n{color:var(--purple)}
+.hg-table-wrap{overflow-x:auto;margin-bottom:16px}
+.hg-table{width:100%;border-collapse:collapse;font-size:12px}
+.hg-table th{background:var(--bg3);color:var(--text2);font-weight:600;padding:6px 10px;text-align:left;border-bottom:1px solid var(--sep);white-space:nowrap;font-size:11px;text-transform:uppercase;letter-spacing:.4px}
+.hg-table td{padding:5px 10px;border-bottom:1px solid rgba(255,255,255,.04);vertical-align:middle;white-space:nowrap}
+.hg-table tr:hover td{background:rgba(255,255,255,.03)}
+.hg-table tr.hg-selected td{background:rgba(181,123,255,.08)}
+.hg-fn{font-family:monospace;font-size:12px;color:var(--text);cursor:pointer}
+.hg-fn:hover{color:var(--purple)}
+.hg-ssn{font-family:monospace;font-size:12px;color:#60a5fa;font-weight:600}
+.hg-ssn-halos{color:#f59e0b}
+.hg-ssn-tartarus{color:#f97316}
+.hg-ssn-unknown{color:var(--dim)}
+.hg-badge{display:inline-block;padding:2px 7px;border-radius:4px;font-size:10px;font-weight:700;letter-spacing:.4px;text-transform:uppercase}
+.hg-badge-clean{background:rgba(74,222,128,.15);color:#4ade80;border:1px solid rgba(74,222,128,.3)}
+.hg-badge-jmp{background:rgba(248,113,113,.15);color:#f87171;border:1px solid rgba(248,113,113,.3)}
+.hg-badge-int3{background:rgba(248,113,113,.15);color:#f87171;border:1px solid rgba(248,113,113,.3)}
+.hg-badge-hook{background:rgba(251,146,60,.15);color:#fb923c;border:1px solid rgba(251,146,60,.3)}
+.hg-badge-unknown{background:rgba(156,163,175,.12);color:#9ca3af;border:1px solid rgba(156,163,175,.2)}
+.hg-stub-bytes{font-family:'Courier New',monospace;font-size:11px;letter-spacing:.5px}
+.hg-b-prefix{color:#4ade80}
+.hg-b-ssn{color:#60a5fa}
+.hg-b-hook{color:#f87171}
+.hg-b-syscall{color:#c084fc}
+.hg-b-ret{color:#6b7280}
+.hg-b-other{color:#9ca3af}
+.hg-disasm{font-family:monospace;font-size:11px;color:var(--text2);line-height:1.5}
+.hg-disasm .hg-di-clean{color:#4ade80}
+.hg-disasm .hg-di-ssn{color:#60a5fa}
+.hg-disasm .hg-di-hook{color:#f87171}
+.hg-disasm .hg-di-sc{color:#c084fc}
+.hg-disasm .hg-di-ret{color:#6b7280}
+.hg-code-wrap{background:var(--bg2);border:1px solid var(--sep);border-radius:8px;overflow:hidden}
+.hg-code-toolbar{display:flex;align-items:center;gap:8px;padding:8px 14px;border-bottom:1px solid var(--sep);background:var(--bg3)}
+.hg-code-toolbar .hg-code-title{font-size:12px;font-weight:600;color:var(--text2);flex:1}
+.hg-code-out{padding:16px;overflow:auto;max-height:420px;font-family:'Courier New',monospace;font-size:12px;line-height:1.6;white-space:pre;color:var(--text)}
+.hg-filter-row{display:flex;gap:8px;align-items:center;margin-bottom:10px;flex-wrap:wrap}
+.hg-sel-bar{display:flex;gap:6px;align-items:center;flex-wrap:wrap;margin-bottom:10px}
+.hg-cb{cursor:pointer;accent-color:var(--purple);width:13px;height:13px}
+.hg-upload-drop{border:2px dashed var(--sep);border-radius:8px;padding:28px 20px;text-align:center;color:var(--text2);font-size:13px;cursor:pointer;transition:border-color .15s,background .15s}
+.hg-upload-drop:hover,.hg-upload-drop.drag{border-color:var(--purple);background:rgba(181,123,255,.05);color:var(--text)}
+.hg-hint{font-size:11px;color:var(--dim);margin-top:4px}
 </style>
 </head>
 <body>
@@ -693,6 +743,9 @@ code{font-family:var(--mono);font-size:12px;background:var(--bg4);padding:1px 5p
     </div>
     <div class="nav-item" onclick="showPanel('pe')" id="nav-pe">
       <span class="nav-icon">🔬</span> PE Inspector
+    </div>
+    <div class="nav-item" onclick="showPanel('hellsgate')" id="nav-hellsgate">
+      <span class="nav-icon">⚡</span> Hell's Gate
     </div>
     <div class="nav-item" onclick="showPanel('library')" id="nav-library">
       <span class="nav-icon">📦</span> Module Library
@@ -1707,6 +1760,124 @@ code{font-family:var(--mono);font-size:12px;background:var(--bg4);padding:1px 5p
   </div>
 </div>
 
+<!-- ════════ HELL'S GATE ════════ -->
+<div id="panel-hellsgate" class="panel">
+
+  <!-- upload card -->
+  <div class="card mb-16">
+    <div class="card-header">
+      <span style="font-size:22px">⚡</span>
+      <div>
+        <div class="card-title">Hell's Gate — Direct Syscall Lab</div>
+        <div class="card-sub">Extract SSNs from ntdll.dll · detect EDR hooks · generate NASM / C stubs</div>
+      </div>
+      <div style="margin-left:auto;display:flex;gap:8px;align-items:center">
+        <span id="hg-upload-name" class="text-dim" style="font-size:12px"></span>
+        <label class="btn btn-ghost btn-sm" style="cursor:pointer">
+          📂 Upload ntdll.dll
+          <input type="file" id="hg-file-input" accept=".dll,.DLL" style="display:none"
+                 onchange="hgFileSelected(this)">
+        </label>
+        <button class="btn btn-primary btn-sm" id="hg-scan-btn" onclick="hgScan()" disabled>⚡ Scan</button>
+      </div>
+    </div>
+    <div class="hg-hint" style="padding:0 4px 4px">
+      Upload a copy of <strong>ntdll.dll</strong> from a Windows target or VM
+      (<code>C:\Windows\System32\ntdll.dll</code>). Parsed entirely in Python on the server
+      — no execution. SSNs for all <code>Nt*</code>/<code>Zw*</code> exports are extracted,
+      EDR inline hooks detected, and hooked SSNs recovered via
+      <em>Halo's Gate</em> (neighbour inference) or <em>Tartarus Gate</em> (forward scan).
+    </div>
+  </div>
+
+  <!-- stats row — hidden until scan -->
+  <div id="hg-stats-row" style="display:none" class="hg-stats-row">
+    <div class="hg-stat hg-stat-total">
+      <div class="hg-stat-n" id="hg-s-total">0</div>
+      <div class="hg-stat-l">Functions</div>
+    </div>
+    <div class="hg-stat hg-stat-clean">
+      <div class="hg-stat-n" id="hg-s-clean">0</div>
+      <div class="hg-stat-l">Clean</div>
+    </div>
+    <div class="hg-stat hg-stat-hooked">
+      <div class="hg-stat-n" id="hg-s-hooked">0</div>
+      <div class="hg-stat-l">Hooked / patched</div>
+    </div>
+    <div class="hg-stat" style="flex:2">
+      <div class="hg-stat-n" id="hg-s-selected" style="color:var(--purple)">0</div>
+      <div class="hg-stat-l">Selected for codegen</div>
+    </div>
+  </div>
+
+  <!-- results section — hidden until scan -->
+  <div id="hg-results" style="display:none">
+
+    <!-- filter + selection bar -->
+    <div class="hg-filter-row">
+      <input id="hg-search" type="text" placeholder="Filter by name…"
+             style="flex:1;min-width:140px;max-width:280px"
+             oninput="hgFilter()">
+      <div class="filter-bar" style="margin:0">
+        <button class="btn btn-sm btn-primary"  id="hg-f-all"    onclick="hgSetFilter('all')">All</button>
+        <button class="btn btn-sm btn-ghost"    id="hg-f-clean"  onclick="hgSetFilter('clean')">Clean</button>
+        <button class="btn btn-sm btn-ghost"    id="hg-f-hooked" onclick="hgSetFilter('hooked')">Hooked</button>
+      </div>
+    </div>
+
+    <div class="hg-sel-bar">
+      <button class="btn btn-ghost btn-sm" onclick="hgSelectAll(true)">☑ Select all</button>
+      <button class="btn btn-ghost btn-sm" onclick="hgSelectAll(false)">☐ Deselect all</button>
+      <button class="btn btn-ghost btn-sm" onclick="hgSelectCommon()">★ Common injection APIs</button>
+      <button class="btn btn-ghost btn-sm" onclick="hgSelectHooked()">🔴 Select hooked</button>
+    </div>
+
+    <!-- SSN table -->
+    <div class="hg-table-wrap">
+      <table class="hg-table" id="hg-table">
+        <thead>
+          <tr>
+            <th style="width:24px"></th>
+            <th>Function</th>
+            <th>SSN</th>
+            <th>Method</th>
+            <th>Hook</th>
+            <th>Stub bytes (first 16)</th>
+            <th>Disasm preview</th>
+          </tr>
+        </thead>
+        <tbody id="hg-tbody"></tbody>
+      </table>
+    </div>
+
+    <!-- code generation -->
+    <div class="card mb-16" style="margin-top:8px">
+      <div class="card-header" style="padding-bottom:10px">
+        <span style="font-size:18px">🛠</span>
+        <div><div class="card-title">Generate Stubs</div>
+             <div class="card-sub">emit direct-syscall ASM / C for all selected functions</div></div>
+        <div style="margin-left:auto;display:flex;gap:8px;align-items:center">
+          <span class="text-dim" style="font-size:12px">Language:</span>
+          <button class="btn btn-sm btn-primary" id="hg-lang-nasm" onclick="hgSetLang('nasm')">NASM</button>
+          <button class="btn btn-sm btn-ghost"   id="hg-lang-c"    onclick="hgSetLang('c')">C (naked)</button>
+          <button class="btn btn-primary btn-sm" onclick="hgGenerate()">⚡ Generate</button>
+        </div>
+      </div>
+    </div>
+
+    <!-- code output -->
+    <div id="hg-code-wrap" class="hg-code-wrap" style="display:none">
+      <div class="hg-code-toolbar">
+        <span class="hg-code-title" id="hg-code-title">syscalls.asm</span>
+        <button class="btn btn-ghost btn-sm" onclick="hgCopy()">📋 Copy</button>
+        <button class="btn btn-ghost btn-sm" onclick="hgDownload()">⬇ Download</button>
+      </div>
+      <pre class="hg-code-out" id="hg-code-out"></pre>
+    </div>
+
+  </div><!-- /hg-results -->
+</div><!-- /panel-hellsgate -->
+
 <!-- ════════ ARTIFACT MAP ════════ -->
 <div id="panel-artifacts" class="panel">
 
@@ -2198,6 +2369,7 @@ const PANEL_META = {
   shellcode: ['Shellcode',         'parse · encode · convert · analyse shellcode'],
   evasion:   ['Evasion Lab',       'score AV evasion potential + apply PE patch transforms'],
   pe:        ['PE Inspector',      'sections, entropy, imports, suspicious APIs, threat score'],
+  hellsgate: ["Hell's Gate",      'extract SSNs · detect EDR hooks · generate direct-syscall stubs'],
   library:   ['Module Library',   'browse 190+ techniques from meow & blog'],
   samples:  ['Samples',          'compiled binaries organized by session'],
   apt:      ['APT Campaign',     'Malpedia -> TTPs -> auto-compile pipeline'],
@@ -6126,6 +6298,268 @@ function artRebuild() {
     msg.textContent = 'Connection error';
     msg.style.color = 'var(--red)';
   };
+}
+
+// =============================================================
+// Hell's Gate — Direct Syscall Lab
+// =============================================================
+
+let _hgEntries  = [];     // full scan result from server
+let _hgFiltered = [];     // after filter/search
+let _hgSelected = new Set();  // selected function names
+let _hgLang     = 'nasm';
+let _hgFilter   = 'all';
+
+// ---- file selection & scan ------------------------------------------
+
+function hgFileSelected(input) {
+  const f = input.files[0];
+  if (!f) return;
+  document.getElementById('hg-upload-name').textContent = `${f.name}  (${(f.size/1024/1024).toFixed(2)} MB)`;
+  document.getElementById('hg-scan-btn').disabled = false;
+}
+
+async function hgScan() {
+  const input = document.getElementById('hg-file-input');
+  const btn   = document.getElementById('hg-scan-btn');
+  btn.disabled = true;
+  btn.textContent = '⏳ scanning…';
+
+  const fd = new FormData();
+  if (input.files[0]) fd.append('file', input.files[0]);
+
+  const r = await fetch('/api/hellsgate/scan', {method:'POST', body: fd})
+    .then(r => r.json())
+    .catch(e => ({ok: false, error: String(e)}));
+
+  btn.disabled = false;
+  btn.textContent = '⚡ Scan';
+
+  if (!r.ok) {
+    alert('Scan failed: ' + (r.error || 'unknown error'));
+    return;
+  }
+
+  _hgEntries  = r.entries || [];
+  _hgSelected = new Set(_hgEntries.map(e => e.name)); // select all by default
+  _hgFilter   = 'all';
+
+  // update stats
+  document.getElementById('hg-s-total').textContent  = r.total;
+  document.getElementById('hg-s-clean').textContent  = r.clean;
+  document.getElementById('hg-s-hooked').textContent = r.hooked;
+  document.getElementById('hg-stats-row').style.display = '';
+  document.getElementById('hg-results').style.display   = '';
+  document.getElementById('hg-code-wrap').style.display = 'none';
+
+  hgSetFilter('all');
+  hgUpdateSelCount();
+}
+
+// ---- filtering & rendering ------------------------------------------
+
+function hgSetFilter(f) {
+  _hgFilter = f;
+  ['all','clean','hooked'].forEach(id => {
+    document.getElementById('hg-f-' + id).className =
+      'btn btn-sm ' + (id === f ? 'btn-primary' : 'btn-ghost');
+  });
+  hgFilter();
+}
+
+function hgFilter() {
+  const q = (document.getElementById('hg-search').value || '').toLowerCase();
+  _hgFiltered = _hgEntries.filter(e => {
+    if (_hgFilter === 'clean'  && e.hook_type !== 'clean')  return false;
+    if (_hgFilter === 'hooked' && e.hook_type === 'clean')  return false;
+    if (q && !e.name.toLowerCase().includes(q)) return false;
+    return true;
+  });
+  hgRenderTable();
+}
+
+function hgRenderTable() {
+  const tbody = document.getElementById('hg-tbody');
+  tbody.innerHTML = '';
+
+  for (const e of _hgFiltered) {
+    const sel  = _hgSelected.has(e.name);
+    const tr   = document.createElement('tr');
+    if (sel) tr.classList.add('hg-selected');
+
+    tr.innerHTML = `
+      <td><input type="checkbox" class="hg-cb" ${sel ? 'checked' : ''}
+            onchange="hgToggle('${e.name}', this.checked)"></td>
+      <td><span class="hg-fn" onclick="hgToggle('${e.name}')">${e.name}</span></td>
+      <td>${_hgSsnCell(e)}</td>
+      <td><span style="font-size:11px;color:var(--text2)">${_hgMethodLabel(e.ssn_method)}</span></td>
+      <td>${_hgHookBadge(e.hook_type)}</td>
+      <td class="hg-stub-bytes">${_hgColorStub(e.stub_hex, e.hook_type)}</td>
+      <td class="hg-disasm">${_hgDisasmHtml(e.disasm || [])}</td>`;
+
+    tbody.appendChild(tr);
+  }
+}
+
+function _hgSsnCell(e) {
+  if (e.ssn === null || e.ssn === undefined)
+    return '<span class="hg-ssn hg-ssn-unknown">—</span>';
+  const cls = e.ssn_method === 'halos_gate'    ? 'hg-ssn hg-ssn-halos'
+            : e.ssn_method === 'tartarus_gate' ? 'hg-ssn hg-ssn-tartarus'
+            :                                    'hg-ssn';
+  return `<span class="${cls}">0x${e.ssn.toString(16).toUpperCase().padStart(4,'0')}</span>`;
+}
+
+function _hgMethodLabel(m) {
+  return {direct:'direct', halos_gate:"Halo's Gate", tartarus_gate:'Tartarus Gate'}[m] || m || '—';
+}
+
+function _hgHookBadge(t) {
+  const map = {
+    clean:          ['hg-badge-clean',   'clean'],
+    jmp_hook:       ['hg-badge-jmp',     'JMP hook'],
+    ind_jmp_hook:   ['hg-badge-jmp',     'IND JMP'],
+    int3_hook:      ['hg-badge-int3',    'INT3'],
+    partial_hook:   ['hg-badge-hook',    'partial'],
+    deep_hook:      ['hg-badge-hook',    'deep'],
+    push_ret_hook:  ['hg-badge-jmp',     'PUSH/RET'],
+    unknown_hook:   ['hg-badge-unknown', 'unknown'],
+  };
+  const [cls, label] = map[t] || ['hg-badge-unknown', t || '?'];
+  return `<span class="hg-badge ${cls}">${label}</span>`;
+}
+
+function _hgColorStub(hexStr, hookType) {
+  if (!hexStr) return '';
+  const parts = hexStr.trim().split(' ');
+  const bytes = parts.map(h => parseInt(h, 16));
+  let html = '';
+  let i = 0;
+  while (i < bytes.length) {
+    const b = bytes[i];
+    if (i + 2 < bytes.length && b === 0x4C && bytes[i+1] === 0x8B && bytes[i+2] === 0xD1) {
+      html += `<span class="hg-b-prefix">${_hbytes(bytes,i,3)}</span> `;
+      i += 3;
+    } else if (b === 0xB8 && i + 4 < bytes.length) {
+      html += `<span class="hg-b-ssn">${_hbytes(bytes,i,5)}</span> `;
+      i += 5;
+    } else if ((b === 0xE9 && i + 4 < bytes.length) ||
+               (b === 0xFF && i+1 < bytes.length && bytes[i+1] === 0x25) ||
+               b === 0xCC) {
+      const n = (b === 0xE9) ? 5 : (b === 0xFF) ? 6 : 1;
+      html += `<span class="hg-b-hook">${_hbytes(bytes,i,Math.min(n,bytes.length-i))}</span> `;
+      i += n;
+    } else if (b === 0x0F && i + 1 < bytes.length && bytes[i+1] === 0x05) {
+      html += `<span class="hg-b-syscall">0f 05</span> `;
+      i += 2;
+    } else if (b === 0xC3) {
+      html += `<span class="hg-b-ret">c3</span> `;
+      i += 1;
+    } else {
+      html += `<span class="hg-b-other">${b.toString(16).padStart(2,'0')}</span> `;
+      i += 1;
+    }
+  }
+  return html;
+}
+
+function _hbytes(arr, start, n) {
+  return arr.slice(start, start+n).map(b => b.toString(16).padStart(2,'0')).join(' ');
+}
+
+function _hgDisasmHtml(lines) {
+  return lines.map(l => {
+    let cls = 'hg-di-other';
+    if (l.startsWith('mov r10'))   cls = 'hg-di-clean';
+    else if (l.startsWith('mov eax')) cls = 'hg-di-ssn';
+    else if (l.includes('hook') || l.startsWith('jmp') || l.startsWith('int3') || l.startsWith('push')) cls = 'hg-di-hook';
+    else if (l.startsWith('syscall')) cls = 'hg-di-sc';
+    else if (l.startsWith('ret'))   cls = 'hg-di-ret';
+    return `<div class="${cls}">${l}</div>`;
+  }).join('');
+}
+
+// ---- selection helpers ----------------------------------------------
+
+function hgToggle(name, checked) {
+  if (checked === undefined) checked = !_hgSelected.has(name);
+  if (checked) _hgSelected.add(name);
+  else         _hgSelected.delete(name);
+  hgUpdateSelCount();
+  hgRenderTable();
+}
+
+function hgSelectAll(v) {
+  _hgFiltered.forEach(e => { if (v) _hgSelected.add(e.name); else _hgSelected.delete(e.name); });
+  hgUpdateSelCount();
+  hgRenderTable();
+}
+
+function hgSelectCommon() {
+  const COMMON = new Set([
+    'NtAllocateVirtualMemory','NtWriteVirtualMemory','NtProtectVirtualMemory',
+    'NtCreateThreadEx','NtOpenProcess','NtReadVirtualMemory','NtFreeVirtualMemory',
+    'NtQueryInformationProcess','NtClose','NtOpenThread','NtSuspendThread',
+    'NtResumeThread','NtGetContextThread','NtSetContextThread',
+    'NtUnmapViewOfSection','NtMapViewOfSection','NtCreateSection',
+    'NtQueueApcThread','NtDelayExecution',
+  ]);
+  _hgEntries.forEach(e => { if (COMMON.has(e.name)) _hgSelected.add(e.name); });
+  hgUpdateSelCount();
+  hgFilter();
+}
+
+function hgSelectHooked() {
+  _hgEntries.filter(e => e.hook_type !== 'clean').forEach(e => _hgSelected.add(e.name));
+  hgUpdateSelCount();
+  hgFilter();
+}
+
+function hgUpdateSelCount() {
+  document.getElementById('hg-s-selected').textContent = _hgSelected.size;
+}
+
+// ---- language toggle ------------------------------------------------
+
+function hgSetLang(lang) {
+  _hgLang = lang;
+  document.getElementById('hg-lang-nasm').className = 'btn btn-sm ' + (lang==='nasm' ? 'btn-primary' : 'btn-ghost');
+  document.getElementById('hg-lang-c').className    = 'btn btn-sm ' + (lang==='c'    ? 'btn-primary' : 'btn-ghost');
+  document.getElementById('hg-code-title').textContent = lang === 'c' ? 'syscalls.h' : 'syscalls.asm';
+}
+
+// ---- code generation ------------------------------------------------
+
+async function hgGenerate() {
+  const selected = _hgEntries.filter(e => _hgSelected.has(e.name));
+  if (!selected.length) { alert('No functions selected.'); return; }
+
+  const r = await fetch('/api/hellsgate/generate', {
+    method: 'POST',
+    headers: {'Content-Type': 'application/json'},
+    body: JSON.stringify({functions: selected, language: _hgLang}),
+  }).then(r => r.json()).catch(e => ({ok: false, error: String(e)}));
+
+  if (!r.ok) { alert('Generate failed: ' + r.error); return; }
+
+  document.getElementById('hg-code-out').textContent  = r.code;
+  document.getElementById('hg-code-wrap').style.display = '';
+  document.getElementById('hg-code-wrap').scrollIntoView({behavior:'smooth', block:'nearest'});
+}
+
+function hgCopy() {
+  const code = document.getElementById('hg-code-out').textContent;
+  navigator.clipboard.writeText(code).then(() => toast('Copied to clipboard', 'ok'));
+}
+
+function hgDownload() {
+  const code = document.getElementById('hg-code-out').textContent;
+  const ext  = _hgLang === 'c' ? 'h' : 'asm';
+  const blob = new Blob([code], {type: 'text/plain'});
+  const a    = document.createElement('a');
+  a.href     = URL.createObjectURL(blob);
+  a.download = `syscalls.${ext}`;
+  a.click();
 }
 </script>
 </body>

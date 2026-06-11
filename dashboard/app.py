@@ -2342,5 +2342,53 @@ def api_pe_analyse_build():
         return jsonify({"ok": False, "error": str(e)}), 500
 
 
+# -- Hell's Gate / Direct Syscall Lab ----------------------------------------
+
+_HG_UPLOAD_DIR: Path = BASE_DIR / "data" / "hellsgate"
+_HG_UPLOAD_DIR.mkdir(parents=True, exist_ok=True)
+
+
+@app.route("/api/hellsgate/scan", methods=["POST"])
+def api_hellsgate_scan():
+    """Accept an ntdll.dll upload (or reuse the last one) and return SSN table."""
+    ntdll_path = _HG_UPLOAD_DIR / "ntdll.dll"
+
+    if "file" in request.files:
+        f = request.files["file"]
+        if not f.filename:
+            return jsonify({"ok": False, "error": "empty filename"}), 400
+        f.save(str(ntdll_path))
+    elif not ntdll_path.exists():
+        return jsonify({"ok": False,
+                        "error": "no ntdll.dll on server – upload one first"}), 400
+
+    try:
+        from hellsgate import scan as _hg_scan
+        return jsonify(_hg_scan(ntdll_path))
+    except Exception as exc:
+        return jsonify({"ok": False, "error": str(exc)}), 500
+
+
+@app.route("/api/hellsgate/generate", methods=["POST"])
+def api_hellsgate_generate():
+    """Generate NASM / C direct-syscall stubs for the selected functions."""
+    data      = request.get_json(force=True) or {}
+    functions = data.get("functions", [])
+    language  = data.get("language", "nasm")   # "nasm" | "c"
+
+    if not functions:
+        return jsonify({"ok": False, "error": "no functions provided"}), 400
+    if language not in ("nasm", "c"):
+        return jsonify({"ok": False, "error": "language must be 'nasm' or 'c'"}), 400
+
+    try:
+        from hellsgate import generate_asm as _hg_gen
+        code = _hg_gen(functions, language)
+        return jsonify({"ok": True, "code": code, "count": len(functions),
+                        "language": language})
+    except Exception as exc:
+        return jsonify({"ok": False, "error": str(exc)}), 500
+
+
 if __name__ == "__main__":
     app.run(debug=True, host="0.0.0.0", port=5000)
