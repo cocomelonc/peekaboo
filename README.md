@@ -246,7 +246,11 @@ The CLI is a rich interactive terminal application (`peekaboo_cli.py`) with a to
 python3 peekaboo_cli.py
 ```
 
-Top-level commands:
+![img](./screenshots/2026-06-11_08-14.png)    
+
+Top-level commands:    
+
+![img](./screenshots/2026-06-11_08-17.png)        
 
 | command | description |
 |---------|-------------|
@@ -267,6 +271,8 @@ Top-level commands:
 
 Browse and search 200+ blog post techniques with inline source code display.
 
+![img](./screenshots/2026-06-11_08-18.png)    
+
 | command | description |
 |---------|-------------|
 | `list [category]` | List all techniques, optionally filtered by category |
@@ -280,6 +286,8 @@ Categories include: `analysis`, `android`, `c2`, `credential-access`, `cryptogra
 ### `builder` sub-REPL
 
 Interactive payload builder with the same options as the dashboard builder.
+
+![img](./screenshots/2026-06-11_08-19.png)    
 
 | command | description |
 |---------|-------------|
@@ -305,6 +313,8 @@ peekaboo builder > build stealer telegram
 
 Shellcode analysis and transformation tools.
 
+![img](./screenshots/2026-06-11_08-20.png)    
+
 | command | description |
 |---------|-------------|
 | `analyse <path>` | Analyse raw shellcode: size, entropy, known pattern detection, hex dump |
@@ -315,6 +325,8 @@ Shellcode analysis and transformation tools.
 ### `yara` sub-REPL
 
 Generate and manage YARA rules from binaries.
+
+![img](./screenshots/2026-06-11_08-21.png)    
 
 | command | description |
 |---------|-------------|
@@ -330,6 +342,8 @@ Generate and manage YARA rules from binaries.
 
 Threat actor and malware family lookup against the Malpedia REST API with semantic blog post matching.
 
+![img](./screenshots/2026-06-11_08-22.png)    
+
 | command | description |
 |---------|-------------|
 | `actors` | List all threat actors |
@@ -343,6 +357,8 @@ Threat actor and malware family lookup against the Malpedia REST API with semant
 
 Browse MITRE ATT&CK techniques.
 
+![img](./screenshots/2026-06-11_08-22_1.png)    
+
 | command | description |
 |---------|-------------|
 | `list [tactic]` | List all techniques, optionally filtered by tactic |
@@ -354,6 +370,8 @@ Browse MITRE ATT&CK techniques.
 ### `pe` sub-REPL
 
 Deep static analysis of PE binaries.
+
+![img](./screenshots/2026-06-11_08-33.png)    
 
 | command | description |
 |---------|-------------|
@@ -377,6 +395,8 @@ Deep static analysis of PE binaries.
 
 Submit binaries to VirusTotal and query results.
 
+![img](./screenshots/2026-06-11_08-34.png)    
+
 | command | description |
 |---------|-------------|
 | `scan <path>` | Upload a binary and start analysis |
@@ -389,6 +409,8 @@ Submit binaries to VirusTotal and query results.
 ### `evasion` sub-REPL
 
 Static evasion scoring and binary patching.
+
+![img](./screenshots/2026-06-11_08-35.png)    
 
 | command | description |
 |---------|-------------|

@@ -4692,7 +4692,9 @@ def run_shellcode() -> None:
 # -- PE Inspector --------------------------------------------------------------
 
 PE_COMMANDS = ["analyse", "open", "dos-header", "file-header", "opt-header",
-               "sections", "imports", "suspicious", "score", "help", "back"]
+               "sections", "imports", "exports", "rich", "overlay", "packer",
+               "suspicious", "score", "builds", "load-build", "load-session",
+               "help", "back"]
 
 _THREAT_LABEL = {
     range(0,  20): ("LOW",      "good"),
@@ -4925,6 +4927,56 @@ def _render_pe_suspicious(r: dict) -> None:
     console.print()
 
 
+def _render_pe_exports(r: dict) -> None:
+    exports = r.get("exports", [])
+    if not exports:
+        console.print("  [dim]no exports found[/dim]\n")
+        return
+    t = Table(box=box.ROUNDED, show_header=True, header_style="bold bright_white on bright_black",
+              border_style="bright_black", padding=(0, 1),
+              title=f"Exports  ({len(exports)})")
+    t.add_column("Name",    style="cmd",  min_width=32)
+    t.add_column("Ordinal", style="dim",  min_width=8,  justify="right")
+    t.add_column("Address", style="info", min_width=14, no_wrap=True)
+    for exp in exports:
+        t.add_row(exp.get("name") or "(unnamed)", str(exp.get("ordinal", "")), exp.get("addr", ""))
+    console.print()
+    console.print(t)
+    console.print()
+
+
+def _render_pe_rich(r: dict) -> None:
+    entries = r.get("rich_header")
+    if not entries:
+        console.print("  [dim]no Rich header found (or header was zeroed)[/dim]\n")
+        return
+    t = Table(box=box.ROUNDED, show_header=True, header_style="bold bright_white on bright_black",
+              border_style="bright_black", padding=(0, 1),
+              title=f"Rich Header  ({len(entries)} entries)")
+    t.add_column("Tool",    style="cmd",  min_width=28)
+    t.add_column("Prod ID", style="dim",  min_width=10, justify="right")
+    t.add_column("Build",   style="info", min_width=8,  justify="right")
+    t.add_column("Count",   style="warn", min_width=6,  justify="right")
+    for e in entries:
+        t.add_row(e.get("tool", "?"), hex(e.get("prod_id", 0)), str(e.get("build", 0)), str(e.get("count", 0)))
+    console.print()
+    console.print(t)
+    console.print()
+
+
+def _render_pe_overlay(r: dict) -> None:
+    ov = r.get("overlay")
+    if not ov:
+        console.print("  [dim]no overlay detected[/dim]\n")
+        return
+    rows = [
+        ("Offset",  hex(ov["offset"])),
+        ("Size",    f"{ov['size']:,} bytes  ({ov['size'] // 1024} KB)"),
+        ("Entropy", str(ov["entropy"])),
+    ]
+    _render_kv_table(rows, "[heading]Overlay[/heading]")
+
+
 def run_pe() -> None:
     """Interactive PE Anatomy Inspector sub-REPL."""
     session = _make_session(PE_COMMANDS,
@@ -4942,7 +4994,7 @@ def run_pe() -> None:
     console.print()
 
     while True:
-        prompt = "pe> " if current is None else f"pe [{current['file_name']}]> "
+        prompt = "peekaboo [pe] > " if current is None else f"peekaboo [pe [{current['file_name']}]]> "
         try:
             raw = session.prompt(prompt, style=PT_STYLE).strip()
         except KeyboardInterrupt:
@@ -4963,17 +5015,24 @@ def run_pe() -> None:
         elif cmd == "help":
             t = Table(box=box.ROUNDED, show_header=False, border_style="bright_black", padding=(0, 1))
             for c, desc in [
-                ("analyse <path>",  "load and fully analyse a PE file"),
-                ("open <path>",     "alias for analyse"),
-                ("dos-header",      "show DOS (MZ) header fields"),
-                ("file-header",     "show COFF file header fields"),
-                ("opt-header",      "show optional header fields"),
-                ("sections",        "show section table with entropy + raw offsets + characteristics"),
-                ("imports",         "show import table"),
-                ("suspicious",      "show suspicious API hits by category"),
-                ("score",           "show threat score breakdown"),
-                ("help",            "show this help"),
-                ("back",            "return to main menu"),
+                ("analyse <path>",              "load and fully analyse a PE file"),
+                ("open <path>",                 "alias for analyse"),
+                ("builds",                      "list successful builds with compiled binaries"),
+                ("load-build <id> [filename]",  "load a compiled build binary directly"),
+                ("load-session <sid> <file>",   "load a binary from a session (samples/)"),
+                ("dos-header",                  "show DOS (MZ) header fields"),
+                ("file-header",                 "show COFF file header fields"),
+                ("opt-header",                  "show optional header fields"),
+                ("sections",                    "show section table with entropy + characteristics"),
+                ("imports",                     "show import table"),
+                ("exports",                     "show export table"),
+                ("rich",                        "show Rich header (compiler fingerprint)"),
+                ("overlay",                     "show overlay info (appended data)"),
+                ("packer",                      "show packer detection result"),
+                ("suspicious",                  "show suspicious API hits by category"),
+                ("score",                       "show threat score breakdown"),
+                ("help",                        "show this help"),
+                ("back",                        "return to main menu"),
             ]:
                 t.add_row(f"[cmd]{c}[/cmd]", desc)
             console.print(t)
@@ -5036,6 +5095,169 @@ def run_pe() -> None:
                 console.print("  [warn][=^..^=] no file loaded -- use  analyse <path>  first[/warn]\n")
             else:
                 _render_pe_suspicious(current)
+
+        elif cmd == "exports":
+            if current is None:
+                console.print("  [warn][=^..^=] no file loaded -- use  analyse <path>  first[/warn]\n")
+            else:
+                _render_pe_exports(current)
+
+        elif cmd == "rich":
+            if current is None:
+                console.print("  [warn][=^..^=] no file loaded -- use  analyse <path>  first[/warn]\n")
+            else:
+                _render_pe_rich(current)
+
+        elif cmd == "overlay":
+            if current is None:
+                console.print("  [warn][=^..^=] no file loaded -- use  analyse <path>  first[/warn]\n")
+            else:
+                _render_pe_overlay(current)
+
+        elif cmd == "packer":
+            if current is None:
+                console.print("  [warn][=^..^=] no file loaded -- use  analyse <path>  first[/warn]\n")
+            else:
+                pck = current.get("packer")
+                if pck:
+                    console.print(f"\n  [warn]packer detected:[/warn] [cmd]{pck}[/cmd]\n")
+                else:
+                    console.print("  [good][=^..^=] no packer signature detected[/good]\n")
+
+        elif cmd == "builds":
+            try:
+                import db as _db_pe
+            except ImportError:
+                console.print("[err][=^..^=] db module unavailable[/err]")
+                continue
+            fresh = _db_pe.get_builds(limit=50)
+            t = Table(box=box.ROUNDED, show_header=True,
+                      header_style="bold bright_white on bright_black",
+                      border_style="bright_black", padding=(0, 1))
+            t.add_column("build-id", style="cmd",  no_wrap=True, min_width=14)
+            t.add_column("type",     style="info",  min_width=10)
+            t.add_column("module",   style="info",  min_width=18)
+            t.add_column("date",     style="dim",   min_width=16)
+            t.add_column("binaries", style="ok",    min_width=30)
+            shown = 0
+            for b in fresh:
+                if b.get("status") != "success":
+                    continue
+                files = _vtscan_resolve_files(b)
+                pa    = b.get("params", {})
+                pa_slug = pa.get("slug")
+                if pa_slug:
+                    mod = pa_slug
+                elif pa.get("malware") == "stealer":
+                    mod = pa.get("stealer") or "?"
+                else:
+                    mod = pa.get("injection") or "?"
+                mtype   = "module" if pa_slug else (pa.get("malware") or "-")
+                bin_txt = "  ".join(n for n, _ in files) if files else "[dim]not on disk[/dim]"
+                t.add_row(b["id"], mtype, mod, (b.get("created") or "")[:16], bin_txt)
+                shown += 1
+            if shown:
+                console.print()
+                console.print(t)
+                console.print()
+            else:
+                console.print("  [dim]no successful builds found[/dim]\n")
+
+        elif cmd == "load-build":
+            if not arg:
+                console.print("  [warn][=^..^=] usage: load-build <build-id> [filename][/warn]\n")
+                continue
+            try:
+                import db as _db_pe
+            except ImportError:
+                console.print("[err][=^..^=] db module unavailable[/err]")
+                continue
+            lb_parts   = arg.split(None, 1)
+            build_id   = lb_parts[0]
+            want_fname = lb_parts[1] if len(lb_parts) > 1 else None
+            build = _db_pe.get_build(build_id)
+            if not build:
+                console.print(f"  [err][=^..^=] build not found: {build_id}[/err]\n")
+                continue
+            if build.get("status") != "success":
+                console.print(f"  [warn][=^..^=] build status is '{build.get('status')}', not success[/warn]\n")
+                continue
+            files = _vtscan_resolve_files(build)
+            if not files:
+                console.print(f"  [err][=^..^=] no binaries on disk for build {build_id}[/err]\n")
+                continue
+            if want_fname:
+                match = [(n, p) for n, p in files if n.lower() == want_fname.lower()]
+                if not match:
+                    avail = "  ".join(n for n, _ in files)
+                    console.print(f"  [err][=^..^=] '{want_fname}' not found; available: {avail}[/err]\n")
+                    continue
+                chosen = match[0][1]
+            elif len(files) > 1:
+                console.print()
+                for i, (n, fp2) in enumerate(files, 1):
+                    console.print(f"  [{i}] [cmd]{n}[/cmd]  [dim]{fp2.stat().st_size:,} bytes[/dim]")
+                console.print(f"\n  Use  [cmd]load-build {build_id} <filename>[/cmd]  to pick one.\n")
+                continue
+            else:
+                chosen = files[0][1]
+            with console.status("[info]analysing...[/info]", spinner="dots"):
+                try:
+                    from pe_inspector import analyze as _pe_analyze2
+                    current = _pe_analyze2(chosen)
+                except Exception as exc:
+                    console.print(f"  [err][=^..^=] {exc}[/err]\n")
+                    continue
+            if not current["ok"]:
+                console.print(f"  [err][=^..^=] {current['error']}[/err]\n")
+                current = None
+                continue
+            console.print(f"  [ok][=^..^=] loaded:[/ok] [cmd]{chosen.name}[/cmd]  [dim](build {build_id})[/dim]")
+            _render_pe_header(current)
+            _render_pe_sections(current)
+
+        elif cmd == "load-session":
+            ls_parts = arg.split(None, 1)
+            if len(ls_parts) < 2:
+                sdir = Path(__file__).parent / "samples"
+                if sdir.exists():
+                    console.print()
+                    for sd in sorted(sdir.iterdir()):
+                        if not sd.is_dir():
+                            continue
+                        exes = [f.name for f in sorted(sd.iterdir())
+                                if f.suffix.lower() in (".exe", ".dll", ".sys", ".bin")]
+                        if exes:
+                            console.print(f"  [cmd]{sd.name}[/cmd]  [dim]{' '.join(exes)}[/dim]")
+                    console.print()
+                console.print("  [warn]usage: load-session <session-id> <filename>[/warn]\n")
+                continue
+            sid, fname = ls_parts[0], ls_parts[1]
+            if "/" in fname or "\\" in fname:
+                console.print("  [err][=^..^=] filename must not contain path separators[/err]\n")
+                continue
+            sdir     = Path(__file__).parent / "samples"
+            fpath    = (sdir / sid / fname).resolve()
+            if not str(fpath).startswith(str(sdir.resolve())):
+                console.print("  [err][=^..^=] path traversal detected[/err]\n")
+                continue
+            if not fpath.exists():
+                console.print(f"  [err][=^..^=] file not found: {fpath}[/err]\n")
+                continue
+            with console.status("[info]analysing...[/info]", spinner="dots"):
+                try:
+                    from pe_inspector import analyze as _pe_analyze3
+                    current = _pe_analyze3(fpath)
+                except Exception as exc:
+                    console.print(f"  [err][=^..^=] {exc}[/err]\n")
+                    continue
+            if not current["ok"]:
+                console.print(f"  [err][=^..^=] {current['error']}[/err]\n")
+                current = None
+                continue
+            console.print(f"  [ok][=^..^=] loaded:[/ok] [cmd]{fpath.name}[/cmd]  [dim](session {sid})[/dim]")
+            _render_pe_header(current)
+            _render_pe_sections(current)
 
         elif cmd == "score":
             if current is None:
