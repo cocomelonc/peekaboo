@@ -2052,22 +2052,28 @@ def print_banner() -> None:
 # -- top-level commands --------------------------------------------------------
 TOP_COMMANDS = [
     "evasion", "library", "artifacts", "builder", "shellcode", "yara",
-    "malpedia", "ttp", "pe", "vtscan", "help", "exit", "quit",
+    "malpedia", "ttp", "pe", "vtscan",
+    "hellsgate", "scemu", "antianalysis", "rop",
+    "help", "exit", "quit",
 ]
 
 TOP_HELP = [
-    ("evasion",   "PE evasion scorer + surgical patch transforms"),
-    ("library",   "MITRE ATT&CK module library -- browse, search, view source"),
-    ("artifacts", "Artifact map -- 410 techniques, 4799 Sigma rules, EventID coverage"),
-    ("builder",   "Compile malware research modules; browse build history"),
-    ("shellcode", "Parse, analyse, transform and reformat shellcode"),
-    ("yara",      "Generate YARA rules from binaries; scan with yara-python"),
-    ("malpedia",  "APT actors, malware families, reports, YARA from Malpedia"),
-    ("ttp",       "TTP -> implementation map: browse ATT&CK techniques and compile"),
-    ("pe",        "PE Anatomy Inspector -- sections, imports, entropy, threat score"),
-    ("vtscan",    "Scan compiled binaries or files with VirusTotal (70+ AV/EDR)"),
-    ("help",      "show this help"),
-    ("exit",      "quit peekaboo-cli"),
+    ("evasion",       "PE evasion scorer + surgical patch transforms"),
+    ("library",       "MITRE ATT&CK module library -- browse, search, view source"),
+    ("artifacts",     "Artifact map -- 410 techniques, 4799 Sigma rules, EventID coverage"),
+    ("builder",       "Compile malware research modules; browse build history"),
+    ("shellcode",     "Parse, analyse, transform and reformat shellcode"),
+    ("yara",          "Generate YARA rules from binaries; scan with yara-python"),
+    ("malpedia",      "APT actors, malware families, reports, YARA from Malpedia"),
+    ("ttp",           "TTP -> implementation map: browse ATT&CK techniques and compile"),
+    ("pe",            "PE Anatomy Inspector -- sections, imports, entropy, threat score"),
+    ("vtscan",        "Scan compiled binaries or files with VirusTotal (70+ AV/EDR)"),
+    ("hellsgate",     "Hell's Gate -- SSN extraction, EDR hook detection, direct-syscall stub gen"),
+    ("scemu",         "Shellcode Emulator -- x86/x64 Unicorn Engine, trace, API intercept, SMC"),
+    ("antianalysis",  "Anti-Analysis Scanner -- detect anti-debug/anti-VM patterns, MITRE ATT&CK"),
+    ("rop",           "ROP Chain Builder -- gadget finder, classifier, chain assembly, C/Python gen"),
+    ("help",          "show this help"),
+    ("exit",          "quit peekaboo-cli"),
 ]
 
 
@@ -6714,6 +6720,1328 @@ def run_vtscan() -> None:
             )
 
 
+# ══════════════════════════════════════════════════════════════════════════════
+# Hell's Gate / Direct Syscall Lab sub-REPL
+# ══════════════════════════════════════════════════════════════════════════════
+
+HG_COMMANDS = ["scan", "filter", "search", "show", "select", "select-all",
+               "select-hooked", "select-common", "deselect-all",
+               "generate", "save", "help", "back"]
+
+_HG_COMMON = [
+    "NtAllocateVirtualMemory", "NtWriteVirtualMemory", "NtProtectVirtualMemory",
+    "NtCreateThreadEx", "NtOpenProcess", "NtReadVirtualMemory",
+    "NtCreateSection", "NtMapViewOfSection", "NtUnmapViewOfSection",
+    "NtQueueApcThread", "NtResumeThread", "NtSuspendThread",
+    "NtClose", "NtWaitForSingleObject", "NtQuerySystemInformation",
+    "NtQueryInformationProcess", "NtSetInformationThread",
+    "NtFreeVirtualMemory", "NtTerminateProcess",
+]
+
+_HG_HOOK_STYLE = {
+    "clean":        "good",
+    "jmp_hook":     "err",
+    "int3_hook":    "err",
+    "ind_jmp_hook": "high",
+    "push_ret_hook":"high",
+    "partial_hook": "medium",
+    "deep_hook":    "medium",
+    "unknown_hook": "warn",
+    "unknown":      "dim",
+}
+
+_HG_METHOD_STYLE = {
+    "direct":       "good",
+    "halos_gate":   "medium",
+    "tartarus_gate":"warn",
+}
+
+
+def _hg_render_table(entries: list[dict], selected: set[str],
+                     page: int = 0) -> None:
+    start = page * PAGE_SIZE
+    chunk = entries[start : start + PAGE_SIZE]
+    if not chunk:
+        console.print("  [dim]no entries to show[/dim]\n")
+        return
+
+    t = Table(box=box.ROUNDED, show_header=True,
+              header_style="bold bright_white on bright_black",
+              border_style="bright_black", padding=(0, 1))
+    t.add_column("*",        width=2, no_wrap=True)
+    t.add_column("Function", style="cmd",  min_width=30, no_wrap=True)
+    t.add_column("SSN",      style="info", min_width=6,  no_wrap=True)
+    t.add_column("Method",   min_width=12, no_wrap=True)
+    t.add_column("Hook",     min_width=14, no_wrap=True)
+    t.add_column("Stub (first 8 bytes)", style="dim", min_width=24)
+
+    for e in chunk:
+        name  = e["name"]
+        ssn   = f"0x{e['ssn']:04X}" if e.get("ssn") is not None else "?"
+        meth  = e.get("ssn_method", "direct")
+        hook  = e.get("hook_type",  "unknown")
+        stub  = " ".join(e.get("stub_hex", "").split()[:8])
+        check = "[ok]✓[/ok]" if name in selected else " "
+        hs    = _HG_HOOK_STYLE.get(hook, "dim")
+        ms    = _HG_METHOD_STYLE.get(meth, "dim")
+        t.add_row(check, name, ssn,
+                  f"[{ms}]{meth}[/{ms}]",
+                  f"[{hs}]{hook}[/{hs}]",
+                  stub)
+
+    console.print()
+    console.print(t)
+    total = len(entries)
+    pages = (total + PAGE_SIZE - 1) // PAGE_SIZE
+    console.print(f"  [dim]page {page+1}/{pages}  ({total} entries)  "
+                  f"[ok]{len(selected)} selected[/ok][/dim]\n")
+
+
+def run_hellsgate() -> None:
+    """Interactive Hell's Gate / Direct Syscall Lab sub-REPL."""
+    session = _make_session(HG_COMMANDS, path_cmds=frozenset({"scan", "save"}))
+
+    scan_result: dict | None = None
+    entries:     list[dict]  = []
+    filtered:    list[dict]  = []
+    selected:    set[str]    = set()
+    generated:   str         = ""
+    _filter      = "all"
+    _search      = ""
+    _page        = 0
+
+    console.print()
+    console.print(Panel(
+        "  Extract SSNs from ntdll.dll · detect EDR hooks · Halo's/Tartarus Gate recovery\n"
+        "  generate NASM x64 or C __declspec(naked) direct-syscall stubs\n"
+        "  type  help  for commands,  back  to return",
+        title="[heading] Hell's Gate - Direct Syscall Lab [/heading]",
+        border_style="bright_cyan", box=box.ROUNDED,
+    ))
+    console.print()
+
+    def _apply_filter() -> None:
+        nonlocal filtered, _page
+        _page = 0
+        result = entries
+        if _filter == "clean":
+            result = [e for e in entries if e.get("hook_type") == "clean"]
+        elif _filter == "hooked":
+            result = [e for e in entries if e.get("hook_type") != "clean"]
+        if _search:
+            q = _search.lower()
+            result = [e for e in result if q in e["name"].lower()]
+        filtered = result
+
+    while True:
+        prompt = "peekaboo [hellsgate] > "
+        try:
+            raw = session.prompt(prompt, style=PT_STYLE).strip()
+        except KeyboardInterrupt:
+            console.print("\n[dim]use  back  to return[/dim]")
+            continue
+        except EOFError:
+            break
+
+        if not raw:
+            continue
+        parts = raw.split(None, 2)
+        cmd   = parts[0].lower()
+        arg   = parts[1].strip() if len(parts) > 1 else ""
+        arg2  = parts[2].strip() if len(parts) > 2 else ""
+
+        if cmd in ("back", "exit", "quit"):
+            break
+
+        elif cmd == "help":
+            t = Table(box=box.ROUNDED, show_header=False,
+                      border_style="bright_black", padding=(0, 1))
+            for c, d in [
+                ("scan <ntdll.dll>",     "parse ntdll.dll - extract SSNs, detect EDR hooks"),
+                ("filter all|clean|hooked","filter the SSN table"),
+                ("search <name>",        "filter by function name substring"),
+                ("show [page]",          "show current SSN table (paginated)"),
+                ("select <name…>",       "select functions for code generation"),
+                ("select-all",           "select all currently filtered functions"),
+                ("select-hooked",        "select all hooked/patched functions"),
+                ("select-common",        "select 19 common injection APIs"),
+                ("deselect-all",         "clear selection"),
+                ("generate nasm|c",      "generate direct-syscall stubs for selected"),
+                ("save <path>",          "save last generated code to file"),
+                ("help",                 "show this help"),
+                ("back",                 "return to main menu"),
+            ]:
+                t.add_row(f"[cmd]{c}[/cmd]", d)
+            console.print()
+            console.print(t)
+            console.print()
+
+        elif cmd == "scan":
+            if not arg:
+                console.print("  [warn]usage: scan <path/to/ntdll.dll>[/warn]\n")
+                continue
+            p = Path(arg).expanduser()
+            if not p.exists():
+                console.print(f"  [err][=^..^=] file not found: {p}[/err]\n")
+                continue
+            with console.status("[info]scanning ntdll.dll…[/info]", spinner="dots"):
+                try:
+                    from hellsgate import scan as _hg_scan
+                    scan_result = _hg_scan(p)
+                except Exception as e:
+                    console.print(f"  [err][=^..^=] {e}[/err]\n")
+                    continue
+            if not scan_result.get("ok"):
+                console.print(f"  [err][=^..^=] {scan_result.get('error')}[/err]\n")
+                scan_result = None
+                continue
+            entries  = scan_result.get("entries", [])
+            selected = set()
+            generated = ""
+            _filter = "all"
+            _search = ""
+            _apply_filter()
+            hooked = scan_result.get("hooked", 0)
+            total  = scan_result.get("total",  0)
+            clean  = scan_result.get("clean",  0)
+            console.print()
+            console.print(Panel(
+                f"  [ok]Total  :[/ok] {total}\n"
+                f"  [good]Clean  :[/good] {clean}\n"
+                f"  [err]Hooked :[/err] {hooked}",
+                title=f"[heading] {p.name} [/heading]",
+                border_style="bright_black", box=box.ROUNDED,
+            ))
+            _hg_render_table(filtered, selected)
+
+        elif cmd == "filter":
+            if arg not in ("all", "clean", "hooked"):
+                console.print("  [warn]usage: filter all|clean|hooked[/warn]\n")
+                continue
+            _filter = arg
+            _apply_filter()
+            _hg_render_table(filtered, selected)
+
+        elif cmd == "search":
+            _search = arg
+            _apply_filter()
+            _hg_render_table(filtered, selected)
+
+        elif cmd == "show":
+            if not entries:
+                console.print("  [dim]no scan loaded - use  scan <ntdll.dll>[/dim]\n")
+                continue
+            try:
+                _page = max(0, int(arg) - 1) if arg else _page
+            except ValueError:
+                _page = 0
+            _hg_render_table(filtered, selected, _page)
+
+        elif cmd == "select":
+            if not arg:
+                console.print("  [warn]usage: select <FuncName> [FuncName2…][/warn]\n")
+                continue
+            names = raw.split()[1:]
+            valid = {e["name"] for e in entries}
+            for n in names:
+                if n in valid:
+                    selected.add(n)
+                else:
+                    console.print(f"  [warn]{n} not found in scan[/warn]")
+            console.print(f"  [ok]{len(selected)} functions selected[/ok]\n")
+
+        elif cmd == "select-all":
+            selected = {e["name"] for e in filtered}
+            console.print(f"  [ok]{len(selected)} functions selected[/ok]\n")
+
+        elif cmd == "select-hooked":
+            selected = {e["name"] for e in entries if e.get("hook_type") != "clean"}
+            console.print(f"  [ok]{len(selected)} hooked functions selected[/ok]\n")
+
+        elif cmd == "select-common":
+            valid = {e["name"] for e in entries}
+            selected = {n for n in _HG_COMMON if n in valid}
+            console.print(f"  [ok]{len(selected)} common injection APIs selected[/ok]\n")
+
+        elif cmd == "deselect-all":
+            selected = set()
+            console.print("  [dim]selection cleared[/dim]\n")
+
+        elif cmd == "generate":
+            if not selected:
+                console.print("  [warn]no functions selected - use  select-all  or  select-common[/warn]\n")
+                continue
+            lang = arg.lower() if arg else "nasm"
+            if lang not in ("nasm", "c"):
+                console.print("  [warn]usage: generate nasm|c[/warn]\n")
+                continue
+            fns = [e for e in entries if e["name"] in selected]
+            try:
+                from hellsgate import generate_asm as _hg_gen
+                generated = _hg_gen(fns, lang)
+            except Exception as e:
+                console.print(f"  [err][=^..^=] {e}[/err]\n")
+                continue
+            lines = generated.splitlines()
+            preview = "\n".join(lines[:40])
+            if len(lines) > 40:
+                preview += f"\n... ({len(lines) - 40} more lines)"
+            console.print()
+            console.print(Syntax(preview, "nasm" if lang == "nasm" else "c",
+                                 theme="monokai", line_numbers=False,
+                                 background_color="default"))
+            console.print(f"\n  [ok]{len(fns)} stubs generated - use  save <path>  to write[/ok]\n")
+
+        elif cmd == "save":
+            if not generated:
+                console.print("  [warn]nothing to save - run  generate  first[/warn]\n")
+                continue
+            if not arg:
+                console.print("  [warn]usage: save <path>[/warn]\n")
+                continue
+            out = Path(arg).expanduser()
+            try:
+                out.write_text(generated)
+                console.print(f"  [ok]saved → {out}[/ok]\n")
+            except Exception as e:
+                console.print(f"  [err][=^..^=] {e}[/err]\n")
+
+        else:
+            console.print(f"  [warn]unknown command: {cmd}  (type  help)[/warn]\n")
+
+
+# ══════════════════════════════════════════════════════════════════════════════
+# Shellcode Emulator sub-REPL
+# ══════════════════════════════════════════════════════════════════════════════
+
+SCEMU_COMMANDS = ["run", "hex", "disasm", "arch", "maxinsns",
+                  "trace", "regs", "mem", "api", "strings", "smc",
+                  "help", "back"]
+
+
+def _scemu_render_result(r: dict) -> None:
+    stop   = r.get("stop_reason", "?")
+    insns  = r.get("insn_count",  0)
+    smc    = r.get("smc",         False)
+    api_n  = len(r.get("api_calls", []))
+    strs   = r.get("strings",    [])
+    smc_s  = "[err]YES[/err]" if smc else "[good]no[/good]"
+    stop_s = f"[ok]{stop}[/ok]" if stop == "clean_exit" else f"[warn]{stop}[/warn]"
+    console.print()
+    console.print(Panel(
+        f"  arch          : {r.get('arch','?')}\n"
+        f"  instructions  : {insns}\n"
+        f"  stop reason   : {stop_s}\n"
+        f"  SMC detected  : {smc_s}\n"
+        f"  API intercepts: {api_n}\n"
+        f"  strings found : {len(strs)}",
+        title="[heading] Emulation Result [/heading]",
+        border_style="bright_cyan", box=box.ROUNDED,
+    ))
+    console.print()
+
+
+def run_scemu() -> None:
+    """Interactive Shellcode Emulator sub-REPL."""
+    session = _make_session(SCEMU_COMMANDS, path_cmds=frozenset({"run", "disasm"}))
+
+    result: dict | None = None
+    _arch    = "x64"
+    _maxinsns = 10000
+
+    console.print()
+    console.print(Panel(
+        "  x86/x64 Unicorn Engine emulation · per-instruction trace · API intercept\n"
+        "  SMC detection · string extraction · Capstone disassembly-only mode\n"
+        "  type  help  for commands,  back  to return",
+        title="[heading] Shellcode Emulator [/heading]",
+        border_style="bright_cyan", box=box.ROUNDED,
+    ))
+    console.print()
+
+    while True:
+        try:
+            raw = session.prompt(f"peekaboo [scemu/{_arch}] > ", style=PT_STYLE).strip()
+        except KeyboardInterrupt:
+            console.print("\n[dim]use  back  to return[/dim]")
+            continue
+        except EOFError:
+            break
+
+        if not raw:
+            continue
+        parts = raw.split(None, 1)
+        cmd   = parts[0].lower()
+        arg   = parts[1].strip() if len(parts) > 1 else ""
+
+        if cmd in ("back", "exit", "quit"):
+            break
+
+        elif cmd == "help":
+            t = Table(box=box.ROUNDED, show_header=False,
+                      border_style="bright_black", padding=(0, 1))
+            for c, d in [
+                ("run <path>",       "emulate a raw shellcode binary file"),
+                ("hex <hex_string>", "emulate hex-encoded shellcode (\\xNN or 0xNN,… or raw hex)"),
+                ("disasm <path>",    "disassemble a file with Capstone (no CPU execution)"),
+                ("arch x64|x86",     "set architecture for next run (default: x64)"),
+                ("maxinsns <n>",     "set max instructions limit (default: 10000, max: 50000)"),
+                ("trace",            "show per-instruction execution trace"),
+                ("regs",             "show final register state"),
+                ("mem",              "show memory read/write log"),
+                ("api",              "show intercepted API calls"),
+                ("strings",          "show extracted strings from emulated memory"),
+                ("smc",              "show self-modifying code detection result"),
+                ("help",             "show this help"),
+                ("back",             "return to main menu"),
+            ]:
+                t.add_row(f"[cmd]{c}[/cmd]", d)
+            console.print()
+            console.print(t)
+            console.print()
+
+        elif cmd == "arch":
+            if arg not in ("x64", "x86"):
+                console.print("  [warn]usage: arch x64|x86[/warn]\n")
+                continue
+            _arch = arg
+            console.print(f"  [ok]arch set to {_arch}[/ok]\n")
+
+        elif cmd == "maxinsns":
+            try:
+                n = max(100, min(50000, int(arg)))
+                _maxinsns = n
+                console.print(f"  [ok]max instructions set to {n}[/ok]\n")
+            except ValueError:
+                console.print("  [warn]usage: maxinsns <number>[/warn]\n")
+
+        elif cmd == "run":
+            if not arg:
+                console.print("  [warn]usage: run <path>[/warn]\n")
+                continue
+            p = Path(arg).expanduser()
+            if not p.exists():
+                console.print(f"  [err][=^..^=] file not found: {p}[/err]\n")
+                continue
+            with console.status("[info]emulating…[/info]", spinner="dots"):
+                try:
+                    from sc_emulator import emulate as _emu
+                    result = _emu(p.read_bytes(), arch=_arch, max_insns=_maxinsns)
+                except Exception as e:
+                    console.print(f"  [err][=^..^=] {e}[/err]\n")
+                    continue
+            if not result.get("ok"):
+                console.print(f"  [err][=^..^=] {result.get('error')}[/err]\n")
+                result = None
+                continue
+            _scemu_render_result(result)
+
+        elif cmd == "hex":
+            if not arg:
+                console.print("  [warn]usage: hex <\\xNN\\xNN…>[/warn]\n")
+                continue
+            # parse: \xNN, 0xNN, or bare hex
+            import re as _re
+            cleaned = arg.strip().strip('"\'')
+            tokens  = _re.findall(r'[0-9a-fA-F]{2}',
+                                  cleaned.replace("\\x", "").replace("0x", "").replace(",", "").replace(" ", ""))
+            if not tokens:
+                console.print("  [err][=^..^=] could not parse hex bytes[/err]\n")
+                continue
+            raw_bytes = bytes(int(b, 16) for b in tokens)
+            with console.status("[info]emulating…[/info]", spinner="dots"):
+                try:
+                    from sc_emulator import emulate as _emu
+                    result = _emu(raw_bytes, arch=_arch, max_insns=_maxinsns)
+                except Exception as e:
+                    console.print(f"  [err][=^..^=] {e}[/err]\n")
+                    continue
+            if not result.get("ok"):
+                console.print(f"  [err][=^..^=] {result.get('error')}[/err]\n")
+                result = None
+                continue
+            _scemu_render_result(result)
+
+        elif cmd == "disasm":
+            if not arg:
+                console.print("  [warn]usage: disasm <path>[/warn]\n")
+                continue
+            p = Path(arg).expanduser()
+            if not p.exists():
+                console.print(f"  [err][=^..^=] file not found: {p}[/err]\n")
+                continue
+            with console.status("[info]disassembling…[/info]", spinner="dots"):
+                try:
+                    import capstone
+                    raw_b = p.read_bytes()
+                    md    = capstone.Cs(capstone.CS_ARCH_X86,
+                                        capstone.CS_MODE_64 if _arch == "x64"
+                                        else capstone.CS_MODE_32)
+                    insns = list(md.disasm(raw_b, 0x400000))[:200]
+                except Exception as e:
+                    console.print(f"  [err][=^..^=] {e}[/err]\n")
+                    continue
+            if not insns:
+                console.print("  [warn]no instructions decoded[/warn]\n")
+                continue
+            t = Table(box=box.ROUNDED, show_header=True,
+                      header_style="bold bright_white on bright_black",
+                      border_style="bright_black", padding=(0, 1))
+            t.add_column("offset",  style="dim",  no_wrap=True, min_width=10)
+            t.add_column("bytes",   style="dim",  no_wrap=True, min_width=20)
+            t.add_column("mnem",    style="cmd",  no_wrap=True, min_width=10)
+            t.add_column("operands",style="info")
+            for i in insns:
+                t.add_row(
+                    hex(i.address),
+                    bytes(i.bytes).hex(" "),
+                    i.mnemonic,
+                    i.op_str,
+                )
+            console.print()
+            console.print(t)
+            if len(insns) == 200:
+                console.print("  [dim](first 200 instructions shown)[/dim]")
+            console.print()
+
+        elif cmd in ("trace", "regs", "mem", "api", "strings", "smc"):
+            if result is None:
+                console.print("  [dim]no emulation result - use  run  or  hex  first[/dim]\n")
+                continue
+
+            if cmd == "smc":
+                smc = result.get("smc", False)
+                smc_addr = result.get("smc_address")
+                if smc:
+                    msg = f"[err]DETECTED[/err]" + (f" at {hex(smc_addr)}" if smc_addr else "")
+                else:
+                    msg = "[good]not detected[/good]"
+                console.print(f"\n  Self-Modifying Code: {msg}\n")
+
+            elif cmd == "strings":
+                strs = result.get("strings", [])
+                if not strs:
+                    console.print("  [dim]no strings extracted[/dim]\n")
+                else:
+                    console.print()
+                    for s in strs:
+                        console.print(f"  [ok]→[/ok] [cmd]{s}[/cmd]")
+                    console.print()
+
+            elif cmd == "api":
+                calls = result.get("api_calls", [])
+                if not calls:
+                    console.print("  [dim]no API calls intercepted[/dim]\n")
+                else:
+                    t = Table(box=box.ROUNDED, show_header=True,
+                              header_style="bold bright_white on bright_black",
+                              border_style="bright_black", padding=(0, 1))
+                    t.add_column("#",       style="dim",  width=4)
+                    t.add_column("target",  style="err",  no_wrap=True)
+                    t.add_column("caller",  style="dim",  no_wrap=True)
+                    t.add_column("note",    style="warn")
+                    for i, c in enumerate(calls, 1):
+                        t.add_row(str(i),
+                                  c.get("target", "?"),
+                                  c.get("caller", "?"),
+                                  c.get("note", ""))
+                    console.print()
+                    console.print(t)
+                    console.print()
+
+            elif cmd == "regs":
+                regs = result.get("regs_final", {})
+                if not regs:
+                    console.print("  [dim]no register data[/dim]\n")
+                else:
+                    t = Table(box=box.ROUNDED, show_header=False,
+                              border_style="bright_black", padding=(0, 1))
+                    t.add_column("reg",   style="info",  no_wrap=True, min_width=6)
+                    t.add_column("value", style="cmd",   no_wrap=True)
+                    for k, v in sorted(regs.items()):
+                        t.add_row(k, hex(v) if isinstance(v, int) else str(v))
+                    console.print()
+                    console.print(t)
+                    console.print()
+
+            elif cmd == "mem":
+                log = result.get("mem_log", [])
+                if not log:
+                    console.print("  [dim]no memory accesses recorded[/dim]\n")
+                else:
+                    t = Table(box=box.ROUNDED, show_header=True,
+                              header_style="bold bright_white on bright_black",
+                              border_style="bright_black", padding=(0, 1))
+                    t.add_column("type",  style="info", width=5, no_wrap=True)
+                    t.add_column("addr",  style="dim",  no_wrap=True)
+                    t.add_column("size",  style="dim",  no_wrap=True)
+                    t.add_column("value", style="cmd",  no_wrap=True)
+                    for m in log[:100]:
+                        acc  = m.get("access", "?")
+                        sty  = "err" if acc == "W" else "good"
+                        t.add_row(f"[{sty}]{acc}[/{sty}]",
+                                  m.get("addr", "?"),
+                                  str(m.get("size", "?")),
+                                  m.get("value", "?"))
+                    console.print()
+                    console.print(t)
+                    if len(log) > 100:
+                        console.print(f"  [dim](first 100 of {len(log)} entries)[/dim]")
+                    console.print()
+
+            elif cmd == "trace":
+                trace = result.get("trace", [])
+                if not trace:
+                    console.print("  [dim]no trace data[/dim]\n")
+                else:
+                    t = Table(box=box.ROUNDED, show_header=True,
+                              header_style="bold bright_white on bright_black",
+                              border_style="bright_black", padding=(0, 1))
+                    t.add_column("#",      style="dim",  width=5)
+                    t.add_column("addr",   style="dim",  no_wrap=True, min_width=12)
+                    t.add_column("bytes",  style="dim",  no_wrap=True, min_width=16)
+                    t.add_column("mnem",   style="cmd",  no_wrap=True, min_width=8)
+                    t.add_column("ops",    style="info")
+                    for i, step in enumerate(trace[:100], 1):
+                        t.add_row(str(i),
+                                  step.get("addr",  "?"),
+                                  step.get("bytes", "?"),
+                                  step.get("mnem",  "?"),
+                                  step.get("ops",   ""))
+                    console.print()
+                    console.print(t)
+                    if len(trace) > 100:
+                        console.print(f"  [dim](first 100 of {len(trace)} steps)[/dim]")
+                    console.print()
+
+        else:
+            console.print(f"  [warn]unknown command: {cmd}  (type  help)[/warn]\n")
+
+
+# ══════════════════════════════════════════════════════════════════════════════
+# Anti-Analysis Pattern Scanner sub-REPL
+# ══════════════════════════════════════════════════════════════════════════════
+
+AA_COMMANDS = ["scan", "scan-build", "scan-session", "arch",
+               "filter", "list", "export", "builds", "help", "back"]
+
+_AA_SEV_STYLE = {"high": "err", "medium": "warn", "low": "good"}
+_AA_CAT_LABEL = {"anti_debug": "Anti-Debug", "anti_vm": "Anti-VM",
+                 "timing": "Timing", "evasion": "Evasion"}
+
+
+def _aa_render_findings(findings: list[dict], page: int = 0) -> None:
+    start = page * PAGE_SIZE
+    chunk = findings[start : start + PAGE_SIZE]
+    if not chunk:
+        console.print("  [dim]no findings[/dim]\n")
+        return
+    t = Table(box=box.ROUNDED, show_header=True,
+              header_style="bold bright_white on bright_black",
+              border_style="bright_black", padding=(0, 1))
+    t.add_column("Sev",      width=7,  no_wrap=True)
+    t.add_column("ID",       style="cmd",  no_wrap=True, min_width=12)
+    t.add_column("Category", style="info", no_wrap=True, min_width=12)
+    t.add_column("MITRE",    style="accent", no_wrap=True, min_width=12)
+    t.add_column("Section",  style="dim",  no_wrap=True, min_width=8)
+    t.add_column("Offset",   style="dim",  no_wrap=True, min_width=10)
+    t.add_column("Bytes",    style="dim",  no_wrap=True, min_width=20)
+    for f in chunk:
+        sev = f.get("severity", "?")
+        sty = _AA_SEV_STYLE.get(sev, "dim")
+        t.add_row(
+            f"[{sty}]{sev.upper()[:3]}[/{sty}]",
+            f.get("id", "?"),
+            _AA_CAT_LABEL.get(f.get("category", ""), f.get("category", "?")),
+            f.get("mitre", "?"),
+            f.get("section", "?"),
+            f.get("va", hex(f.get("offset", 0))),
+            f.get("bytes", ""),
+        )
+    console.print()
+    console.print(t)
+    total = len(findings)
+    pages = (total + PAGE_SIZE - 1) // PAGE_SIZE
+    console.print(f"  [dim]page {page+1}/{pages}  ({total} findings)[/dim]\n")
+
+
+def run_antianalysis() -> None:
+    """Interactive Anti-Analysis Pattern Scanner sub-REPL."""
+    session = _make_session(AA_COMMANDS, path_cmds=frozenset({"scan", "export"}))
+
+    result:   dict | None = None
+    findings: list[dict]  = []
+    filtered: list[dict]  = []
+    _arch    = "auto"
+    _filter  = "all"
+    _page    = 0
+
+    console.print()
+    console.print(Panel(
+        "  Static Capstone scan for anti-debug, anti-VM, timing and evasion patterns\n"
+        "  15 rules mapped to MITRE ATT&CK T1622 · T1497.001 · T1497.003\n"
+        "  type  help  for commands,  back  to return",
+        title="[heading] Anti-Analysis Pattern Scanner [/heading]",
+        border_style="bright_cyan", box=box.ROUNDED,
+    ))
+    console.print()
+
+    def _apply_filter():
+        nonlocal filtered, _page
+        _page = 0
+        filtered = findings if _filter == "all" else \
+                   [f for f in findings if f.get("category") == _filter]
+
+    def _show_summary():
+        if result is None:
+            return
+        by = result.get("by_category", {})
+        fname = result.get("file_name", "")
+        console.print()
+        console.print(Panel(
+            f"  file        : [cmd]{fname}[/cmd]\n"
+            f"  arch        : {result.get('arch','?')}\n"
+            f"  total       : [warn]{result.get('total',0)}[/warn] findings\n"
+            f"  anti_debug  : [err]{by.get('anti_debug',0)}[/err]\n"
+            f"  anti_vm     : [high]{by.get('anti_vm',0)}[/high]\n"
+            f"  timing      : [medium]{by.get('timing',0)}[/medium]\n"
+            f"  evasion     : [low]{by.get('evasion',0)}[/low]",
+            title="[heading] Scan Summary [/heading]",
+            border_style="bright_black", box=box.ROUNDED,
+        ))
+        mitre = result.get("mitre_summary", [])
+        if mitre:
+            console.print("  MITRE ATT&CK: " +
+                          "  ".join(f"[accent]{m['id']}[/accent]" for m in mitre))
+        console.print()
+
+    while True:
+        try:
+            raw = session.prompt("peekaboo [antianalysis] > ", style=PT_STYLE).strip()
+        except KeyboardInterrupt:
+            console.print("\n[dim]use  back  to return[/dim]")
+            continue
+        except EOFError:
+            break
+
+        if not raw:
+            continue
+        parts = raw.split(None, 3)
+        cmd   = parts[0].lower()
+        arg   = parts[1].strip() if len(parts) > 1 else ""
+        arg2  = parts[2].strip() if len(parts) > 2 else ""
+
+        if cmd in ("back", "exit", "quit"):
+            break
+
+        elif cmd == "help":
+            t = Table(box=box.ROUNDED, show_header=False,
+                      border_style="bright_black", padding=(0, 1))
+            for c, d in [
+                ("scan <path>",                "scan a PE binary or raw shellcode"),
+                ("scan-build <id> [fname]",    "scan a compiled build binary"),
+                ("scan-session <sid> <file>",  "scan a session sample"),
+                ("arch auto|x64|x86",          "set architecture (default: auto from PE header)"),
+                ("filter all|anti_debug|anti_vm|timing|evasion", "filter findings"),
+                ("list [page]",                "show findings table (paginated)"),
+                ("builds",                     "list available compiled builds"),
+                ("export <path>",              "export findings as JSON"),
+                ("help",                       "show this help"),
+                ("back",                       "return to main menu"),
+            ]:
+                t.add_row(f"[cmd]{c}[/cmd]", d)
+            console.print()
+            console.print(t)
+            console.print()
+
+        elif cmd == "arch":
+            if arg not in ("auto", "x64", "x86"):
+                console.print("  [warn]usage: arch auto|x64|x86[/warn]\n")
+                continue
+            _arch = arg
+            console.print(f"  [ok]arch set to {_arch}[/ok]\n")
+
+        elif cmd == "scan":
+            if not arg:
+                console.print("  [warn]usage: scan <path>[/warn]\n")
+                continue
+            p = Path(arg).expanduser()
+            if not p.exists():
+                console.print(f"  [err][=^..^=] not found: {p}[/err]\n")
+                continue
+            with console.status("[info]scanning…[/info]", spinner="dots"):
+                try:
+                    from anti_analysis import scan_pe as _aa_pe, scan_raw as _aa_raw
+                    result = _aa_pe(p, arch=_arch)
+                    if not result.get("ok"):
+                        result = _aa_raw(p.read_bytes(),
+                                         arch="x64" if _arch == "auto" else _arch)
+                    result["file_name"] = p.name
+                except Exception as e:
+                    console.print(f"  [err][=^..^=] {e}[/err]\n")
+                    continue
+            findings = result.get("findings", [])
+            _filter  = "all"
+            _apply_filter()
+            _show_summary()
+            _aa_render_findings(filtered)
+
+        elif cmd == "scan-build":
+            if not arg:
+                console.print("  [warn]usage: scan-build <build-id> [fname][/warn]\n")
+                continue
+            try:
+                import db as _db2
+                build = _db2.get_build(arg)
+            except Exception:
+                build = None
+            if not build:
+                console.print(f"  [err][=^..^=] build {arg} not found[/err]\n")
+                continue
+            files = _vtscan_resolve_files(build)
+            if not files:
+                console.print("  [err][=^..^=] no binary found for this build[/err]\n")
+                continue
+            fname = arg2
+            p = next((path for name, path in files if name == fname), files[0][1])
+            with console.status("[info]scanning…[/info]", spinner="dots"):
+                try:
+                    from anti_analysis import scan_pe as _aa_pe, scan_raw as _aa_raw
+                    result = _aa_pe(p, arch=_arch)
+                    if not result.get("ok"):
+                        result = _aa_raw(p.read_bytes(),
+                                         arch="x64" if _arch == "auto" else _arch)
+                    result["file_name"] = p.name
+                except Exception as e:
+                    console.print(f"  [err][=^..^=] {e}[/err]\n")
+                    continue
+            findings = result.get("findings", [])
+            _filter  = "all"
+            _apply_filter()
+            _show_summary()
+            _aa_render_findings(filtered)
+
+        elif cmd == "scan-session":
+            if not arg or not arg2:
+                console.print("  [warn]usage: scan-session <session-id> <filename>[/warn]\n")
+                continue
+            base  = Path(__file__).parent
+            p     = (base / "samples" / arg / arg2).resolve()
+            guard = (base / "samples").resolve()
+            if not str(p).startswith(str(guard)) or not p.exists():
+                console.print(f"  [err][=^..^=] file not found or invalid path[/err]\n")
+                continue
+            with console.status("[info]scanning…[/info]", spinner="dots"):
+                try:
+                    from anti_analysis import scan_pe as _aa_pe, scan_raw as _aa_raw
+                    result = _aa_pe(p, arch=_arch)
+                    if not result.get("ok"):
+                        result = _aa_raw(p.read_bytes(),
+                                         arch="x64" if _arch == "auto" else _arch)
+                    result["file_name"] = p.name
+                except Exception as e:
+                    console.print(f"  [err][=^..^=] {e}[/err]\n")
+                    continue
+            findings = result.get("findings", [])
+            _filter  = "all"
+            _apply_filter()
+            _show_summary()
+            _aa_render_findings(filtered)
+
+        elif cmd == "filter":
+            cats = ("all", "anti_debug", "anti_vm", "timing", "evasion")
+            if arg not in cats:
+                console.print(f"  [warn]usage: filter {' | '.join(cats)}[/warn]\n")
+                continue
+            _filter = arg
+            _apply_filter()
+            _aa_render_findings(filtered)
+
+        elif cmd == "list":
+            if not findings:
+                console.print("  [dim]no scan loaded - use  scan  first[/dim]\n")
+                continue
+            try:
+                _page = max(0, int(arg) - 1) if arg else _page
+            except ValueError:
+                _page = 0
+            _aa_render_findings(filtered, _page)
+
+        elif cmd == "builds":
+            try:
+                import db as _db2
+                builds = _db2.get_builds(limit=30)
+            except Exception:
+                builds = []
+            t = Table(box=box.ROUNDED, show_header=True,
+                      header_style="bold bright_white on bright_black",
+                      border_style="bright_black", padding=(0, 1))
+            t.add_column("build-id", style="cmd",  no_wrap=True, min_width=12)
+            t.add_column("module",   style="info", min_width=18)
+            t.add_column("date",     style="dim",  min_width=16)
+            t.add_column("binaries", style="ok",   min_width=20)
+            for b in builds:
+                if b.get("status") != "success":
+                    continue
+                pa  = b.get("params", {})
+                mod = pa.get("slug") or pa.get("injection") or pa.get("stealer") or b["id"]
+                fls = _vtscan_resolve_files(b)
+                t.add_row(b["id"], mod, (b.get("created") or "")[:16],
+                          "  ".join(n for n, _ in fls) if fls else "-")
+            console.print()
+            console.print(t)
+            console.print()
+
+        elif cmd == "export":
+            if not findings:
+                console.print("  [warn]nothing to export - run  scan  first[/warn]\n")
+                continue
+            if not arg:
+                console.print("  [warn]usage: export <path>[/warn]\n")
+                continue
+            import json as _json
+            out = Path(arg).expanduser()
+            try:
+                out.write_text(_json.dumps({"findings": findings}, indent=2))
+                console.print(f"  [ok]exported {len(findings)} findings → {out}[/ok]\n")
+            except Exception as e:
+                console.print(f"  [err][=^..^=] {e}[/err]\n")
+
+        else:
+            console.print(f"  [warn]unknown command: {cmd}  (type  help)[/warn]\n")
+
+
+# ══════════════════════════════════════════════════════════════════════════════
+# ROP Chain Builder sub-REPL
+# ══════════════════════════════════════════════════════════════════════════════
+
+ROP_COMMANDS = ["scan", "scan-build", "scan-session", "arch", "base",
+                "filter", "search", "list", "chain-add", "chain-add-addr",
+                "chain-clear", "chain-show", "chain-arg",
+                "generate", "save", "builds", "help", "back"]
+
+_ROP_SEM_STYLE = {
+    "reg_load":    "good",
+    "multi_pop":   "good",
+    "stack_pivot": "err",
+    "syscall":     "accent",
+    "arithmetic":  "medium",
+    "reg_mov":     "info",
+    "mem_write":   "high",
+    "mem_read":    "info",
+    "nop_ret":     "dim",
+    "ret_only":    "dim",
+    "misc":        "dim",
+}
+
+
+def _rop_render_gadgets(gadgets: list[dict], page: int = 0) -> None:
+    start = page * PAGE_SIZE
+    chunk = gadgets[start : start + PAGE_SIZE]
+    if not chunk:
+        console.print("  [dim]no gadgets to show[/dim]\n")
+        return
+    t = Table(box=box.ROUNDED, show_header=True,
+              header_style="bold bright_white on bright_black",
+              border_style="bright_black", padding=(0, 1))
+    t.add_column("#",        style="dim", width=5)
+    t.add_column("Address",  style="cmd", no_wrap=True, min_width=14)
+    t.add_column("RVA",      style="dim", no_wrap=True, min_width=10)
+    t.add_column("Semantic", no_wrap=True, min_width=12)
+    t.add_column("Instructions", min_width=36)
+    t.add_column("Bytes",    style="dim", no_wrap=True, min_width=20)
+    for idx, g in enumerate(chunk, start + 1):
+        sem = g.get("semantic", "misc")
+        sty = _ROP_SEM_STYLE.get(sem, "dim")
+        t.add_row(
+            str(idx),
+            g.get("addr", "?"),
+            g.get("rva",  "?"),
+            f"[{sty}]{sem}[/{sty}]",
+            "  ;  ".join(g.get("insns", [])),
+            " ".join(g.get("bytes", "").split()[:8]),
+        )
+    console.print()
+    console.print(t)
+    total = len(gadgets)
+    pages = (total + PAGE_SIZE - 1) // PAGE_SIZE
+    console.print(f"  [dim]page {page+1}/{pages}  ({total} gadgets)[/dim]\n")
+
+
+def run_rop() -> None:
+    """Interactive ROP Chain Builder sub-REPL."""
+    session = _make_session(ROP_COMMANDS, path_cmds=frozenset({"scan", "save"}))
+
+    result:  dict | None = None
+    gadgets: list[dict]  = []
+    filtered: list[dict] = []
+    chain:   list[dict]  = []   # [{gadget, arg}]
+    generated: str       = ""
+    _arch    = "auto"
+    _base: str | None    = None
+    _filter  = "all"
+    _search  = ""
+    _page    = 0
+    _lang    = "c"
+
+    console.print()
+    console.print(Panel(
+        "  Find ROP gadgets in Windows PE / DLL / SYS or raw shellcode\n"
+        "  Classify: reg_load · stack_pivot · syscall · arithmetic · mem_write · …\n"
+        "  Assemble a chain, generate C array or Python payload\n"
+        "  type  help  for commands,  back  to return",
+        title="[heading] ROP Chain Builder [/heading]",
+        border_style="bright_cyan", box=box.ROUNDED,
+    ))
+    console.print()
+
+    def _apply_filter():
+        nonlocal filtered, _page
+        _page = 0
+        result2 = gadgets if _filter == "all" else \
+                  [g for g in gadgets if g.get("semantic") == _filter]
+        if _search:
+            q = _search.lower()
+            result2 = [g for g in result2
+                       if q in " ".join(g.get("insns", [])).lower()
+                       or q in g.get("addr", "").lower()
+                       or q in g.get("semantic", "").lower()]
+        filtered = result2
+
+    while True:
+        chain_n = f" chain:{len(chain)}" if chain else ""
+        try:
+            raw = session.prompt(f"peekaboo [rop{chain_n}] > ", style=PT_STYLE).strip()
+        except KeyboardInterrupt:
+            console.print("\n[dim]use  back  to return[/dim]")
+            continue
+        except EOFError:
+            break
+
+        if not raw:
+            continue
+        parts = raw.split(None, 3)
+        cmd   = parts[0].lower()
+        arg   = parts[1].strip() if len(parts) > 1 else ""
+        arg2  = parts[2].strip() if len(parts) > 2 else ""
+
+        if cmd in ("back", "exit", "quit"):
+            break
+
+        elif cmd == "help":
+            t = Table(box=box.ROUNDED, show_header=False,
+                      border_style="bright_black", padding=(0, 1))
+            for c, d in [
+                ("scan <path>",                    "find gadgets in a PE / DLL / raw binary"),
+                ("scan-build <id> [fname]",        "scan a compiled build binary"),
+                ("scan-session <sid> <file>",      "scan a session sample"),
+                ("arch auto|x64|x86",              "set architecture (default: auto from PE header)"),
+                ("base <hex>",                     "override image base address (e.g. 0x180001000)"),
+                ("filter <semantic>",              "filter by semantic: reg_load stack_pivot syscall arithmetic …"),
+                ("search <query>",                 "text search across mnemonics, address, semantic"),
+                ("list [page]",                    "show gadget table (paginated, 20/page)"),
+                ("chain-add <#>",                  "add gadget by table row number to chain"),
+                ("chain-add-addr <addr>",          "add gadget by hex address to chain"),
+                ("chain-arg <chain-idx> <value>",  "set stack argument for a pop/load gadget in chain"),
+                ("chain-show",                     "print current chain"),
+                ("chain-clear",                    "clear the chain"),
+                ("generate c|py",                  "generate C ULONG_PTR array or Python payload"),
+                ("save <path>",                    "save last generated code to file"),
+                ("builds",                         "list available compiled builds"),
+                ("help",                           "show this help"),
+                ("back",                           "return to main menu"),
+            ]:
+                t.add_row(f"[cmd]{c}[/cmd]", d)
+            console.print()
+            console.print(t)
+            console.print()
+
+        elif cmd == "arch":
+            if arg not in ("auto", "x64", "x86"):
+                console.print("  [warn]usage: arch auto|x64|x86[/warn]\n")
+                continue
+            _arch = arg
+            console.print(f"  [ok]arch set to {_arch}[/ok]\n")
+
+        elif cmd == "base":
+            if not arg:
+                console.print("  [warn]usage: base <hex_address>   e.g. base 0x180001000[/warn]\n")
+                continue
+            _base = arg
+            console.print(f"  [ok]image base override: {_base}[/ok]\n")
+
+        elif cmd in ("scan", "scan-build", "scan-session"):
+            p_path: Path | None = None
+
+            if cmd == "scan":
+                if not arg:
+                    console.print("  [warn]usage: scan <path>[/warn]\n")
+                    continue
+                p_path = Path(arg).expanduser()
+                if not p_path.exists():
+                    console.print(f"  [err][=^..^=] not found: {p_path}[/err]\n")
+                    continue
+
+            elif cmd == "scan-build":
+                if not arg:
+                    console.print("  [warn]usage: scan-build <build-id> [fname][/warn]\n")
+                    continue
+                try:
+                    import db as _db2
+                    build = _db2.get_build(arg)
+                except Exception:
+                    build = None
+                if not build:
+                    console.print(f"  [err][=^..^=] build {arg} not found[/err]\n")
+                    continue
+                files = _vtscan_resolve_files(build)
+                if not files:
+                    console.print("  [err][=^..^=] no binary for this build[/err]\n")
+                    continue
+                p_path = next((path for name, path in files if name == arg2), files[0][1])
+
+            elif cmd == "scan-session":
+                if not arg or not arg2:
+                    console.print("  [warn]usage: scan-session <sid> <file>[/warn]\n")
+                    continue
+                base_dir = Path(__file__).parent
+                p_path   = (base_dir / "samples" / arg / arg2).resolve()
+                guard    = (base_dir / "samples").resolve()
+                if not str(p_path).startswith(str(guard)) or not p_path.exists():
+                    console.print("  [err][=^..^=] file not found or invalid path[/err]\n")
+                    continue
+
+            ib: int | None = None
+            if _base:
+                try:
+                    ib = int(_base, 16) if _base.startswith("0x") else int(_base, 0)
+                except ValueError:
+                    pass
+
+            with console.status("[info]scanning for gadgets…[/info]", spinner="dots"):
+                try:
+                    from rop_builder import scan_pe as _rop_pe, scan_raw as _rop_raw
+                    result = _rop_pe(p_path, arch=_arch, image_base=ib)
+                    if not result.get("ok"):
+                        result = _rop_raw(p_path.read_bytes(),
+                                          arch="x64" if _arch == "auto" else _arch,
+                                          image_base=ib or 0x400000)
+                    result["file_name"] = p_path.name
+                except Exception as e:
+                    console.print(f"  [err][=^..^=] {e}[/err]\n")
+                    continue
+
+            gadgets  = result.get("gadgets", [])
+            chain    = []
+            generated = ""
+            _filter  = "all"
+            _search  = ""
+            _apply_filter()
+
+            by_sem = result.get("by_semantic", {})
+            console.print()
+            console.print(Panel(
+                f"  file         : [cmd]{result.get('file_name','')}[/cmd]\n"
+                f"  arch         : {result.get('arch','?')}  |  base: {result.get('base','?')}\n"
+                f"  total gadgets: [warn]{result.get('total',0)}[/warn]\n"
+                f"  reg_load     : [good]{by_sem.get('reg_load',0) + by_sem.get('multi_pop',0)}[/good]  "
+                f"  stack_pivot  : [err]{by_sem.get('stack_pivot',0)}[/err]  "
+                f"  syscall      : [accent]{by_sem.get('syscall',0)}[/accent]  "
+                f"  arithmetic   : [medium]{by_sem.get('arithmetic',0)}[/medium]",
+                title="[heading] Gadget Scan [/heading]",
+                border_style="bright_black", box=box.ROUNDED,
+            ))
+            _rop_render_gadgets(filtered)
+
+        elif cmd == "filter":
+            _filter = arg if arg else "all"
+            _apply_filter()
+            _rop_render_gadgets(filtered)
+
+        elif cmd == "search":
+            _search = arg
+            _apply_filter()
+            _rop_render_gadgets(filtered)
+
+        elif cmd == "list":
+            if not gadgets:
+                console.print("  [dim]no scan loaded - use  scan  first[/dim]\n")
+                continue
+            try:
+                _page = max(0, int(arg) - 1) if arg else _page
+            except ValueError:
+                _page = 0
+            _rop_render_gadgets(filtered, _page)
+
+        elif cmd == "chain-add":
+            if not filtered:
+                console.print("  [dim]gadget list is empty - run  scan  first[/dim]\n")
+                continue
+            try:
+                row = int(arg) - 1
+                g   = filtered[row]
+            except (ValueError, IndexError):
+                console.print(f"  [warn]usage: chain-add <row-number>  (1–{len(filtered)})[/warn]\n")
+                continue
+            needs_arg = g.get("semantic") in ("reg_load", "multi_pop")
+            chain.append({"gadget": g, "arg": "" if needs_arg else None})
+            console.print(f"  [ok]added #{len(chain)}: {' ; '.join(g['insns'])}[/ok]\n")
+
+        elif cmd == "chain-add-addr":
+            if not gadgets:
+                console.print("  [dim]no gadgets loaded[/dim]\n")
+                continue
+            addr = arg.lower()
+            found = next((g for g in gadgets if g.get("addr", "").lower() == addr), None)
+            if not found:
+                console.print(f"  [warn]{addr} not found in gadget list[/warn]\n")
+                continue
+            needs_arg = found.get("semantic") in ("reg_load", "multi_pop")
+            chain.append({"gadget": found, "arg": "" if needs_arg else None})
+            console.print(f"  [ok]added #{len(chain)}: {' ; '.join(found['insns'])}[/ok]\n")
+
+        elif cmd == "chain-arg":
+            if not arg or not arg2:
+                console.print("  [warn]usage: chain-arg <chain-index> <value>[/warn]\n")
+                continue
+            try:
+                idx = int(arg) - 1
+                chain[idx]["arg"] = arg2
+                console.print(f"  [ok]slot #{idx+1} arg = {arg2}[/ok]\n")
+            except (ValueError, IndexError):
+                console.print(f"  [warn]invalid chain index - chain has {len(chain)} entries[/warn]\n")
+
+        elif cmd == "chain-show":
+            if not chain:
+                console.print("  [dim]chain is empty - use  chain-add  to build[/dim]\n")
+            else:
+                t = Table(box=box.ROUNDED, show_header=True,
+                          header_style="bold bright_white on bright_black",
+                          border_style="bright_black", padding=(0, 1))
+                t.add_column("#",      style="dim", width=4)
+                t.add_column("Address",style="cmd", no_wrap=True)
+                t.add_column("Insns",  style="info")
+                t.add_column("Stack arg", style="warn")
+                for i, item in enumerate(chain, 1):
+                    g   = item["gadget"]
+                    arg_v = item.get("arg")
+                    t.add_row(str(i), g.get("addr","?"),
+                              " ; ".join(g.get("insns",[])),
+                              arg_v if arg_v is not None else "[dim]-[/dim]")
+                console.print()
+                console.print(t)
+                console.print()
+
+        elif cmd == "chain-clear":
+            chain = []
+            generated = ""
+            console.print("  [dim]chain cleared[/dim]\n")
+
+        elif cmd == "generate":
+            if not chain:
+                console.print("  [warn]chain is empty - add gadgets first[/warn]\n")
+                continue
+            lang = arg.lower() if arg in ("c", "py") else "c"
+            _lang = lang
+            fname = result.get("file_name", "") if result else ""
+            arch_out = result.get("arch", "x64") if result else _arch
+
+            if lang == "c":
+                ptr = "ULONG_PTR" if arch_out == "x64" else "DWORD"
+                lines = [
+                    f"/* ROP chain - {fname}  ({arch_out}) */",
+                    f"/* Generated by peekaboo ROP Builder */",
+                    f"#include <windows.h>",
+                    f"",
+                    f"{ptr} rop_chain[] = {{",
+                ]
+                for item in chain:
+                    g   = item["gadget"]
+                    cmt = " ; ".join(g.get("insns", []))
+                    lines.append(f"    {g['addr']},  /* {cmt} */")
+                    if item.get("arg") is not None:
+                        pops = sum(1 for l in g.get("insns", []) if l.strip().startswith("pop"))
+                        val  = item["arg"] or "0x0"
+                        for pi in range(pops):
+                            reg = g["insns"][pi].split()[-1] if pi < len(g["insns"]) else "?"
+                            lines.append(f"    {val},  /* {reg} = {val} */")
+                lines.append("};")
+                lines.append("")
+                lines.append(f"/* Pack with memcpy into the target stack buffer */")
+                generated = "\n".join(lines)
+            else:  # py
+                lines = [
+                    f"# ROP chain - {fname}  ({arch_out})",
+                    f"# Generated by peekaboo ROP Builder",
+                    f"",
+                    f"chain = [",
+                ]
+                for item in chain:
+                    g   = item["gadget"]
+                    cmt = " ; ".join(g.get("insns", []))
+                    lines.append(f"    {g['addr']},  # {cmt}")
+                    if item.get("arg") is not None:
+                        pops = sum(1 for l in g.get("insns", []) if l.strip().startswith("pop"))
+                        val  = item["arg"] or "0x0"
+                        for pi in range(pops):
+                            reg = g["insns"][pi].split()[-1] if pi < len(g["insns"]) else "?"
+                            lines.append(f"    {val},  # {reg} = {val}")
+                lines.append("]")
+                lines.append("")
+                lines.append("import struct")
+                lines.append("payload = b''.join(struct.pack('<Q', a) for a in chain)")
+                generated = "\n".join(lines)
+
+            ext = "c" if lang == "c" else "py"
+            console.print()
+            console.print(Syntax(generated[:2000], lang if lang != "py" else "python",
+                                 theme="monokai", line_numbers=False,
+                                 background_color="default"))
+            console.print(f"\n  [ok]{len(chain)} gadgets - use  save <path>  to write  chain.{ext}[/ok]\n")
+
+        elif cmd == "save":
+            if not generated:
+                console.print("  [warn]nothing to save - run  generate  first[/warn]\n")
+                continue
+            if not arg:
+                console.print("  [warn]usage: save <path>[/warn]\n")
+                continue
+            out = Path(arg).expanduser()
+            try:
+                out.write_text(generated)
+                console.print(f"  [ok]saved → {out}[/ok]\n")
+            except Exception as e:
+                console.print(f"  [err][=^..^=] {e}[/err]\n")
+
+        elif cmd == "builds":
+            try:
+                import db as _db2
+                builds = _db2.get_builds(limit=30)
+            except Exception:
+                builds = []
+            t = Table(box=box.ROUNDED, show_header=True,
+                      header_style="bold bright_white on bright_black",
+                      border_style="bright_black", padding=(0, 1))
+            t.add_column("build-id", style="cmd",  no_wrap=True, min_width=12)
+            t.add_column("module",   style="info", min_width=18)
+            t.add_column("date",     style="dim",  min_width=16)
+            t.add_column("binaries", style="ok",   min_width=20)
+            for b in builds:
+                if b.get("status") != "success":
+                    continue
+                pa  = b.get("params", {})
+                mod = pa.get("slug") or pa.get("injection") or pa.get("stealer") or b["id"]
+                fls = _vtscan_resolve_files(b)
+                t.add_row(b["id"], mod, (b.get("created") or "")[:16],
+                          "  ".join(n for n, _ in fls) if fls else "-")
+            console.print()
+            console.print(t)
+            console.print()
+
+        else:
+            console.print(f"  [warn]unknown command: {cmd}  (type  help)[/warn]\n")
+
+
 # -- top-level REPL ------------------------------------------------------------
 
 def main() -> None:
@@ -6722,15 +8050,19 @@ def main() -> None:
     ev_mod = _load_evasion_module()
 
     _dispatch: dict[str, object] = {
-        "library":   run_library,
-        "artifacts": run_artifacts,
-        "builder":   run_builder,
-        "shellcode": run_shellcode,
-        "yara":      run_yara,
-        "malpedia":  run_malpedia,
-        "ttp":       run_ttp,
-        "pe":        run_pe,
-        "vtscan":    run_vtscan,
+        "library":      run_library,
+        "artifacts":    run_artifacts,
+        "builder":      run_builder,
+        "shellcode":    run_shellcode,
+        "yara":         run_yara,
+        "malpedia":     run_malpedia,
+        "ttp":          run_ttp,
+        "pe":           run_pe,
+        "vtscan":       run_vtscan,
+        "hellsgate":    run_hellsgate,
+        "scemu":        run_scemu,
+        "antianalysis": run_antianalysis,
+        "rop":          run_rop,
     }
 
     session = _make_session(TOP_COMMANDS)

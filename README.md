@@ -30,6 +30,7 @@ Peekaboo is a modular framework designed to safely emulate malware behavior. It 
 - **Hell's Gate / Direct Syscall Lab** - parse `ntdll.dll` to extract System Service Numbers for all `Nt*`/`Zw*` exports; detect EDR inline hooks (JMP rel32, FF25, INT3, PUSH/RET trampoline); recover hooked SSNs via Halo's Gate (nearest-clean-neighbour inference) and Tartarus Gate (forward byte scan); generate ready-to-compile NASM x64 or C `__declspec(naked)` direct-syscall stubs.
 - **Shellcode Emulator** - x86/x64 CPU emulation via Unicorn Engine with per-instruction disassembly trace (Capstone), memory read/write log, self-modifying code detection, API interception at unmapped call targets, extracted string identification, and standalone disassembly-only mode.
 - **Anti-Analysis Pattern Scanner** - static Capstone scan of PE executables or raw shellcode for 15 anti-debug, anti-VM, timing, and sandbox-evasion patterns (RDTSC, CPUID, INT 2D, PEB FS/GS reads, SIDT/SGDT/SLDT, IN EAX/DX VMware backdoor, NOP sleds, PUSHFD Trap Flag probe, VPC magic bytes, and more); findings mapped to MITRE ATT&CK T1622, T1497.001, T1497.003.
+- **ROP Chain Builder** - parse PE/DLL/SYS binaries (x64/x86) for Return-Oriented Programming gadgets using Capstone; classify gadgets by semantic role (reg_load, stack_pivot, syscall, arithmetic, mem_write, mem_read, multi_pop, nop_ret, misc); interactive chain builder with per-slot stack argument inputs; generate C `ULONG_PTR` array or Python `struct.pack` payload; supports From Build, From Session, and direct upload.
 - **safe by design:** Focuses on telemetry generation (process creation, network connections) rather than actual system damage.      
 
 ## architecture
@@ -86,6 +87,7 @@ cd dashboard && python3 app.py
 | **Hell's Gate** | SSN extractor for all `Nt*`/`Zw*` exports; EDR hook detection; Halo's Gate + Tartarus Gate SSN recovery; NASM / C direct-syscall stub generator |
 | **SC Emulator** | x86/x64 Unicorn Engine emulation with per-instruction trace, memory log, SMC detection, API interception, string extraction, and disasm-only mode |
 | **Anti-Analysis** | Static Capstone scan for 15 anti-debug/anti-VM/timing/evasion patterns; MITRE ATT&CK T1622/T1497 mapping; From Session / From Build / Upload |
+| **ROP Builder** | Gadget finder for Windows PE/DLL/SYS x64/x86; semantic classification (reg_load, stack_pivot, syscall, arithmetic, mem_write, mem_read, multi_pop…); chain builder with per-slot arg inputs; C `ULONG_PTR` array / Python `struct.pack` payload generation |
 | **APT Campaign** | Fully automated pipeline: actor -> reports -> TTP extraction -> module selection -> binary compile |
 | **MITRE ATT&CK** | Browse 200+ blog posts mapped to ATT&CK techniques with inline source code viewer |
 | **Malpedia** | Threat actor and malware family lookup with semantic blog post matching |
@@ -261,6 +263,58 @@ Input sources: **Upload**, **From Session**, **From Build**. Architecture: **Aut
 
 Results include: per-category counts, MITRE ATT&CK coverage chips (T1622 / T1497.001 / T1497.003), and a filterable table showing severity badge, technique name, category, MITRE ID, section name, file offset + VA, raw bytes, and description. Findings can be exported as JSON.
 
+### ROP Chain Builder
+
+Static ROP gadget finder for Windows PE executables, DLLs, and SYS drivers (x64 and x86). Uses **Capstone** to disassemble all executable sections and walks backwards from every `ret`/`retn`/`jmp [reg]`/`call [reg]` terminator to collect instruction chains of up to 6 instructions and 24 bytes. No code is executed.
+
+Input sources: **Upload**, **From Session**, **From Build**. Architecture: **Auto** (detected from PE `Machine` field), **x64**, or **x86**. Image base defaults to the PE optional header value and can be overridden for relocatable DLLs.
+
+**Terminator types:**
+
+| type | description |
+|------|-------------|
+| `ret` | Plain `RET`, `RETN N`, `RETF`, `RETQ` |
+| `jmp_reg` | `JMP reg` / `JMP [reg]` / `JMP [reg+offset]` |
+| `call_reg` | `CALL reg` / `CALL [reg]` |
+
+**Semantic classification:**
+
+| class | pattern |
+|-------|---------|
+| `ret_only` | Terminator with no preceding instructions |
+| `reg_load` | `pop <reg>; ret` |
+| `multi_pop` | Multiple consecutive `pop` instructions |
+| `stack_pivot` | `xchg rsp/esp, *` / `mov rsp/esp, reg` / `leave` |
+| `syscall` | `syscall; ret` / `sysenter; ret` / `int 0x2e; ret` |
+| `reg_mov` | `mov <reg>, <reg>; ret` |
+| `mem_write` | `mov [reg…], reg; ret` |
+| `mem_read` | `mov reg, [reg…]; ret` |
+| `arithmetic` | `add/sub/xor/and/or/neg/shl/shr/ror/rol…; ret` |
+| `nop_ret` | All-NOP body + `ret` |
+| `misc` | Everything else ending in `ret` |
+
+**UI layout:** two-column view. Left panel: gadget browser with filter pills (by semantic class) + keyword search + scrollable table showing address, RVA, section, bytes, disassembly, and semantic badge. Right panel: sticky chain builder - click **Add** on any gadget row to append it to the chain; each chain slot has an optional stack argument input (64-bit hex). **Generate** produces the selected output format; **Copy** puts it on the clipboard; **Download** saves as `.c` or `.py`.
+
+**Output formats:**
+
+```c
+/* C - ULONG_PTR array */
+ULONG_PTR rop_chain[] = {
+    0x7ffb12340000ULL,  /* pop rax; ret */
+    0x0000000000000001ULL,  /* arg: rax = 0x1 */
+    ...
+};
+/* memcpy onto stack or pass to NtCreateThreadEx as start address */
+```
+
+```python
+# Python - struct.pack
+import struct
+rop = b""
+rop += struct.pack("<Q", 0x7ffb12340000)  # pop rax; ret
+rop += struct.pack("<Q", 0x0000000000000001)  # arg: rax = 0x1
+```
+
 ### MITRE ATT&CK R&D
 
 The MITRE ATT&CK tab indexes all blog posts from the [meow](https://github.com/cocomelonc/meow) research repository and maps them to ATT&CK technique IDs found in the post body. Source code is extracted automatically from the post directory - supporting C, C++, Nim, and assembly (`.asm`/`.s`) files, including posts where source is nested inside subdirectories.
@@ -346,6 +400,10 @@ Top-level commands:
 | `pe` | PE binary anatomy sub-REPL |
 | `vtscan` | VirusTotal scanner sub-REPL |
 | `evasion` | Evasion score and patch lab sub-REPL |
+| `hellsgate` | Hell's Gate / Halo's Gate / Tartarus Gate SSN extractor and stub generator sub-REPL |
+| `scemu` | Shellcode emulator (Unicorn Engine) sub-REPL |
+| `antianalysis` | Anti-analysis pattern scanner sub-REPL |
+| `rop` | ROP gadget finder and chain builder sub-REPL |
 | `help` | Top-level help; `help <module>` for module-specific docs |
 | `exit` / `quit` | Exit the CLI |
 
@@ -506,6 +564,85 @@ Static evasion scoring and binary patching.
 | `apply-all` | Apply all suggested patches |
 | `save <path>` | Save patched binary to file |
 | `help` | Show all evasion commands |
+
+### `hellsgate` sub-REPL
+
+Parse `ntdll.dll` to extract SSNs, detect EDR hooks, recover hooked SSNs, and generate direct-syscall stubs.
+
+| command | description |
+|---------|-------------|
+| `scan <path>` | Load and parse ntdll.dll from a file path |
+| `scan-build <id> [fname]` | Load ntdll.dll from a compiled build binary |
+| `scan-session <sid> <file>` | Load ntdll.dll from a session sample |
+| `filter <all\|clean\|hooked>` | Filter SSN table by hook status |
+| `search <query>` | Search by function name prefix |
+| `show <name>` | Show stub detail: SSN, bytes, hook type, recovery method |
+| `select <name>` | Toggle a function for code generation |
+| `select-hooked` | Select all hooked stubs at once |
+| `select-common` | Select preset list of 19 common injection APIs |
+| `generate <nasm\|c>` | Generate NASM x64 or C `__declspec(naked)` stubs for selected functions |
+| `save <path>` | Save generated stubs to file |
+| `builds` | List available compiled builds |
+| `help` | Show all hellsgate commands |
+
+### `scemu` sub-REPL
+
+Emulate x86/x64 shellcode with Unicorn Engine and inspect CPU state.
+
+| command | description |
+|---------|-------------|
+| `run <path>` | Load and emulate a raw shellcode binary |
+| `hex <hex-string>` | Emulate shellcode from hex input (`\xNN`, `0xNN,`, or raw hex) |
+| `disasm <path>` | Disassemble-only mode (no execution) |
+| `arch <x64\|x86>` | Set emulation architecture (default: x64) |
+| `maxinsns <N>` | Set instruction count limit (default: 10 000, max: 50 000) |
+| `trace` | Print per-instruction trace from last emulation |
+| `regs` | Print final register state from last emulation |
+| `mem` | Print memory access log from last emulation |
+| `api` | Print intercepted API calls from last emulation |
+| `strings` | Print extracted strings from last emulation |
+| `smc` | Show self-modifying code detection result |
+| `help` | Show all scemu commands |
+
+### `antianalysis` sub-REPL
+
+Scan PE binaries or raw shellcode for anti-debug, anti-VM, timing, and evasion patterns.
+
+| command | description |
+|---------|-------------|
+| `scan <path>` | Scan a binary file for anti-analysis patterns |
+| `scan-build [id] [fname]` | Scan a compiled build binary |
+| `scan-session <sid> <file>` | Scan a session sample |
+| `arch <auto\|x64\|x86>` | Set disassembly architecture (default: auto) |
+| `filter <all\|anti-debug\|anti-vm\|timing\|evasion>` | Filter findings by category |
+| `list` | List all findings from the last scan |
+| `export <path>` | Export findings to a JSON file |
+| `builds` | List available compiled builds |
+| `help` | Show all antianalysis commands |
+
+### `rop` sub-REPL
+
+Find ROP gadgets in PE binaries and build exploit chains.
+
+| command | description |
+|---------|-------------|
+| `scan <path>` | Scan a PE binary for ROP gadgets |
+| `scan-build [id] [fname]` | Scan a compiled build binary |
+| `scan-session <sid> <file>` | Scan a session sample |
+| `arch <auto\|x64\|x86>` | Set disassembly architecture (default: auto) |
+| `base <hex>` | Override image base address (e.g. `base 0x180000000`) |
+| `filter <semantic>` | Filter gadgets by semantic class (reg_load, stack_pivot, syscall, etc.) |
+| `search <keyword>` | Search gadgets by mnemonic or operand keyword |
+| `list` | List filtered gadgets (paginated) |
+| `chain-add <index>` | Add gadget by list index to the chain |
+| `chain-add-addr <hex>` | Add gadget by address to the chain |
+| `chain-arg <slot> <hex>` | Set a stack argument value for a chain slot |
+| `chain-show` | Display the current chain |
+| `chain-clear` | Clear the chain |
+| `generate <c\|python>` | Generate C `ULONG_PTR` array or Python `struct.pack` payload |
+| `save <path>` | Save generated payload to file |
+| `builds` | List available compiled builds |
+| `help` | Show all rop commands |
 
 ## virus total result:
 02 september 2021

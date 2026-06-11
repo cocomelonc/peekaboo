@@ -766,6 +766,58 @@ code{font-family:var(--mono);font-size:12px;background:var(--bg4);padding:1px 5p
 .hg-upload-drop{border:2px dashed var(--sep);border-radius:8px;padding:28px 20px;text-align:center;color:var(--text2);font-size:13px;cursor:pointer;transition:border-color .15s,background .15s}
 .hg-upload-drop:hover,.hg-upload-drop.drag{border-color:var(--purple);background:rgba(181,123,255,.05);color:var(--text)}
 .hg-hint{font-size:11px;color:var(--dim);margin-top:4px}
+/* -- ROP Chain Builder panel -- */
+.rop-layout{display:grid;grid-template-columns:1fr 380px;gap:16px;align-items:start}
+@media(max-width:1200px){.rop-layout{grid-template-columns:1fr}}
+.rop-stats-row{display:flex;gap:10px;margin-bottom:16px;flex-wrap:wrap}
+.rop-stat{flex:1;min-width:100px;background:var(--bg2);border:1px solid var(--sep);border-radius:8px;padding:10px 14px;text-align:center}
+.rop-stat .rn{font-size:22px;font-weight:700;line-height:1;color:var(--purple)}
+.rop-stat .rl{font-size:11px;color:var(--text2);margin-top:3px;text-transform:uppercase;letter-spacing:.5px}
+.rop-tbl-scroll{max-height:440px;overflow-y:auto;background:var(--bg2);border:1px solid var(--sep);border-radius:8px}
+.rop-tbl{width:100%;border-collapse:collapse;font-size:11.5px}
+.rop-tbl th{background:var(--bg3);color:var(--text2);font-weight:600;padding:5px 10px;text-align:left;border-bottom:1px solid var(--sep);white-space:nowrap;font-size:10px;text-transform:uppercase;letter-spacing:.4px;position:sticky;top:0;z-index:1}
+.rop-tbl td{padding:4px 10px;border-bottom:1px solid rgba(255,255,255,.03);vertical-align:middle}
+.rop-tbl tr:hover td{background:rgba(255,255,255,.04)}
+.rop-addr{font-family:monospace;font-size:11px;color:#60a5fa;white-space:nowrap}
+.rop-rva{font-family:monospace;font-size:10px;color:var(--dim)}
+.rop-bytes{font-family:'Courier New',monospace;font-size:10px;color:#6b7280;white-space:nowrap}
+.rop-insns{font-family:'Courier New',monospace;font-size:11px;color:var(--text);line-height:1.5}
+.rop-insns .ri-mnem{color:#c084fc;font-weight:600}
+.rop-insns .ri-ops{color:#60a5fa}
+.rop-insns .ri-ret{color:var(--dim)}
+.rop-sem{display:inline-block;padding:2px 7px;border-radius:4px;font-size:10px;font-weight:600;white-space:nowrap;text-transform:uppercase;letter-spacing:.3px}
+.rs-reg_load  {background:rgba(86,217,138,.12);color:#4ade80;border:1px solid rgba(86,217,138,.25)}
+.rs-multi_pop {background:rgba(86,217,138,.10);color:#34d399;border:1px solid rgba(86,217,138,.2)}
+.rs-stack_pivot{background:rgba(248,113,113,.15);color:#f87171;border:1px solid rgba(248,113,113,.3)}
+.rs-syscall   {background:rgba(181,123,255,.15);color:#c084fc;border:1px solid rgba(181,123,255,.3)}
+.rs-arithmetic{background:rgba(251,191,36,.12); color:#fbbf24;border:1px solid rgba(251,191,36,.25)}
+.rs-reg_mov   {background:rgba(120,180,255,.12);color:#78b4ff;border:1px solid rgba(120,180,255,.25)}
+.rs-mem_write {background:rgba(255,120,117,.12);color:#fb923c;border:1px solid rgba(255,120,117,.25)}
+.rs-mem_read  {background:rgba(120,180,255,.10);color:#60a5fa;border:1px solid rgba(120,180,255,.2)}
+.rs-nop_ret   {background:rgba(156,163,175,.10);color:#9ca3af;border:1px solid rgba(156,163,175,.2)}
+.rs-ret_only  {background:rgba(156,163,175,.08);color:#6b7280;border:1px solid rgba(156,163,175,.15)}
+.rs-misc      {background:rgba(156,163,175,.08);color:#6b7280;border:1px solid rgba(156,163,175,.15)}
+.rop-add-btn{background:rgba(181,123,255,.15);border:1px solid rgba(181,123,255,.3);color:var(--purple);border-radius:4px;padding:2px 8px;cursor:pointer;font-size:11px;font-weight:600;transition:background .12s}
+.rop-add-btn:hover{background:rgba(181,123,255,.3)}
+.rop-filter-row{display:flex;gap:8px;align-items:center;margin-bottom:10px;flex-wrap:wrap}
+.rop-chain-panel{background:var(--bg2);border:1px solid var(--sep);border-radius:8px;overflow:hidden;position:sticky;top:calc(var(--hdr) + 16px)}
+.rop-chain-hdr{background:var(--bg3);border-bottom:1px solid var(--sep);padding:10px 14px;display:flex;align-items:center;gap:8px}
+.rop-chain-hdr h3{font-size:13px;font-weight:600;flex:1;margin:0}
+.rop-chain-body{padding:10px 12px;max-height:340px;overflow-y:auto}
+.rop-chain-empty{text-align:center;color:var(--dim);font-size:12px;padding:24px 0}
+.rop-chain-item{background:var(--bg3);border:1px solid var(--sep);border-radius:6px;padding:8px 10px;margin-bottom:6px;position:relative}
+.rop-ci-idx{font-size:10px;color:var(--dim);margin-bottom:3px;font-family:monospace}
+.rop-ci-addr{font-family:monospace;font-size:11px;color:#60a5fa;font-weight:600}
+.rop-ci-insns{font-family:'Courier New',monospace;font-size:11px;color:var(--text2);margin-top:2px;line-height:1.5}
+.rop-ci-arg{width:100%;background:var(--bg2);border:1px solid var(--sep);border-radius:4px;color:var(--text);font-family:monospace;font-size:11px;padding:3px 7px;margin-top:5px;outline:none}
+.rop-ci-arg:focus{border-color:var(--purple)}
+.rop-ci-arg::placeholder{color:var(--dim)}
+.rop-ci-del{position:absolute;top:6px;right:8px;background:none;border:none;color:var(--dim);cursor:pointer;font-size:13px;line-height:1;padding:0}
+.rop-ci-del:hover{color:var(--red)}
+.rop-chain-footer{padding:10px 12px;border-top:1px solid var(--sep);display:flex;gap:6px;flex-wrap:wrap}
+.rop-out-wrap{background:var(--bg2);border:1px solid var(--sep);border-radius:8px;overflow:hidden;margin-top:10px}
+.rop-out-toolbar{display:flex;align-items:center;gap:8px;padding:7px 12px;border-bottom:1px solid var(--sep);background:var(--bg3)}
+.rop-out-pre{padding:14px;overflow:auto;max-height:300px;font-family:'Courier New',monospace;font-size:11.5px;line-height:1.6;white-space:pre;color:var(--text)}
 /* -- Anti-Analysis Scanner panel -- */
 .aa-stats-row{display:flex;gap:10px;margin-bottom:16px;flex-wrap:wrap}
 .aa-stat{flex:1;min-width:100px;background:var(--bg2);border:1px solid var(--sep);border-radius:8px;padding:12px 16px;text-align:center}
@@ -830,6 +882,9 @@ code{font-family:var(--mono);font-size:12px;background:var(--bg4);padding:1px 5p
     </div>
     <div class="nav-item" onclick="showPanel('antianalysis')" id="nav-antianalysis">
       <span class="nav-icon">🔍</span> Anti-Analysis
+    </div>
+    <div class="nav-item" onclick="showPanel('rop')" id="nav-rop">
+      <span class="nav-icon">⛓</span> ROP Builder
     </div>
     <div class="nav-item" onclick="showPanel('library')" id="nav-library">
       <span class="nav-icon">📦</span> Module Library
@@ -2254,6 +2309,188 @@ code{font-family:var(--mono);font-size:12px;background:var(--bg4);padding:1px 5p
   </div><!-- /aa-results -->
 </div><!-- /panel-antianalysis -->
 
+<!-- ════════ ROP CHAIN BUILDER ════════ -->
+<div id="panel-rop" class="panel">
+
+  <!-- source tabs + options -->
+  <div class="filter-bar" style="margin-bottom:16px">
+    <button class="btn btn-primary btn-sm" id="rop-tab-upload-btn"  onclick="ropSetTab('upload')">Upload</button>
+    <button class="btn btn-ghost btn-sm"   id="rop-tab-session-btn" onclick="ropSetTab('session')">From Session</button>
+    <button class="btn btn-ghost btn-sm"   id="rop-tab-build-btn"   onclick="ropSetTab('build')">🔨 From Build</button>
+    <div style="margin-left:auto;display:flex;gap:8px;align-items:center;flex-wrap:wrap">
+      <span style="font-size:12px;color:var(--dim)">Arch:</span>
+      <button class="btn btn-sm btn-primary" id="rop-arch-auto" onclick="ropSetArch('auto')">Auto</button>
+      <button class="btn btn-sm btn-ghost"   id="rop-arch-x64"  onclick="ropSetArch('x64')">x64</button>
+      <button class="btn btn-sm btn-ghost"   id="rop-arch-x86"  onclick="ropSetArch('x86')">x86</button>
+      <span style="font-size:12px;color:var(--dim)">Base:</span>
+      <input type="text" id="rop-base-input" placeholder="auto (from PE header)"
+             style="width:160px;font-family:monospace;font-size:12px">
+    </div>
+    <span id="rop-status" class="text-dim" style="font-size:12px;flex-shrink:0"></span>
+  </div>
+
+  <!-- UPLOAD tab -->
+  <div id="rop-src-upload">
+    <div class="card mb-16">
+      <div class="card-header">
+        <span style="font-size:22px">⛓</span>
+        <div>
+          <div class="card-title">ROP Chain Builder</div>
+          <div class="card-sub">find gadgets in Windows PE / DLL · classify · assemble chains · generate C / Python</div>
+        </div>
+        <label class="btn btn-primary btn-sm" style="margin-left:auto;cursor:pointer">
+          📂 Choose binary
+          <input type="file" id="rop-upload-input" accept=".exe,.dll,.sys,.bin,.raw"
+                 style="display:none" onchange="ropScanUpload(this)">
+        </label>
+      </div>
+      <div class="hg-hint" style="padding:0 4px 4px">
+        Upload a Windows PE (<code>.exe</code>, <code>.dll</code>, <code>.sys</code>) or raw binary.
+        Capstone disassembles all executable sections and walks backwards from every
+        <code>ret</code> / <code>jmp [reg]</code> / <code>call [reg]</code> terminator - up to
+        6 instructions deep. Gadgets are semantically classified:
+        <strong>reg_load</strong>, <strong>stack_pivot</strong>, <strong>syscall</strong>,
+        <strong>arithmetic</strong>, etc. Select gadgets to build a chain, then generate
+        a C array or Python list with optional stack argument slots.
+        <strong>ntdll.dll</strong> and <strong>kernel32.dll</strong> from a Windows target are ideal sources.
+      </div>
+    </div>
+  </div>
+
+  <!-- FROM SESSION tab -->
+  <div id="rop-src-session" style="display:none">
+    <div class="card mb-16">
+      <div class="card-header">
+        <span style="font-size:22px">⛓</span>
+        <div><div class="card-title">ROP Builder</div><div class="card-sub">select a session sample</div></div>
+        <button class="btn btn-ghost btn-sm" style="margin-left:auto" onclick="loadRopSessionList()">↻ Refresh</button>
+      </div>
+      <div class="vt-pick-row">
+        <div class="vt-select vt-drop-wide" id="rop-session-drop">
+          <div class="vt-select-val" onclick="vtToggleDrop('rop-session-drop')">
+            <span id="rop-session-label" class="vt-ph">- select session -</span>
+            <span class="vt-select-arrow">▼</span>
+          </div>
+          <div class="vt-select-menu" id="rop-session-menu"></div>
+        </div>
+        <div class="vt-select vt-drop-narrow" id="rop-sfile-drop">
+          <div class="vt-select-val" onclick="vtToggleDrop('rop-sfile-drop')">
+            <span id="rop-sfile-label" class="vt-ph">- select file -</span>
+            <span class="vt-select-arrow">▼</span>
+          </div>
+          <div class="vt-select-menu" id="rop-sfile-menu"></div>
+        </div>
+        <button class="btn btn-primary vt-pick-btn" id="rop-session-scan-btn"
+                onclick="ropScanSession()" disabled>⛓ Scan</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- FROM BUILD tab -->
+  <div id="rop-src-build" style="display:none">
+    <div class="card mb-16">
+      <div class="card-header">
+        <span style="font-size:22px">⛓</span>
+        <div><div class="card-title">ROP Builder</div><div class="card-sub">select a compiled build binary</div></div>
+        <button class="btn btn-ghost btn-sm" style="margin-left:auto" onclick="loadRopBuilds()">↻ Refresh</button>
+      </div>
+      <div class="vt-pick-row">
+        <div class="vt-select vt-drop-wide" id="rop-build-drop">
+          <div class="vt-select-val" onclick="vtToggleDrop('rop-build-drop')">
+            <span id="rop-build-label" class="vt-ph">- select build binary -</span>
+            <span class="vt-select-arrow">▼</span>
+          </div>
+          <div class="vt-select-menu" id="rop-build-menu"></div>
+        </div>
+        <button class="btn btn-primary vt-pick-btn" id="rop-build-scan-btn"
+                onclick="ropScanBuild()" disabled>⛓ Scan</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- results -->
+  <div id="rop-results" style="display:none">
+
+    <!-- stats row -->
+    <div class="rop-stats-row" id="rop-stats-row"></div>
+
+    <!-- two-column layout: gadget browser | chain builder -->
+    <div class="rop-layout">
+
+      <!-- LEFT: gadget browser -->
+      <div>
+        <!-- filter bar -->
+        <div class="rop-filter-row">
+          <input type="text" id="rop-search" placeholder="Filter by mnemonic, address, semantic…"
+                 style="flex:1;min-width:160px;max-width:300px" oninput="ropFilter()">
+          <div class="filter-bar" style="margin:0;flex-wrap:wrap">
+            <button class="btn btn-xs btn-primary" id="rop-f-all"         onclick="ropSetFilter('all')">All</button>
+            <button class="btn btn-xs btn-ghost"   id="rop-f-reg_load"    onclick="ropSetFilter('reg_load')">reg_load</button>
+            <button class="btn btn-xs btn-ghost"   id="rop-f-multi_pop"   onclick="ropSetFilter('multi_pop')">multi_pop</button>
+            <button class="btn btn-xs btn-ghost"   id="rop-f-stack_pivot" onclick="ropSetFilter('stack_pivot')">stack_pivot</button>
+            <button class="btn btn-xs btn-ghost"   id="rop-f-syscall"     onclick="ropSetFilter('syscall')">syscall</button>
+            <button class="btn btn-xs btn-ghost"   id="rop-f-arithmetic"  onclick="ropSetFilter('arithmetic')">arithmetic</button>
+            <button class="btn btn-xs btn-ghost"   id="rop-f-reg_mov"     onclick="ropSetFilter('reg_mov')">reg_mov</button>
+            <button class="btn btn-xs btn-ghost"   id="rop-f-mem_write"   onclick="ropSetFilter('mem_write')">mem_write</button>
+            <button class="btn btn-xs btn-ghost"   id="rop-f-mem_read"    onclick="ropSetFilter('mem_read')">mem_read</button>
+            <button class="btn btn-xs btn-ghost"   id="rop-f-misc"        onclick="ropSetFilter('misc')">misc</button>
+          </div>
+        </div>
+        <span id="rop-gadget-count" class="text-dim" style="font-size:11px;display:block;margin-bottom:6px"></span>
+
+        <!-- gadget table -->
+        <div class="rop-tbl-scroll">
+          <table class="rop-tbl" id="rop-tbl">
+            <thead>
+              <tr>
+                <th></th>
+                <th>Address / RVA</th>
+                <th>Semantic</th>
+                <th>Instructions</th>
+                <th>Bytes</th>
+              </tr>
+            </thead>
+            <tbody id="rop-tbody"></tbody>
+          </table>
+        </div>
+      </div>
+
+      <!-- RIGHT: chain builder -->
+      <div class="rop-chain-panel">
+        <div class="rop-chain-hdr">
+          <span style="font-size:16px">⛓</span>
+          <h3>Chain Builder</h3>
+          <span id="rop-chain-count" class="text-dim" style="font-size:11px"></span>
+          <button class="btn btn-ghost btn-xs" onclick="ropChainClear()" title="Clear chain">✕ Clear</button>
+        </div>
+        <div class="rop-chain-body" id="rop-chain-body">
+          <div class="rop-chain-empty" id="rop-chain-empty">
+            Click <strong>+</strong> next to any gadget to add it to the chain.
+          </div>
+        </div>
+        <div class="rop-chain-footer">
+          <span style="font-size:11px;color:var(--dim);align-self:center">Output:</span>
+          <button class="btn btn-sm btn-primary" id="rop-lang-c"   onclick="ropSetLang('c')">C array</button>
+          <button class="btn btn-sm btn-ghost"   id="rop-lang-py"  onclick="ropSetLang('py')">Python</button>
+          <button class="btn btn-primary btn-sm" onclick="ropGenerate()">⚡ Generate</button>
+        </div>
+
+        <!-- code output inside chain panel -->
+        <div id="rop-out-wrap" class="rop-out-wrap" style="display:none;border-radius:0;border-left:0;border-right:0;border-bottom:0">
+          <div class="rop-out-toolbar">
+            <span style="font-size:11px;font-weight:600;color:var(--text2);flex:1" id="rop-out-title">chain.c</span>
+            <button class="btn btn-ghost btn-xs" onclick="ropCopy()">📋 Copy</button>
+            <button class="btn btn-ghost btn-xs" onclick="ropDownload()">⬇</button>
+          </div>
+          <pre class="rop-out-pre" id="rop-out-pre"></pre>
+        </div>
+      </div>
+
+    </div><!-- /rop-layout -->
+  </div><!-- /rop-results -->
+</div><!-- /panel-rop -->
+
+
 
 <!-- ════════ ARTIFACT MAP ════════ -->
 <div id="panel-artifacts" class="panel">
@@ -2749,6 +2986,7 @@ const PANEL_META = {
   hellsgate: ["Hell's Gate",      'extract SSNs · detect EDR hooks · generate direct-syscall stubs'],
   scemu:        ['SC Emulator',       'x86/x64 shellcode emulation · trace · API intercept · SMC detect'],
   antianalysis: ['Anti-Analysis',     'detect anti-debug · anti-VM · timing · evasion patterns · MITRE ATT&CK'],
+  rop:          ['ROP Builder',       'find gadgets in PE/DLL · classify · build chains · generate C / Python output'],
   library:   ['Module Library',   'browse 190+ techniques from meow & blog'],
   samples:  ['Samples',          'compiled binaries organized by session'],
   apt:      ['APT Campaign',     'Malpedia -> TTPs -> auto-compile pipeline'],
@@ -7390,6 +7628,409 @@ function aaExport() {
   const a    = document.createElement('a');
   a.href     = URL.createObjectURL(blob);
   a.download = 'anti_analysis_findings.json';
+  a.click();
+}
+
+// ══════════════════════════════════════════════════════════════════════════
+// ROP Chain Builder
+// ══════════════════════════════════════════════════════════════════════════
+
+let _ropSrcTab   = 'upload';
+let _ropArch     = 'auto';
+let _ropFilter   = 'all';
+let _ropLang     = 'c';
+let _ropGadgets  = [];          // all gadgets from last scan
+let _ropChain    = [];          // [{gadget, argVal}]
+let _ropSession  = null;
+let _ropFile     = null;
+let _ropBuildId  = null;
+let _ropBuildFname = null;
+let _ropFileInfo = '';
+
+// Semantic display names & order for filter pills
+const _ROP_SEMS = [
+  'all','reg_load','multi_pop','stack_pivot','syscall',
+  'arithmetic','reg_mov','mem_write','mem_read','misc'
+];
+
+// --- tab / arch / lang ---
+
+function ropSetTab(tab) {
+  _ropSrcTab = tab;
+  ['upload','session','build'].forEach(t => {
+    document.getElementById('rop-src-' + t).style.display      = t === tab ? '' : 'none';
+    document.getElementById('rop-tab-' + t + '-btn').className =
+      'btn btn-sm ' + (t === tab ? 'btn-primary' : 'btn-ghost');
+  });
+  document.getElementById('rop-results').style.display = 'none';
+  document.getElementById('rop-status').textContent    = '';
+  if (tab === 'session' && !document.getElementById('rop-session-menu').children.length) loadRopSessionList();
+  if (tab === 'build'   && !document.getElementById('rop-build-menu').children.length)   loadRopBuilds();
+}
+
+function ropSetArch(arch) {
+  _ropArch = arch;
+  ['auto','x64','x86'].forEach(a => {
+    document.getElementById('rop-arch-' + a).className =
+      'btn btn-sm ' + (a === arch ? 'btn-primary' : 'btn-ghost');
+  });
+}
+
+function ropSetLang(lang) {
+  _ropLang = lang;
+  document.getElementById('rop-lang-c').className  = 'btn btn-sm ' + (lang === 'c'  ? 'btn-primary' : 'btn-ghost');
+  document.getElementById('rop-lang-py').className = 'btn btn-sm ' + (lang === 'py' ? 'btn-primary' : 'btn-ghost');
+}
+
+// --- session / build loaders ---
+
+async function loadRopSessionList() {
+  const samples = await fetch('/api/samples').then(r => r.json()).catch(() => []);
+  const menu = document.getElementById('rop-session-menu');
+  menu.innerHTML = '';
+  if (!samples.length) { menu.innerHTML = '<div class="vt-select-opt vt-ph">no samples yet</div>'; return; }
+  samples.forEach(s => {
+    const d = document.createElement('div');
+    d.className = 'vt-select-opt';
+    d.textContent = `${s.session_id} · ${s.actor || 'unknown'} · ${s.files?.length || 0} file(s)`;
+    d.onclick = () => {
+      _ropSession = s.session_id;
+      document.getElementById('rop-session-label').textContent = `${s.session_id} (${s.actor || 'no actor'})`;
+      document.getElementById('rop-session-label').classList.remove('vt-ph');
+      vtCloseDrop('rop-session-drop');
+      _ropUpdateFileList(s);
+    };
+    menu.appendChild(d);
+  });
+}
+
+function _ropUpdateFileList(sample) {
+  const menu  = document.getElementById('rop-sfile-menu');
+  const label = document.getElementById('rop-sfile-label');
+  _ropFile = null;
+  label.textContent = '- select file -'; label.classList.add('vt-ph');
+  document.getElementById('rop-session-scan-btn').disabled = true;
+  menu.innerHTML = '';
+  (sample.files || []).forEach(f => {
+    const d = document.createElement('div');
+    d.className = 'vt-select-opt';
+    d.textContent = `${f.name} (${(f.size / 1024).toFixed(1)} KB)`;
+    d.onclick = () => {
+      _ropFile = f.name;
+      label.textContent = f.name; label.classList.remove('vt-ph');
+      vtCloseDrop('rop-sfile-drop');
+      document.getElementById('rop-session-scan-btn').disabled = false;
+    };
+    menu.appendChild(d);
+  });
+}
+
+async function loadRopBuilds() {
+  const builds    = await fetch('/api/logs?limit=50').then(r => r.json()).catch(() => []);
+  const menu      = document.getElementById('rop-build-menu');
+  menu.innerHTML  = '';
+  const available = builds.filter(b => b.status === 'success' && b.binary_files?.length);
+  if (!available.length) { menu.innerHTML = '<div class="vt-select-opt vt-ph">no compiled binaries found</div>'; return; }
+  for (const b of available) {
+    const p   = b.params || {};
+    const mod = p.slug || p.stealer || p.meow_slug || p.attack_id || p.injection || b.id;
+    for (const f of b.binary_files) {
+      const lbl = `${b.id}  ·  ${mod}  (${f.name})  ${b.created?.slice(0,16)||''}`;
+      const div = document.createElement('div');
+      div.className   = 'vt-select-opt';
+      div.textContent = lbl;
+      div.dataset.bid = b.id; div.dataset.fname = f.name;
+      div.onclick = () => {
+        _ropBuildId = b.id; _ropBuildFname = f.name;
+        const l = document.getElementById('rop-build-label');
+        l.textContent = lbl; l.className = '';
+        document.querySelectorAll('#rop-build-menu .vt-select-opt').forEach(o =>
+          o.classList.toggle('vt-selected', o.dataset.bid === b.id && o.dataset.fname === f.name));
+        vtCloseDrop('rop-build-drop');
+        document.getElementById('rop-build-scan-btn').disabled = false;
+      };
+      menu.appendChild(div);
+    }
+  }
+}
+
+// --- scan triggers ---
+
+function ropScanUpload(input) {
+  if (!input.files[0]) return;
+  _ropFileInfo = input.files[0].name;
+  const fd = new FormData();
+  fd.append('file', input.files[0]);
+  fd.append('arch', _ropArch);
+  const base = document.getElementById('rop-base-input').value.trim();
+  if (base) fd.append('image_base', base);
+  _ropRun(fetch('/api/rop/scan', {method:'POST', body:fd}).then(r => r.json()));
+}
+
+function ropScanSession() {
+  if (!_ropSession || !_ropFile) return;
+  _ropFileInfo = _ropFile;
+  const base = document.getElementById('rop-base-input').value.trim();
+  _ropRun(fetch('/api/rop/scan', {
+    method: 'POST', headers: {'Content-Type':'application/json'},
+    body: JSON.stringify({source:'session', session_id:_ropSession, filename:_ropFile,
+                          arch:_ropArch, image_base: base || undefined}),
+  }).then(r => r.json()));
+}
+
+function ropScanBuild() {
+  if (!_ropBuildId) return;
+  _ropFileInfo = _ropBuildFname || _ropBuildId;
+  const base = document.getElementById('rop-base-input').value.trim();
+  _ropRun(fetch('/api/rop/scan', {
+    method: 'POST', headers: {'Content-Type':'application/json'},
+    body: JSON.stringify({source:'build', build_id:_ropBuildId, fname:_ropBuildFname || undefined,
+                          arch:_ropArch, image_base: base || undefined}),
+  }).then(r => r.json()));
+}
+
+async function _ropRun(promise) {
+  document.getElementById('rop-status').textContent = '⏳ Scanning for gadgets…';
+  document.getElementById('rop-results').style.display = 'none';
+  let r;
+  try { r = await promise; } catch(e) { r = {ok:false, error:String(e)}; }
+  document.getElementById('rop-status').textContent = '';
+  if (!r.ok) { toast('Scan failed: ' + r.error, 'err'); return; }
+  _ropGadgets = r.gadgets || [];
+  _ropChain   = [];
+  _ropRenderAll(r);
+}
+
+// --- rendering ---
+
+function _ropRenderAll(r) {
+  _ropRenderStats(r);
+  _ropFilter = 'all';
+  _ropSetFilterBtns('all');
+  _ropRenderTable(_ropGadgets);
+  _ropRenderChain();
+  document.getElementById('rop-results').style.display = '';
+  document.getElementById('rop-results').scrollIntoView({behavior:'smooth', block:'nearest'});
+}
+
+function _ropRenderStats(r) {
+  const by = r.by_semantic || {};
+  const order = ['reg_load','multi_pop','stack_pivot','syscall','arithmetic','reg_mov','mem_write','mem_read','misc'];
+  const statItems = [
+    {n: r.total, l: `gadgets (${r.arch})`},
+    {n: (by.reg_load||0)+(by.multi_pop||0), l: 'pop/load'},
+    {n: by.stack_pivot||0, l: 'stack pivot'},
+    {n: by.syscall||0,     l: 'syscall'},
+    {n: by.arithmetic||0,  l: 'arithmetic'},
+  ];
+  document.getElementById('rop-stats-row').innerHTML = statItems.map(s =>
+    `<div class="rop-stat"><div class="rn">${s.n}</div><div class="rl">${s.l}</div></div>`
+  ).join('');
+}
+
+function _ropRenderTable(gadgets) {
+  const tbody = document.getElementById('rop-tbody');
+  document.getElementById('rop-gadget-count').textContent =
+    `${gadgets.length} gadget${gadgets.length !== 1 ? 's' : ''}`;
+
+  if (!gadgets.length) {
+    tbody.innerHTML = `<tr><td colspan="5" style="text-align:center;padding:20px;color:var(--dim)">No gadgets match the filter.</td></tr>`;
+    return;
+  }
+
+  tbody.innerHTML = gadgets.map((g, i) => {
+    const insnsHtml = g.insns.map((line, li) => {
+      const isLast = li === g.insns.length - 1;
+      const parts  = line.match(/^(\S+)\s*(.*)$/);
+      const mnem   = parts ? parts[1] : line;
+      const ops    = parts ? parts[2] : '';
+      const cls    = isLast ? 'ri-ret' : 'ri-mnem';
+      return `<span class="${cls}">${_escHtml(mnem)}</span>${ops ? ' <span class="ri-ops">'+_escHtml(ops)+'</span>' : ''}`;
+    }).join('<br>');
+
+    return `<tr data-idx="${i}">
+      <td><button class="rop-add-btn" onclick="ropChainAdd(${i})" title="Add to chain">+</button></td>
+      <td>
+        <div class="rop-addr">${g.addr}</div>
+        <div class="rop-rva">rva ${g.rva}</div>
+        <div style="font-size:10px;color:var(--dim)">${_escHtml(g.section)}</div>
+      </td>
+      <td><span class="rop-sem rs-${g.semantic}">${g.semantic}</span></td>
+      <td class="rop-insns">${insnsHtml}</td>
+      <td class="rop-bytes">${_escHtml(g.bytes)}</td>
+    </tr>`;
+  }).join('');
+}
+
+// --- filter ---
+
+function ropSetFilter(sem) {
+  _ropFilter = sem;
+  _ropSetFilterBtns(sem);
+  ropFilter();
+}
+
+function _ropSetFilterBtns(active) {
+  _ROP_SEMS.forEach(s => {
+    const el = document.getElementById('rop-f-' + s);
+    if (el) el.className = 'btn btn-xs ' + (s === active ? 'btn-primary' : 'btn-ghost');
+  });
+}
+
+function ropFilter() {
+  const q   = (document.getElementById('rop-search').value || '').toLowerCase();
+  const sem = _ropFilter;
+  const vis = _ropGadgets.filter(g => {
+    if (sem !== 'all' && g.semantic !== sem) return false;
+    if (!q) return true;
+    return (g.addr + g.rva + g.semantic + g.insns.join(' ') + g.section).toLowerCase().includes(q);
+  });
+  _ropRenderTable(vis);
+}
+
+// --- chain management ---
+
+function ropChainAdd(gadgetIdx) {
+  const g = _ropGadgets[gadgetIdx];
+  if (!g) return;
+  // determine if this gadget loads a register (needs arg slot)
+  const needsArg = g.semantic === 'reg_load' || g.semantic === 'multi_pop';
+  _ropChain.push({gadget: g, argVal: needsArg ? '' : null, idx: _ropChain.length});
+  _ropRenderChain();
+  toast(`Added ${g.insns[0]} to chain`, 'ok');
+}
+
+function ropChainRemove(chainIdx) {
+  _ropChain.splice(chainIdx, 1);
+  // re-index
+  _ropChain.forEach((item, i) => item.idx = i);
+  _ropRenderChain();
+}
+
+function ropChainClear() {
+  _ropChain = [];
+  _ropRenderChain();
+  document.getElementById('rop-out-wrap').style.display = 'none';
+}
+
+function _ropRenderChain() {
+  const body  = document.getElementById('rop-chain-body');
+  const empty = document.getElementById('rop-chain-empty');
+  const cnt   = document.getElementById('rop-chain-count');
+
+  cnt.textContent = _ropChain.length ? `${_ropChain.length} gadget${_ropChain.length!==1?'s':''}` : '';
+
+  if (!_ropChain.length) {
+    body.innerHTML = '';
+    body.appendChild(empty);
+    empty.style.display = '';
+    return;
+  }
+  empty.style.display = 'none';
+
+  body.innerHTML = _ropChain.map((item, i) => {
+    const g = item.gadget;
+    const insnsText = g.insns.map(l => _escHtml(l)).join('<br>');
+    const argSlot   = item.argVal !== null
+      ? `<input class="rop-ci-arg" placeholder="stack arg value (e.g. 0x1337)"
+               value="${_escHtml(String(item.argVal))}"
+               oninput="ropChainArgUpdate(${i}, this.value)">`
+      : '';
+    return `<div class="rop-chain-item">
+      <div class="rop-ci-idx">#${i+1}</div>
+      <div class="rop-ci-addr">${g.addr}</div>
+      <div class="rop-ci-insns">${insnsText}</div>
+      ${argSlot}
+      <button class="rop-ci-del" onclick="ropChainRemove(${i})" title="Remove">✕</button>
+    </div>`;
+  }).join('');
+}
+
+function ropChainArgUpdate(idx, val) {
+  if (_ropChain[idx]) _ropChain[idx].argVal = val;
+}
+
+// --- code generation ---
+
+function ropGenerate() {
+  if (!_ropChain.length) { toast('Chain is empty - add gadgets first', 'err'); return; }
+  const code = _ropLang === 'c' ? _ropGenC() : _ropGenPy();
+  document.getElementById('rop-out-pre').textContent = code;
+  document.getElementById('rop-out-title').textContent = _ropLang === 'c' ? 'chain.c' : 'chain.py';
+  document.getElementById('rop-out-wrap').style.display = '';
+}
+
+function _ropGenC() {
+  const arch   = _ropGadgets[0]?.section ? '' : '';
+  const ptrType = (_ropGadgets.length && _ropGadgets[0].addr.length > 10) ? 'ULONG_PTR' : 'DWORD';
+  const lines = [
+    `/* ROP chain - ${_ropFileInfo} (${_ropGadgets[0] ? (_ropGadgets[0].addr.length > 10 ? 'x64' : 'x86') : 'x64'}) */`,
+    `/* Generated by peekaboo ROP Builder */`,
+    `#include <windows.h>`,
+    ``,
+    `${ptrType} rop_chain[] = {`,
+  ];
+
+  for (const item of _ropChain) {
+    const g      = item.gadget;
+    const comment = `/* ${g.insns.join(' ; ')} */`;
+    lines.push(`    ${g.addr},  ${comment}`);
+    if (item.argVal !== null) {
+      const argVal = item.argVal.trim() || '0x0';
+      const pops   = g.insns.filter(l => l.trim().startsWith('pop')).length;
+      for (let p = 0; p < pops; p++) {
+        const reg = g.insns[p]?.split(' ')[1] || '?';
+        lines.push(`    ${argVal},  /* ${reg} = ${argVal} */`);
+      }
+    }
+  }
+  lines.push(`};`);
+  lines.push(``);
+  lines.push(`/* Stack setup example (x64): */`);
+  lines.push(`/* memcpy((void*)stack_ptr, rop_chain, sizeof(rop_chain)); */`);
+  return lines.join('\n');
+}
+
+function _ropGenPy() {
+  const lines = [
+    `# ROP chain - ${_ropFileInfo}`,
+    `# Generated by peekaboo ROP Builder`,
+    ``,
+    `chain = [`,
+  ];
+  for (const item of _ropChain) {
+    const g       = item.gadget;
+    const comment = `# ${g.insns.join(' ; ')}`;
+    lines.push(`    ${g.addr},  ${comment}`);
+    if (item.argVal !== null) {
+      const argVal = item.argVal.trim() || '0x0';
+      const pops   = g.insns.filter(l => l.trim().startsWith('pop')).length;
+      for (let p = 0; p < pops; p++) {
+        const reg = g.insns[p]?.split(' ')[1] || '?';
+        lines.push(`    ${argVal},  # ${reg} = ${argVal}`);
+      }
+    }
+  }
+  lines.push(`]`);
+  lines.push(``);
+  lines.push(`# Pack as little-endian 8-byte addresses:`);
+  lines.push(`import struct`);
+  lines.push(`payload = b"".join(struct.pack("<Q", a) for a in chain)`);
+  return lines.join('\n');
+}
+
+function ropCopy() {
+  navigator.clipboard.writeText(document.getElementById('rop-out-pre').textContent)
+    .then(() => toast('Copied to clipboard', 'ok'));
+}
+
+function ropDownload() {
+  const code = document.getElementById('rop-out-pre').textContent;
+  const ext  = _ropLang === 'c' ? 'c' : 'py';
+  const blob = new Blob([code], {type:'text/plain'});
+  const a    = document.createElement('a');
+  a.href     = URL.createObjectURL(blob);
+  a.download = `rop_chain.${ext}`;
   a.click();
 }
 </script>

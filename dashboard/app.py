@@ -2568,5 +2568,115 @@ def api_antianalysis_scan():
     return jsonify({"ok": False, "error": "provide a file upload or source+session_id/build_id"}), 400
 
 
+# -- ROP Chain Builder --------------------------------------------------------
+
+def _rop_parse_params(data: dict):
+    arch       = data.get("arch", "auto")
+    if arch not in ("auto", "x64", "x86"):
+        arch = "auto"
+    base_str   = str(data.get("image_base", "")).strip()
+    image_base = None
+    if base_str:
+        try:
+            image_base = int(base_str, 16) if base_str.startswith("0x") else int(base_str, 0)
+        except ValueError:
+            pass
+    return arch, image_base
+
+
+@app.route("/api/rop/scan", methods=["POST"])
+def api_rop_scan():
+    """Find ROP gadgets in an uploaded PE/DLL or raw binary."""
+    try:
+        from rop_builder import scan_pe as _rop_pe, scan_raw as _rop_raw
+    except Exception as exc:
+        return jsonify({"ok": False, "error": str(exc)}), 500
+
+    # --- file upload ---
+    if "file" in request.files:
+        f = request.files["file"]
+        if not f.filename:
+            return jsonify({"ok": False, "error": "empty filename"}), 400
+        raw = f.read()
+        if not raw:
+            return jsonify({"ok": False, "error": "empty file"}), 400
+        arch_str   = request.form.get("arch", "auto")
+        base_str   = request.form.get("image_base", "").strip()
+        image_base = None
+        if base_str:
+            try:
+                image_base = int(base_str, 16) if base_str.startswith("0x") else int(base_str, 0)
+            except ValueError:
+                pass
+        if arch_str not in ("auto", "x64", "x86"):
+            arch_str = "auto"
+        import tempfile, os
+        tmp = tempfile.NamedTemporaryFile(delete=False, suffix=".bin")
+        tmp.write(raw); tmp.close()
+        try:
+            result = _rop_pe(Path(tmp.name), arch=arch_str, image_base=image_base)
+            if not result["ok"]:
+                result = _rop_raw(raw,
+                                  arch="x64" if arch_str == "auto" else arch_str,
+                                  image_base=image_base or 0x400000)
+        finally:
+            os.unlink(tmp.name)
+        result["file_name"] = f.filename
+        return jsonify(result)
+
+    # --- JSON: session / build source ---
+    data = request.get_json(force=True, silent=True) or {}
+    arch, image_base = _rop_parse_params(data)
+    source = data.get("source", "")
+
+    if source == "session":
+        session_id = data.get("session_id", "").strip()
+        filename   = data.get("filename",   "").strip()
+        if not session_id or not filename:
+            return jsonify({"ok": False, "error": "session_id and filename required"}), 400
+        filepath = (SAMPLES_DIR / session_id / filename).resolve()
+        if not str(filepath).startswith(str(SAMPLES_DIR.resolve())):
+            return jsonify({"ok": False, "error": "invalid path"}), 400
+        if not filepath.exists():
+            return jsonify({"ok": False, "error": "file not found"}), 404
+        result = _rop_pe(filepath, arch=arch, image_base=image_base)
+        if not result["ok"]:
+            result = _rop_raw(filepath.read_bytes(),
+                              arch="x64" if arch == "auto" else arch,
+                              image_base=image_base or 0x400000)
+        result["file_name"] = filename
+        return jsonify(result)
+
+    if source == "build":
+        build_id = data.get("build_id", "").strip()
+        if not build_id:
+            return jsonify({"ok": False, "error": "build_id required"}), 400
+        with _lock:
+            job = dict(_builds.get(build_id, {}))
+        if not job:
+            job = _db.get_build(build_id) or {}
+        if not job or job.get("status") != "success":
+            return jsonify({"ok": False, "error": "build not found or not successful"}), 404
+        p = _resolve_build_binary(job)
+        if not p:
+            return jsonify({"ok": False, "error": "binary not found on disk"}), 404
+        fname = data.get("fname", "").strip()
+        if fname and fname != p.name:
+            if "/" in fname or "\\" in fname:
+                return jsonify({"ok": False, "error": "invalid fname"}), 400
+            alt = p.parent / fname
+            if alt.exists():
+                p = alt
+        result = _rop_pe(p, arch=arch, image_base=image_base)
+        if not result["ok"]:
+            result = _rop_raw(p.read_bytes(),
+                              arch="x64" if arch == "auto" else arch,
+                              image_base=image_base or 0x400000)
+        result["file_name"] = p.name
+        return jsonify(result)
+
+    return jsonify({"ok": False, "error": "provide a file upload or source+session_id/build_id"}), 400
+
+
 if __name__ == "__main__":
     app.run(debug=True, host="0.0.0.0", port=5000)
