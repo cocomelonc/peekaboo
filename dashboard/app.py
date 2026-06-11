@@ -2269,6 +2269,99 @@ def api_artifacts_rebuild():
     )
 
 
+# -- Shellcode Emulator -------------------------------------------------------
+
+@app.route("/api/scemu/run", methods=["POST"])
+def api_scemu_run():
+    """Emulate shellcode bytes; accepts multipart (file) or JSON (hex/base64)."""
+    arch      = "x64"
+    max_insns = 5000
+    raw: bytes | None = None
+
+    if "file" in request.files:
+        raw  = request.files["file"].read()
+        arch = request.form.get("arch", "x64")
+        try:
+            max_insns = int(request.form.get("max_insns", 5000))
+        except ValueError:
+            pass
+    else:
+        data = request.get_json(force=True) or {}
+        arch = data.get("arch", "x64")
+        try:
+            max_insns = int(data.get("max_insns", 5000))
+        except (ValueError, TypeError):
+            pass
+        hex_str = data.get("hex", "").replace(" ", "").replace("\n", "")
+        b64_str = data.get("base64", "")
+        if hex_str:
+            try:
+                raw = bytes.fromhex(hex_str)
+            except ValueError as exc:
+                return jsonify({"ok": False, "error": f"invalid hex: {exc}"}), 400
+        elif b64_str:
+            import base64 as _b64
+            try:
+                raw = _b64.b64decode(b64_str)
+            except Exception as exc:
+                return jsonify({"ok": False, "error": f"invalid base64: {exc}"}), 400
+
+    if not raw:
+        return jsonify({"ok": False, "error": "no shellcode provided"}), 400
+    if len(raw) > 2 * 1024 * 1024:
+        return jsonify({"ok": False, "error": "shellcode too large (max 2 MB)"}), 400
+    if arch not in ("x86", "x64"):
+        return jsonify({"ok": False, "error": "arch must be 'x86' or 'x64'"}), 400
+    max_insns = min(max(100, max_insns), 50_000)
+
+    try:
+        from sc_emulator import emulate as _sc_emu
+        return jsonify(_sc_emu(raw, arch, max_insns))
+    except Exception as exc:
+        return jsonify({"ok": False, "error": str(exc)}), 500
+
+
+@app.route("/api/scemu/disasm", methods=["POST"])
+def api_scemu_disasm():
+    """Pure Capstone disassembly - no execution."""
+    raw: bytes | None = None
+    arch = "x64"
+
+    if "file" in request.files:
+        raw  = request.files["file"].read()
+        arch = request.form.get("arch", "x64")
+    else:
+        data = request.get_json(force=True) or {}
+        arch = data.get("arch", "x64")
+        hex_str = data.get("hex", "").replace(" ", "").replace("\n", "")
+        if hex_str:
+            try:
+                raw = bytes.fromhex(hex_str)
+            except ValueError as exc:
+                return jsonify({"ok": False, "error": f"invalid hex: {exc}"}), 400
+
+    if not raw:
+        return jsonify({"ok": False, "error": "no bytes provided"}), 400
+    if arch not in ("x86", "x64"):
+        return jsonify({"ok": False, "error": "arch must be 'x86' or 'x64'"}), 400
+
+    try:
+        import capstone as cs
+        mode = cs.CS_MODE_64 if arch == "x64" else cs.CS_MODE_32
+        md   = cs.Cs(cs.CS_ARCH_X86, mode)
+        insns = []
+        for i in md.disasm(raw[:4096], 0):
+            insns.append({
+                "offset": hex(i.address),
+                "bytes":  i.bytes.hex(" "),
+                "mnem":   i.mnemonic,
+                "ops":    i.op_str,
+            })
+        return jsonify({"ok": True, "arch": arch, "count": len(insns), "insns": insns})
+    except Exception as exc:
+        return jsonify({"ok": False, "error": str(exc)}), 500
+
+
 # ---------------------------------------------------------------------------
 # PE Inspector
 # ---------------------------------------------------------------------------
@@ -2388,6 +2481,91 @@ def api_hellsgate_generate():
                         "language": language})
     except Exception as exc:
         return jsonify({"ok": False, "error": str(exc)}), 500
+
+
+# -- Anti-Analysis Pattern Scanner -------------------------------------------
+
+@app.route("/api/antianalysis/scan", methods=["POST"])
+def api_antianalysis_scan():
+    """Scan a PE or raw binary for anti-debug/anti-VM patterns."""
+    try:
+        from anti_analysis import scan_pe as _aa_pe, scan_raw as _aa_raw
+    except Exception as exc:
+        return jsonify({"ok": False, "error": str(exc)}), 500
+
+    arch = (request.form.get("arch") or
+            (request.get_json(force=True, silent=True) or {}).get("arch", "auto"))
+    if arch not in ("auto", "x64", "x86"):
+        arch = "auto"
+
+    # --- upload ---
+    if "file" in request.files:
+        f = request.files["file"]
+        if not f.filename:
+            return jsonify({"ok": False, "error": "empty filename"}), 400
+        raw = f.read()
+        if not raw:
+            return jsonify({"ok": False, "error": "empty file"}), 400
+        # try as PE first, fall back to raw
+        import tempfile, os
+        tmp = tempfile.NamedTemporaryFile(delete=False, suffix=".bin")
+        tmp.write(raw); tmp.close()
+        try:
+            result = _aa_pe(Path(tmp.name), arch=arch)
+            if not result["ok"]:
+                result = _aa_raw(raw, arch="x64" if arch == "auto" else arch)
+        finally:
+            os.unlink(tmp.name)
+        result["file_name"] = f.filename
+        return jsonify(result)
+
+    # --- JSON: session source ---
+    data = request.get_json(force=True, silent=True) or {}
+    source = data.get("source", "")
+
+    if source == "session":
+        session_id = data.get("session_id", "").strip()
+        filename   = data.get("filename",   "").strip()
+        if not session_id or not filename:
+            return jsonify({"ok": False, "error": "session_id and filename required"}), 400
+        filepath = (SAMPLES_DIR / session_id / filename).resolve()
+        if not str(filepath).startswith(str(SAMPLES_DIR.resolve())):
+            return jsonify({"ok": False, "error": "invalid path"}), 400
+        if not filepath.exists():
+            return jsonify({"ok": False, "error": "file not found"}), 404
+        result = _aa_pe(filepath, arch=arch)
+        if not result["ok"]:
+            result = _aa_raw(filepath.read_bytes(), arch="x64" if arch == "auto" else arch)
+        result["file_name"] = filename
+        return jsonify(result)
+
+    if source == "build":
+        build_id = data.get("build_id", "").strip()
+        if not build_id:
+            return jsonify({"ok": False, "error": "build_id required"}), 400
+        with _lock:
+            job = dict(_builds.get(build_id, {}))
+        if not job:
+            job = _db.get_build(build_id) or {}
+        if not job or job.get("status") != "success":
+            return jsonify({"ok": False, "error": "build not found or not successful"}), 404
+        p = _resolve_build_binary(job)
+        if not p:
+            return jsonify({"ok": False, "error": "binary not found on disk"}), 404
+        fname = data.get("fname", "").strip()
+        if fname and fname != p.name:
+            if "/" in fname or "\\" in fname:
+                return jsonify({"ok": False, "error": "invalid fname"}), 400
+            alt = p.parent / fname
+            if alt.exists():
+                p = alt
+        result = _aa_pe(p, arch=arch)
+        if not result["ok"]:
+            result = _aa_raw(p.read_bytes(), arch="x64" if arch == "auto" else arch)
+        result["file_name"] = p.name
+        return jsonify(result)
+
+    return jsonify({"ok": False, "error": "provide a file upload or source+session_id/build_id"}), 400
 
 
 if __name__ == "__main__":

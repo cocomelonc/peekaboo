@@ -668,6 +668,55 @@ code{font-family:var(--mono);font-size:12px;background:var(--bg4);padding:1px 5p
 .page-bar .pg-btn:disabled{opacity:.35;cursor:default}
 .page-bar .pg-info{font-size:11px;color:var(--dim);margin-left:auto}
 
+/* -- Shellcode Emulator -- */
+.emu-layout{display:grid;grid-template-columns:1fr 1fr;gap:16px}
+@media(max-width:1100px){.emu-layout{grid-template-columns:1fr}}
+.emu-input-area{font-family:'Courier New',monospace;font-size:12px;width:100%;resize:vertical;min-height:120px;background:var(--bg3);border:1px solid var(--sep);border-radius:6px;color:var(--text);padding:10px;line-height:1.5}
+.emu-input-area:focus{outline:none;border-color:var(--purple)}
+.emu-stats-row{display:flex;gap:10px;flex-wrap:wrap;margin-bottom:14px}
+.emu-stat{flex:1;min-width:100px;background:var(--bg2);border:1px solid var(--sep);border-radius:8px;padding:10px 14px;text-align:center}
+.emu-stat .es-n{font-size:22px;font-weight:700;line-height:1;color:var(--purple)}
+.emu-stat .es-l{font-size:11px;color:var(--text2);margin-top:3px;text-transform:uppercase;letter-spacing:.5px}
+.emu-stat-smc .es-n{color:var(--red)}
+.emu-stat-ok  .es-n{color:var(--green)}
+.emu-trace-wrap{max-height:340px;overflow-y:auto;background:var(--bg2);border:1px solid var(--sep);border-radius:8px}
+.emu-trace-table{width:100%;border-collapse:collapse;font-size:11px;font-family:'Courier New',monospace}
+.emu-trace-table th{background:var(--bg3);color:var(--text2);padding:5px 8px;text-align:left;position:sticky;top:0;z-index:1;font-size:10px;text-transform:uppercase;letter-spacing:.4px;white-space:nowrap}
+.emu-trace-table td{padding:3px 8px;border-bottom:1px solid rgba(255,255,255,.03);vertical-align:top;white-space:nowrap}
+.emu-trace-table tr:hover td{background:rgba(255,255,255,.03)}
+.emu-tr-addr{color:var(--dim)}
+.emu-tr-bytes{color:#6b7280}
+.emu-tr-mnem{color:#c084fc;font-weight:600;min-width:80px;display:inline-block}
+.emu-tr-ops{color:#60a5fa}
+.emu-tr-call .emu-tr-mnem{color:var(--red)}
+.emu-tr-ret  .emu-tr-mnem{color:var(--green)}
+.emu-tr-smc  td{background:rgba(248,113,113,.07)}
+.emu-reg-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(150px,1fr));gap:6px;font-family:monospace;font-size:12px}
+.emu-reg{background:var(--bg3);border:1px solid var(--sep);border-radius:5px;padding:5px 10px;display:flex;justify-content:space-between}
+.emu-reg-name{color:var(--text2);font-size:11px}
+.emu-reg-val{color:#60a5fa;font-weight:600}
+.emu-mem-wrap{max-height:220px;overflow-y:auto;background:var(--bg2);border:1px solid var(--sep);border-radius:8px}
+.emu-mem-table{width:100%;border-collapse:collapse;font-size:11px;font-family:'Courier New',monospace}
+.emu-mem-table th{background:var(--bg3);color:var(--text2);padding:5px 8px;text-align:left;position:sticky;top:0;font-size:10px;text-transform:uppercase;letter-spacing:.4px}
+.emu-mem-table td{padding:3px 8px;border-bottom:1px solid rgba(255,255,255,.03)}
+.emu-mw{color:#f87171}.emu-mr{color:#4ade80}
+.emu-api-row{display:flex;align-items:center;gap:8px;padding:5px 10px;border-bottom:1px solid rgba(255,255,255,.04);font-size:12px;font-family:monospace}
+.emu-api-target{color:var(--red)}.emu-api-note{color:#f59e0b}
+.emu-disasm-wrap{max-height:400px;overflow-y:auto;background:var(--bg2);border:1px solid var(--sep);border-radius:8px}
+.emu-disasm-table{width:100%;border-collapse:collapse;font-size:11px;font-family:'Courier New',monospace}
+.emu-disasm-table th{background:var(--bg3);color:var(--text2);padding:5px 8px;text-align:left;position:sticky;top:0;font-size:10px;text-transform:uppercase;letter-spacing:.4px}
+.emu-disasm-table td{padding:3px 8px;border-bottom:1px solid rgba(255,255,255,.03)}
+.emu-di-off{color:var(--dim)}.emu-di-b{color:#6b7280}.emu-di-m{color:#c084fc;font-weight:600}.emu-di-o{color:#60a5fa}
+.emu-section{margin-bottom:16px}
+.emu-section-hdr{display:flex;align-items:center;gap:8px;margin-bottom:8px}
+.emu-section-hdr h4{font-size:12px;font-weight:600;color:var(--text2);text-transform:uppercase;letter-spacing:.5px;margin:0}
+.emu-badge{display:inline-block;padding:2px 7px;border-radius:4px;font-size:10px;font-weight:700;letter-spacing:.3px}
+.emu-badge-ok{background:rgba(74,222,128,.15);color:#4ade80}
+.emu-badge-warn{background:rgba(251,191,36,.15);color:#fbbf24}
+.emu-badge-err{background:rgba(248,113,113,.15);color:#f87171}
+.emu-smc-banner{background:rgba(248,113,113,.12);border:1px solid rgba(248,113,113,.3);border-radius:6px;padding:8px 14px;font-size:12px;color:#f87171;margin-bottom:12px}
+.emu-strings-list{display:flex;flex-wrap:wrap;gap:6px}
+.emu-string-tag{background:var(--bg3);border:1px solid var(--sep);border-radius:4px;padding:2px 8px;font-family:monospace;font-size:11px;color:var(--text)}
 /* -- Hell's Gate panel -- */
 .hg-stats-row{display:flex;gap:10px;margin-bottom:16px;flex-wrap:wrap}
 .hg-stat{flex:1;min-width:110px;background:var(--bg2);border:1px solid var(--sep);border-radius:8px;padding:12px 16px;text-align:center}
@@ -717,6 +766,35 @@ code{font-family:var(--mono);font-size:12px;background:var(--bg4);padding:1px 5p
 .hg-upload-drop{border:2px dashed var(--sep);border-radius:8px;padding:28px 20px;text-align:center;color:var(--text2);font-size:13px;cursor:pointer;transition:border-color .15s,background .15s}
 .hg-upload-drop:hover,.hg-upload-drop.drag{border-color:var(--purple);background:rgba(181,123,255,.05);color:var(--text)}
 .hg-hint{font-size:11px;color:var(--dim);margin-top:4px}
+/* -- Anti-Analysis Scanner panel -- */
+.aa-stats-row{display:flex;gap:10px;margin-bottom:16px;flex-wrap:wrap}
+.aa-stat{flex:1;min-width:100px;background:var(--bg2);border:1px solid var(--sep);border-radius:8px;padding:12px 16px;text-align:center}
+.aa-stat .aa-n{font-size:26px;font-weight:700;line-height:1;color:var(--purple)}
+.aa-stat .aa-l{font-size:11px;color:var(--text2);margin-top:4px;text-transform:uppercase;letter-spacing:.5px}
+.aa-stat-debug .aa-n{color:var(--red)}
+.aa-stat-vm    .aa-n{color:var(--orange)}
+.aa-stat-timing .aa-n{color:var(--yellow)}
+.aa-stat-evasion .aa-n{color:var(--cyan)}
+.aa-mitre-row{display:flex;flex-wrap:wrap;gap:6px;margin-bottom:14px}
+.aa-mitre-chip{display:inline-flex;align-items:center;gap:5px;padding:3px 10px;border-radius:12px;font-size:11px;font-weight:600;background:rgba(181,123,255,.12);border:1px solid rgba(181,123,255,.3);color:var(--purple);font-family:monospace}
+.aa-mitre-chip .aa-mc-ids{font-size:10px;color:var(--text2);font-weight:400}
+.aa-tbl-wrap{overflow-x:auto;margin-bottom:16px}
+.aa-tbl{width:100%;border-collapse:collapse;font-size:12px}
+.aa-tbl th{background:var(--bg3);color:var(--text2);font-weight:600;padding:6px 10px;text-align:left;border-bottom:1px solid var(--sep);white-space:nowrap;font-size:11px;text-transform:uppercase;letter-spacing:.4px;position:sticky;top:0;z-index:1}
+.aa-tbl td{padding:5px 10px;border-bottom:1px solid rgba(255,255,255,.04);vertical-align:middle}
+.aa-tbl tr:hover td{background:rgba(255,255,255,.03)}
+.aa-badge{display:inline-block;padding:2px 7px;border-radius:4px;font-size:10px;font-weight:700;letter-spacing:.4px;text-transform:uppercase}
+.aa-sev-high  {background:rgba(248,113,113,.15);color:#f87171;border:1px solid rgba(248,113,113,.3)}
+.aa-sev-medium{background:rgba(251,191,36,.13); color:#fbbf24;border:1px solid rgba(251,191,36,.3)}
+.aa-sev-low   {background:rgba(74,222,128,.12); color:#4ade80;border:1px solid rgba(74,222,128,.3)}
+.aa-cat-badge{display:inline-block;padding:2px 7px;border-radius:4px;font-size:10px;font-weight:600;background:var(--bg3);border:1px solid var(--sep);color:var(--text2)}
+.aa-mitre-id{font-family:monospace;font-size:11px;color:var(--purple);font-weight:600}
+.aa-offset{font-family:monospace;font-size:11px;color:var(--dim)}
+.aa-bytes{font-family:'Courier New',monospace;font-size:11px;color:#6b7280;white-space:nowrap}
+.aa-name{font-weight:600;color:var(--text)}
+.aa-desc{font-size:11px;color:var(--text2);max-width:340px;white-space:normal;line-height:1.4}
+.aa-filter-row{display:flex;gap:8px;align-items:center;margin-bottom:10px;flex-wrap:wrap}
+.aa-tbl-scroll{max-height:480px;overflow-y:auto;background:var(--bg2);border:1px solid var(--sep);border-radius:8px}
 </style>
 </head>
 <body>
@@ -746,6 +824,12 @@ code{font-family:var(--mono);font-size:12px;background:var(--bg4);padding:1px 5p
     </div>
     <div class="nav-item" onclick="showPanel('hellsgate')" id="nav-hellsgate">
       <span class="nav-icon">⚡</span> Hell's Gate
+    </div>
+    <div class="nav-item" onclick="showPanel('scemu')" id="nav-scemu">
+      <span class="nav-icon">🧬</span> SC Emulator
+    </div>
+    <div class="nav-item" onclick="showPanel('antianalysis')" id="nav-antianalysis">
+      <span class="nav-icon">🔍</span> Anti-Analysis
     </div>
     <div class="nav-item" onclick="showPanel('library')" id="nav-library">
       <span class="nav-icon">📦</span> Module Library
@@ -1760,6 +1844,156 @@ code{font-family:var(--mono);font-size:12px;background:var(--bg4);padding:1px 5p
   </div>
 </div>
 
+<!-- ════════ SHELLCODE EMULATOR ════════ -->
+<div id="panel-scemu" class="panel">
+
+  <!-- input card -->
+  <div class="card mb-16">
+    <div class="card-header">
+      <span style="font-size:22px">🧬</span>
+      <div>
+        <div class="card-title">Shellcode Emulator</div>
+        <div class="card-sub">x86/x64 · Unicorn Engine · per-instruction trace · API intercept · SMC detection</div>
+      </div>
+    </div>
+
+    <!-- source tabs -->
+    <div class="filter-bar" style="margin-bottom:12px">
+      <button class="btn btn-primary btn-sm" id="scemu-tab-hex-btn"    onclick="scemuSetTab('hex')">Hex / Paste</button>
+      <button class="btn btn-ghost btn-sm"   id="scemu-tab-upload-btn" onclick="scemuSetTab('upload')">Upload binary</button>
+      <button class="btn btn-ghost btn-sm"   id="scemu-tab-disasm-btn" onclick="scemuSetTab('disasm')">Disasm only</button>
+      <div style="margin-left:auto;display:flex;gap:8px;align-items:center">
+        <span class="text-dim" style="font-size:12px">Arch:</span>
+        <button class="btn btn-sm btn-primary" id="scemu-arch-x64" onclick="scemuSetArch('x64')">x64</button>
+        <button class="btn btn-sm btn-ghost"   id="scemu-arch-x86" onclick="scemuSetArch('x86')">x86</button>
+        <span class="text-dim" style="font-size:12px;margin-left:4px">Max insns:</span>
+        <input id="scemu-max-insns" type="number" value="5000" min="100" max="50000"
+               style="width:70px;text-align:right">
+      </div>
+    </div>
+
+    <!-- hex/paste tab -->
+    <div id="scemu-src-hex">
+      <textarea id="scemu-hex-input" class="emu-input-area"
+                placeholder="Paste hex bytes: 48 31 c0 b8 37 13 00 00 c3&#10;or C-style: \x48\x31\xc0&#10;or base64 encoded shellcode"></textarea>
+      <div class="filter-bar" style="margin-top:8px">
+        <button class="btn btn-primary" onclick="scemuRun()">▶ Emulate</button>
+        <button class="btn btn-ghost btn-sm" onclick="scemuClear()">✕ Clear</button>
+        <span id="scemu-byte-count" class="text-dim" style="font-size:12px"></span>
+      </div>
+    </div>
+
+    <!-- upload tab -->
+    <div id="scemu-src-upload" style="display:none">
+      <label class="btn btn-primary" style="cursor:pointer">
+        📂 Choose shellcode file (.bin / .exe / any)
+        <input type="file" id="scemu-file-input" style="display:none"
+               onchange="scemuFileSelected(this)">
+      </label>
+      <span id="scemu-file-name" class="text-dim" style="font-size:12px;margin-left:10px"></span>
+      <div style="margin-top:10px">
+        <button class="btn btn-primary" id="scemu-upload-run-btn" onclick="scemuRunFile()" disabled>▶ Emulate</button>
+      </div>
+    </div>
+
+    <!-- disasm-only tab -->
+    <div id="scemu-src-disasm" style="display:none">
+      <textarea id="scemu-disasm-input" class="emu-input-area"
+                placeholder="Paste hex bytes for static disassembly only (no execution)"></textarea>
+      <div style="margin-top:8px">
+        <button class="btn btn-primary" onclick="scemuDisasmOnly()">🔍 Disassemble</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- results - hidden until run -->
+  <div id="scemu-results" style="display:none">
+
+    <!-- stats row -->
+    <div class="emu-stats-row" id="scemu-stats-row"></div>
+
+    <!-- SMC banner -->
+    <div id="scemu-smc-banner" class="emu-smc-banner" style="display:none">
+      ⚠ <strong>Self-modifying code detected</strong> - shellcode wrote to its own code region.
+      This is a classic decoder/unpacker pattern (XOR loop, ADD loop, etc.).
+    </div>
+
+    <!-- two-column layout: trace | right panel -->
+    <div class="emu-layout">
+
+      <!-- LEFT: instruction trace -->
+      <div>
+        <div class="emu-section-hdr">
+          <h4>Instruction Trace</h4>
+          <span id="scemu-trace-badge" class="emu-badge emu-badge-ok"></span>
+        </div>
+        <div class="emu-trace-wrap">
+          <table class="emu-trace-table">
+            <thead><tr>
+              <th>Address</th><th>Bytes</th><th>Instruction</th><th>RIP/EIP</th>
+            </tr></thead>
+            <tbody id="scemu-trace-body"></tbody>
+          </table>
+        </div>
+      </div>
+
+      <!-- RIGHT: registers + API calls + strings -->
+      <div>
+
+        <!-- Final register state -->
+        <div class="emu-section">
+          <div class="emu-section-hdr"><h4>Register State (exit)</h4></div>
+          <div class="emu-reg-grid" id="scemu-regs"></div>
+        </div>
+
+        <!-- API intercepts -->
+        <div class="emu-section" id="scemu-api-section" style="display:none">
+          <div class="emu-section-hdr">
+            <h4>API Call Intercepts</h4>
+            <span id="scemu-api-badge" class="emu-badge emu-badge-warn"></span>
+          </div>
+          <div style="background:var(--bg2);border:1px solid var(--sep);border-radius:8px;overflow:hidden" id="scemu-api-list"></div>
+        </div>
+
+        <!-- Extracted strings -->
+        <div class="emu-section" id="scemu-strings-section" style="display:none">
+          <div class="emu-section-hdr"><h4>Extracted Strings</h4></div>
+          <div class="emu-strings-list" id="scemu-strings-list"></div>
+        </div>
+
+      </div>
+    </div><!-- /emu-layout -->
+
+    <!-- Memory access log (full width) -->
+    <div class="emu-section">
+      <div class="emu-section-hdr">
+        <h4>Memory Access Log</h4>
+        <span id="scemu-mem-badge" class="emu-badge emu-badge-ok"></span>
+      </div>
+      <div class="emu-mem-wrap">
+        <table class="emu-mem-table">
+          <thead><tr><th>R/W</th><th>Address</th><th>Size</th><th>Value</th></tr></thead>
+          <tbody id="scemu-mem-body"></tbody>
+        </table>
+      </div>
+    </div>
+
+    <!-- Disasm-only output (shown only for disasm tab) -->
+    <div class="emu-section" id="scemu-disasm-section" style="display:none">
+      <div class="emu-section-hdr"><h4>Static Disassembly</h4>
+        <span id="scemu-disasm-badge" class="emu-badge emu-badge-ok"></span>
+      </div>
+      <div class="emu-disasm-wrap">
+        <table class="emu-disasm-table">
+          <thead><tr><th>Offset</th><th>Bytes</th><th>Mnemonic</th><th>Operands</th></tr></thead>
+          <tbody id="scemu-disasm-body"></tbody>
+        </table>
+      </div>
+    </div>
+
+  </div><!-- /scemu-results -->
+</div><!-- /panel-scemu -->
+
 <!-- ════════ HELL'S GATE ════════ -->
 <div id="panel-hellsgate" class="panel">
 
@@ -1877,6 +2111,149 @@ code{font-family:var(--mono);font-size:12px;background:var(--bg4);padding:1px 5p
 
   </div><!-- /hg-results -->
 </div><!-- /panel-hellsgate -->
+
+<!-- ════════ ANTI-ANALYSIS PATTERN SCANNER ════════ -->
+<div id="panel-antianalysis" class="panel">
+
+  <!-- source tabs -->
+  <div class="filter-bar" style="margin-bottom:16px">
+    <button class="btn btn-primary btn-sm" id="aa-tab-upload-btn"  onclick="aaSetTab('upload')">Upload</button>
+    <button class="btn btn-ghost btn-sm"   id="aa-tab-session-btn" onclick="aaSetTab('session')">From Session</button>
+    <button class="btn btn-ghost btn-sm"   id="aa-tab-build-btn"   onclick="aaSetTab('build')">🔨 From Build</button>
+    <div style="margin-left:auto;display:flex;gap:8px;align-items:center">
+      <span style="font-size:12px;color:var(--dim)">Arch:</span>
+      <button class="btn btn-sm btn-primary" id="aa-arch-auto" onclick="aaSetArch('auto')">Auto</button>
+      <button class="btn btn-sm btn-ghost"   id="aa-arch-x64"  onclick="aaSetArch('x64')">x64</button>
+      <button class="btn btn-sm btn-ghost"   id="aa-arch-x86"  onclick="aaSetArch('x86')">x86</button>
+    </div>
+    <span id="aa-status" class="text-dim" style="font-size:12px;flex-shrink:0"></span>
+  </div>
+
+  <!-- UPLOAD tab -->
+  <div id="aa-src-upload">
+    <div class="card mb-16">
+      <div class="card-header">
+        <span style="font-size:22px">🔍</span>
+        <div>
+          <div class="card-title">Anti-Analysis Pattern Scanner</div>
+          <div class="card-sub">static Capstone scan for anti-debug · anti-VM · timing · evasion patterns</div>
+        </div>
+        <label class="btn btn-primary btn-sm" style="margin-left:auto;cursor:pointer">
+          📂 Choose file
+          <input type="file" id="aa-upload-input" accept=".exe,.dll,.sys,.bin,.raw"
+                 style="display:none" onchange="aaScanUpload(this)">
+        </label>
+      </div>
+      <div class="hg-hint" style="padding:0 4px 4px">
+        Upload a PE binary (<code>.exe</code>, <code>.dll</code>, <code>.sys</code>) or raw shellcode blob.
+        The scanner disassembles all executable sections with <strong>Capstone</strong> and matches
+        15 pattern rules mapped to <strong>MITRE ATT&CK</strong> T1622, T1497.001 and T1497.003.
+        No code is executed - static analysis only.
+      </div>
+    </div>
+  </div>
+
+  <!-- FROM SESSION tab -->
+  <div id="aa-src-session" style="display:none">
+    <div class="card mb-16">
+      <div class="card-header">
+        <span style="font-size:22px">🔍</span>
+        <div><div class="card-title">Anti-Analysis Scanner</div><div class="card-sub">select a compiled session sample</div></div>
+        <button class="btn btn-ghost btn-sm" style="margin-left:auto" onclick="loadAaSessionList()">↻ Refresh</button>
+      </div>
+      <div class="vt-pick-row">
+        <div class="vt-select vt-drop-wide" id="aa-session-drop">
+          <div class="vt-select-val" onclick="vtToggleDrop('aa-session-drop')">
+            <span id="aa-session-label" class="vt-ph">- select session -</span>
+            <span class="vt-select-arrow">▼</span>
+          </div>
+          <div class="vt-select-menu" id="aa-session-menu"></div>
+        </div>
+        <div class="vt-select vt-drop-narrow" id="aa-sfile-drop">
+          <div class="vt-select-val" onclick="vtToggleDrop('aa-sfile-drop')">
+            <span id="aa-sfile-label" class="vt-ph">- select file -</span>
+            <span class="vt-select-arrow">▼</span>
+          </div>
+          <div class="vt-select-menu" id="aa-sfile-menu"></div>
+        </div>
+        <button class="btn btn-primary vt-pick-btn" id="aa-session-scan-btn"
+                onclick="aaScanSession()" disabled>🔍 Scan</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- FROM BUILD tab -->
+  <div id="aa-src-build" style="display:none">
+    <div class="card mb-16">
+      <div class="card-header">
+        <span style="font-size:22px">🔍</span>
+        <div><div class="card-title">Anti-Analysis Scanner</div><div class="card-sub">select a compiled build binary</div></div>
+        <button class="btn btn-ghost btn-sm" style="margin-left:auto" onclick="loadAaBuilds()">↻ Refresh</button>
+      </div>
+      <div class="vt-pick-row">
+        <div class="vt-select vt-drop-wide" id="aa-build-drop">
+          <div class="vt-select-val" onclick="vtToggleDrop('aa-build-drop')">
+            <span id="aa-build-label" class="vt-ph">- select build binary -</span>
+            <span class="vt-select-arrow">▼</span>
+          </div>
+          <div class="vt-select-menu" id="aa-build-menu"></div>
+        </div>
+        <button class="btn btn-primary vt-pick-btn" id="aa-build-scan-btn"
+                onclick="aaScanBuild()" disabled>🔍 Scan</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- results -->
+  <div id="aa-results" style="display:none">
+
+    <!-- stats row -->
+    <div class="aa-stats-row" id="aa-stats-row"></div>
+
+    <!-- MITRE chips -->
+    <div class="aa-mitre-row" id="aa-mitre-row"></div>
+
+    <!-- filter bar -->
+    <div class="aa-filter-row">
+      <input type="text" id="aa-search" placeholder="Filter by technique, category, MITRE ID…"
+             style="flex:1;min-width:160px;max-width:320px" oninput="aaFilter()">
+      <div class="filter-bar" style="margin:0">
+        <button class="btn btn-sm btn-primary" id="aa-f-all"       onclick="aaSetFilter('all')">All</button>
+        <button class="btn btn-sm btn-ghost"   id="aa-f-anti_debug" onclick="aaSetFilter('anti_debug')">Anti-Debug</button>
+        <button class="btn btn-sm btn-ghost"   id="aa-f-anti_vm"    onclick="aaSetFilter('anti_vm')">Anti-VM</button>
+        <button class="btn btn-sm btn-ghost"   id="aa-f-timing"     onclick="aaSetFilter('timing')">Timing</button>
+        <button class="btn btn-sm btn-ghost"   id="aa-f-evasion"    onclick="aaSetFilter('evasion')">Evasion</button>
+      </div>
+    </div>
+
+    <!-- findings table -->
+    <div class="aa-tbl-scroll" id="aa-tbl-scroll">
+      <table class="aa-tbl" id="aa-tbl">
+        <thead>
+          <tr>
+            <th>Severity</th>
+            <th>Technique</th>
+            <th>Category</th>
+            <th>MITRE</th>
+            <th>Section</th>
+            <th>Offset / VA</th>
+            <th>Bytes</th>
+            <th>Description</th>
+          </tr>
+        </thead>
+        <tbody id="aa-tbody"></tbody>
+      </table>
+    </div>
+
+    <!-- export -->
+    <div style="margin-top:12px;display:flex;gap:8px">
+      <button class="btn btn-ghost btn-sm" onclick="aaExport()">⬇ Export JSON</button>
+      <span id="aa-count-label" class="text-dim" style="font-size:12px;align-self:center"></span>
+    </div>
+
+  </div><!-- /aa-results -->
+</div><!-- /panel-antianalysis -->
+
 
 <!-- ════════ ARTIFACT MAP ════════ -->
 <div id="panel-artifacts" class="panel">
@@ -2370,6 +2747,8 @@ const PANEL_META = {
   evasion:   ['Evasion Lab',       'score AV evasion potential + apply PE patch transforms'],
   pe:        ['PE Inspector',      'sections, entropy, imports, suspicious APIs, threat score'],
   hellsgate: ["Hell's Gate",      'extract SSNs · detect EDR hooks · generate direct-syscall stubs'],
+  scemu:        ['SC Emulator',       'x86/x64 shellcode emulation · trace · API intercept · SMC detect'],
+  antianalysis: ['Anti-Analysis',     'detect anti-debug · anti-VM · timing · evasion patterns · MITRE ATT&CK'],
   library:   ['Module Library',   'browse 190+ techniques from meow & blog'],
   samples:  ['Samples',          'compiled binaries organized by session'],
   apt:      ['APT Campaign',     'Malpedia -> TTPs -> auto-compile pipeline'],
@@ -6301,6 +6680,203 @@ function artRebuild() {
 }
 
 // =============================================================
+// Shellcode Emulator
+// =============================================================
+
+let _scemuTab  = 'hex';
+let _scemuArch = 'x64';
+let _scemuFile = null;
+
+function scemuSetTab(t) {
+  _scemuTab = t;
+  ['hex','upload','disasm'].forEach(id => {
+    document.getElementById('scemu-src-' + id).style.display = id === t ? '' : 'none';
+    document.getElementById('scemu-tab-' + id + '-btn').className =
+      'btn btn-sm ' + (id === t ? 'btn-primary' : 'btn-ghost');
+  });
+  document.getElementById('scemu-results').style.display = 'none';
+}
+
+function scemuSetArch(a) {
+  _scemuArch = a;
+  document.getElementById('scemu-arch-x64').className = 'btn btn-sm ' + (a==='x64' ? 'btn-primary' : 'btn-ghost');
+  document.getElementById('scemu-arch-x86').className = 'btn btn-sm ' + (a==='x86' ? 'btn-primary' : 'btn-ghost');
+}
+
+function scemuClear() {
+  document.getElementById('scemu-hex-input').value = '';
+  document.getElementById('scemu-byte-count').textContent = '';
+  document.getElementById('scemu-results').style.display = 'none';
+}
+
+function scemuFileSelected(input) {
+  _scemuFile = input.files[0];
+  if (!_scemuFile) return;
+  document.getElementById('scemu-file-name').textContent =
+    `${_scemuFile.name}  (${(_scemuFile.size/1024).toFixed(1)} KB)`;
+  document.getElementById('scemu-upload-run-btn').disabled = false;
+}
+
+function _scemuParseHex(raw) {
+  let s = raw.replace(/\\x([0-9a-fA-F]{2})/g, '$1');
+  s = s.replace(/0x([0-9a-fA-F]{2})/gi, '$1');
+  s = s.replace(/[,\s;]+/g, '');
+  s = s.replace(/['"]/g, '');
+  if (!/^[0-9a-fA-F]+$/.test(s)) return null;
+  if (s.length % 2 !== 0) return null;
+  return s;
+}
+
+async function scemuRun() {
+  const raw = document.getElementById('scemu-hex-input').value.trim();
+  if (!raw) { alert('Paste shellcode bytes first.'); return; }
+  const isB64 = /^[A-Za-z0-9+/]+=*$/.test(raw.replace(/\s/g,'')) && raw.length > 16;
+  const hexStr = _scemuParseHex(raw);
+  let body;
+  if (hexStr) {
+    document.getElementById('scemu-byte-count').textContent = `${hexStr.length/2} bytes`;
+    body = {hex: hexStr, arch: _scemuArch, max_insns: _scemuMaxInsns()};
+  } else if (isB64) {
+    body = {base64: raw.replace(/\s/g,''), arch: _scemuArch, max_insns: _scemuMaxInsns()};
+  } else {
+    alert('Cannot parse input.\nAccepted: 48 31 c0 / \\x48\\x31 / base64');
+    return;
+  }
+  await _scemuFetch(null, body);
+}
+
+async function scemuRunFile() {
+  if (!_scemuFile) return;
+  const fd = new FormData();
+  fd.append('file', _scemuFile);
+  fd.append('arch', _scemuArch);
+  fd.append('max_insns', String(_scemuMaxInsns()));
+  await _scemuFetch(fd, null);
+}
+
+async function scemuDisasmOnly() {
+  const raw = document.getElementById('scemu-disasm-input').value.trim();
+  if (!raw) return;
+  const hexStr = _scemuParseHex(raw);
+  if (!hexStr) { alert('Could not parse as hex.'); return; }
+  const r = await fetch('/api/scemu/disasm', {
+    method: 'POST', headers: {'Content-Type':'application/json'},
+    body: JSON.stringify({hex: hexStr, arch: _scemuArch}),
+  }).then(r => r.json()).catch(e => ({ok:false, error:String(e)}));
+  if (!r.ok) { alert('Disasm failed: ' + r.error); return; }
+  document.getElementById('scemu-results').style.display = '';
+  document.getElementById('scemu-disasm-section').style.display = '';
+  document.getElementById('scemu-disasm-badge').textContent = `${r.count} insns`;
+  _scemuRenderDisasm(r.insns);
+  document.getElementById('scemu-stats-row').innerHTML = '';
+  document.getElementById('scemu-smc-banner').style.display = 'none';
+  document.getElementById('scemu-trace-body').innerHTML = '';
+  document.getElementById('scemu-regs').innerHTML = '';
+  document.getElementById('scemu-mem-body').innerHTML = '';
+  document.getElementById('scemu-api-section').style.display = 'none';
+  document.getElementById('scemu-strings-section').style.display = 'none';
+}
+
+function _scemuMaxInsns() {
+  return parseInt(document.getElementById('scemu-max-insns').value) || 5000;
+}
+
+async function _scemuFetch(fd, jsonBody) {
+  const opts = fd
+    ? {method:'POST', body: fd}
+    : {method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify(jsonBody)};
+  const r = await fetch('/api/scemu/run', opts)
+    .then(r => r.json()).catch(e => ({ok:false, error:String(e)}));
+  if (!r.ok) { alert('Emulation failed: ' + (r.error||'unknown')); return; }
+  _scemuRenderResults(r);
+}
+
+function _scemuRenderResults(r) {
+  document.getElementById('scemu-results').style.display = '';
+  document.getElementById('scemu-smc-banner').style.display = r.smc ? '' : 'none';
+  document.getElementById('scemu-disasm-section').style.display = 'none';
+
+  const stopCls = r.stop_reason === 'clean_exit' ? 'emu-badge-ok'
+                : r.stop_reason?.startsWith('exception') ? 'emu-badge-err' : 'emu-badge-warn';
+  document.getElementById('scemu-stats-row').innerHTML = `
+    <div class="emu-stat emu-stat-ok"><div class="es-n">${r.insn_count.toLocaleString()}</div><div class="es-l">Instructions</div></div>
+    <div class="emu-stat"><div class="es-n" style="font-size:13px"><span class="emu-badge ${stopCls}">${r.stop_reason}</span></div><div class="es-l">Stop reason</div></div>
+    <div class="emu-stat ${r.smc ? 'emu-stat-smc':'emu-stat-ok'}"><div class="es-n">${r.smc?'⚠ YES':'NO'}</div><div class="es-l">Self-mod code</div></div>
+    <div class="emu-stat"><div class="es-n">${r.api_calls?.length||0}</div><div class="es-l">API intercepts</div></div>
+    <div class="emu-stat"><div class="es-n">${r.strings?.length||0}</div><div class="es-l">Strings found</div></div>`;
+
+  document.getElementById('scemu-trace-badge').textContent = `${r.trace.length} shown`;
+  _scemuRenderTrace(r.trace, r.arch);
+  _scemuRenderRegs(r.regs_final);
+  _scemuRenderMem(r.mem_log);
+  document.getElementById('scemu-mem-badge').textContent = `${r.mem_log.length} events`;
+
+  const apiSec = document.getElementById('scemu-api-section');
+  if (r.api_calls?.length) {
+    apiSec.style.display = '';
+    document.getElementById('scemu-api-badge').textContent = `${r.api_calls.length} call${r.api_calls.length!==1?'s':''}`;
+    document.getElementById('scemu-api-list').innerHTML = r.api_calls.map(c =>
+      `<div class="emu-api-row">
+        <span class="text-dim" style="font-size:10px">CALL</span>
+        <span class="emu-api-target">${c.target}</span>
+        <span class="text-dim">from</span>
+        <span style="color:var(--dim);font-size:11px">${c.caller}</span>
+        ${c.note ? `<span class="emu-api-note">&#x2192; ${c.note}</span>` : ''}
+       </div>`).join('');
+  } else { apiSec.style.display = 'none'; }
+
+  const strSec = document.getElementById('scemu-strings-section');
+  if (r.strings?.length) {
+    strSec.style.display = '';
+    document.getElementById('scemu-strings-list').innerHTML =
+      r.strings.map(s => `<span class="emu-string-tag">${_escHtml(s)}</span>`).join('');
+  } else { strSec.style.display = 'none'; }
+}
+
+function _scemuRenderTrace(trace, arch) {
+  const ip = arch === 'x64' ? 'rip' : 'eip';
+  document.getElementById('scemu-trace-body').innerHTML = trace.map(t => {
+    const isCall = t.mnem === 'call';
+    const isRet  = t.mnem === 'ret' || t.mnem === 'retn';
+    const rc = isCall ? 'emu-tr-call' : isRet ? 'emu-tr-ret' : '';
+    return `<tr class="${rc}">
+      <td class="emu-tr-addr">${t.addr}</td>
+      <td class="emu-tr-bytes">${t.bytes}</td>
+      <td><span class="emu-tr-mnem">${_escHtml(t.mnem)}</span> <span class="emu-tr-ops">${_escHtml(t.ops)}</span></td>
+      <td class="emu-tr-addr">${t.regs?.[ip]||''}</td>
+    </tr>`;
+  }).join('');
+}
+
+function _scemuRenderRegs(regs) {
+  const el = document.getElementById('scemu-regs');
+  if (!regs || !Object.keys(regs).length) { el.innerHTML = '<span class="text-dim">-</span>'; return; }
+  el.innerHTML = Object.entries(regs).map(([k,v]) =>
+    `<div class="emu-reg"><span class="emu-reg-name">${k}</span><span class="emu-reg-val">${v}</span></div>`
+  ).join('');
+}
+
+function _scemuRenderMem(log) {
+  document.getElementById('scemu-mem-body').innerHTML = (log||[]).map(m =>
+    `<tr><td class="${m.type==='W'?'emu-mw':'emu-mr'}">${m.type}</td>
+     <td style="color:var(--text)">${m.addr}</td>
+     <td style="color:var(--dim)">${m.size}B</td>
+     <td style="font-family:monospace;color:var(--text2)">${m.value}</td></tr>`
+  ).join('');
+}
+
+function _scemuRenderDisasm(insns) {
+  document.getElementById('scemu-disasm-body').innerHTML = (insns||[]).map(i =>
+    `<tr><td class="emu-di-off">${i.offset}</td><td class="emu-di-b">${i.bytes}</td>
+     <td class="emu-di-m">${_escHtml(i.mnem)}</td><td class="emu-di-o">${_escHtml(i.ops)}</td></tr>`
+  ).join('');
+}
+
+function _escHtml(s) {
+  return String(s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+}
+
+// =============================================================
 // Hell's Gate - Direct Syscall Lab
 // =============================================================
 
@@ -6559,6 +7135,261 @@ function hgDownload() {
   const a    = document.createElement('a');
   a.href     = URL.createObjectURL(blob);
   a.download = `syscalls.${ext}`;
+  a.click();
+}
+
+// ══════════════════════════════════════════════════════════════════════════
+// Anti-Analysis Pattern Scanner
+// ══════════════════════════════════════════════════════════════════════════
+
+let _aaSrcTab   = 'upload';
+let _aaArch     = 'auto';
+let _aaFilter   = 'all';
+let _aaFindings = [];
+let _aaSession  = null;
+let _aaFile     = null;
+let _aaBuildId  = null;
+let _aaBuildFname = null;
+
+// --- tab / arch selectors ---
+
+function aaSetTab(tab) {
+  _aaSrcTab = tab;
+  ['upload','session','build'].forEach(t => {
+    document.getElementById('aa-src-' + t).style.display      = t === tab ? '' : 'none';
+    document.getElementById('aa-tab-' + t + '-btn').className =
+      'btn btn-sm ' + (t === tab ? 'btn-primary' : 'btn-ghost');
+  });
+  document.getElementById('aa-results').style.display = 'none';
+  document.getElementById('aa-status').textContent    = '';
+  if (tab === 'session' && !document.getElementById('aa-session-menu').children.length) loadAaSessionList();
+  if (tab === 'build'   && !document.getElementById('aa-build-menu').children.length)   loadAaBuilds();
+}
+
+function aaSetArch(arch) {
+  _aaArch = arch;
+  ['auto','x64','x86'].forEach(a => {
+    document.getElementById('aa-arch-' + a).className =
+      'btn btn-sm ' + (a === arch ? 'btn-primary' : 'btn-ghost');
+  });
+}
+
+// --- session / build loaders (reuse API already used by PE Inspector) ---
+
+async function loadAaSessionList() {
+  const samples = await fetch('/api/samples').then(r => r.json()).catch(() => []);
+  const menu = document.getElementById('aa-session-menu');
+  menu.innerHTML = '';
+  if (!samples.length) {
+    menu.innerHTML = '<div class="vt-select-opt vt-ph">no samples yet</div>'; return;
+  }
+  samples.forEach(s => {
+    const d = document.createElement('div');
+    d.className   = 'vt-select-opt';
+    d.textContent = `${s.session_id} · ${s.actor || 'unknown'} · ${s.files?.length || 0} file(s)`;
+    d.onclick = () => {
+      _aaSession = s.session_id;
+      document.getElementById('aa-session-label').textContent = `${s.session_id} (${s.actor || 'no actor'})`;
+      document.getElementById('aa-session-label').classList.remove('vt-ph');
+      vtCloseDrop('aa-session-drop');
+      _aaUpdateFileList(s);
+    };
+    menu.appendChild(d);
+  });
+}
+
+function _aaUpdateFileList(sample) {
+  const menu  = document.getElementById('aa-sfile-menu');
+  const label = document.getElementById('aa-sfile-label');
+  _aaFile = null;
+  label.textContent = '- select file -'; label.classList.add('vt-ph');
+  document.getElementById('aa-session-scan-btn').disabled = true;
+  menu.innerHTML = '';
+  (sample.files || []).forEach(f => {
+    const d = document.createElement('div');
+    d.className   = 'vt-select-opt';
+    d.textContent = `${f.name} (${(f.size / 1024).toFixed(1)} KB)`;
+    d.onclick = () => {
+      _aaFile = f.name;
+      label.textContent = f.name; label.classList.remove('vt-ph');
+      vtCloseDrop('aa-sfile-drop');
+      document.getElementById('aa-session-scan-btn').disabled = false;
+    };
+    menu.appendChild(d);
+  });
+}
+
+async function loadAaBuilds() {
+  const builds    = await fetch('/api/logs?limit=50').then(r => r.json()).catch(() => []);
+  const menu      = document.getElementById('aa-build-menu');
+  menu.innerHTML  = '';
+  const available = builds.filter(b => b.status === 'success' && b.binary_files?.length);
+  if (!available.length) {
+    menu.innerHTML = '<div class="vt-select-opt vt-ph">no compiled binaries found</div>'; return;
+  }
+  for (const b of available) {
+    const p = b.params || {};
+    let mod = p.slug || p.stealer || p.meow_slug || p.attack_id || p.injection || b.id;
+    for (const f of b.binary_files) {
+      const lbl = `${b.id}  ·  ${mod}  (${f.name})  ${b.created?.slice(0,16)||''}`;
+      const div = document.createElement('div');
+      div.className   = 'vt-select-opt';
+      div.textContent = lbl;
+      div.dataset.bid = b.id; div.dataset.fname = f.name;
+      div.onclick = () => {
+        _aaBuildId = b.id; _aaBuildFname = f.name;
+        const l = document.getElementById('aa-build-label');
+        l.textContent = lbl; l.className = '';
+        document.querySelectorAll('#aa-build-menu .vt-select-opt').forEach(o =>
+          o.classList.toggle('vt-selected', o.dataset.bid === b.id && o.dataset.fname === f.name));
+        vtCloseDrop('aa-build-drop');
+        document.getElementById('aa-build-scan-btn').disabled = false;
+      };
+      menu.appendChild(div);
+    }
+  }
+}
+
+// --- scan triggers ---
+
+function aaScanUpload(input) {
+  if (!input.files[0]) return;
+  const fd = new FormData();
+  fd.append('file', input.files[0]);
+  fd.append('arch', _aaArch);
+  _aaRun(fetch('/api/antianalysis/scan', {method:'POST', body:fd}).then(r => r.json()));
+}
+
+function aaScanSession() {
+  if (!_aaSession || !_aaFile) return;
+  _aaRun(fetch('/api/antianalysis/scan', {
+    method: 'POST',
+    headers: {'Content-Type': 'application/json'},
+    body: JSON.stringify({source:'session', session_id: _aaSession, filename: _aaFile, arch: _aaArch}),
+  }).then(r => r.json()));
+}
+
+function aaScanBuild() {
+  if (!_aaBuildId) return;
+  _aaRun(fetch('/api/antianalysis/scan', {
+    method: 'POST',
+    headers: {'Content-Type': 'application/json'},
+    body: JSON.stringify({source:'build', build_id: _aaBuildId, fname: _aaBuildFname || undefined, arch: _aaArch}),
+  }).then(r => r.json()));
+}
+
+async function _aaRun(promise) {
+  document.getElementById('aa-status').textContent = '⏳ Scanning…';
+  document.getElementById('aa-results').style.display = 'none';
+  let r;
+  try { r = await promise; } catch(e) { r = {ok:false, error:String(e)}; }
+  document.getElementById('aa-status').textContent = '';
+  if (!r.ok) { toast('Scan failed: ' + r.error, 'err'); return; }
+  _aaFindings = r.findings || [];
+  _aaRenderAll(r);
+}
+
+// --- rendering ---
+
+function _aaRenderAll(r) {
+  _aaRenderStats(r);
+  _aaRenderMitre(r.mitre_summary || []);
+  _aaFilter = 'all';
+  _aaSetFilterBtns('all');
+  _aaRenderTable(_aaFindings);
+  document.getElementById('aa-results').style.display = '';
+  document.getElementById('aa-results').scrollIntoView({behavior:'smooth', block:'nearest'});
+}
+
+function _aaRenderStats(r) {
+  const cat = r.by_category || {};
+  const rows = [
+    ['aa-stat',         r.total,                     r.arch === 'x64' ? 'Findings (x64)' : r.arch === 'x86' ? 'Findings (x86)' : 'Findings', ''],
+    ['aa-stat aa-stat-debug',   cat.anti_debug || 0, 'Anti-Debug',  ''],
+    ['aa-stat aa-stat-vm',      cat.anti_vm    || 0, 'Anti-VM',     ''],
+    ['aa-stat aa-stat-timing',  cat.timing     || 0, 'Timing',      ''],
+    ['aa-stat aa-stat-evasion', cat.evasion    || 0, 'Evasion',     ''],
+  ];
+  document.getElementById('aa-stats-row').innerHTML = rows.map(([cls, n, lbl]) =>
+    `<div class="${cls}"><div class="aa-n">${n}</div><div class="aa-l">${lbl}</div></div>`
+  ).join('');
+}
+
+function _aaRenderMitre(summary) {
+  const row = document.getElementById('aa-mitre-row');
+  if (!summary.length) { row.innerHTML = ''; return; }
+  const _MITRE_NAME = {
+    'T1622':     'Debugger Evasion',
+    'T1497.001': 'System Checks',
+    'T1497.003': 'Time Based Evasion',
+  };
+  row.innerHTML = summary.map(m =>
+    `<div class="aa-mitre-chip">
+      <span>${m.id}</span>
+      <span style="color:var(--text);font-size:10px">${_MITRE_NAME[m.id] || ''}</span>
+      <span class="aa-mc-ids">${m.techniques.join(', ')}</span>
+    </div>`
+  ).join('');
+}
+
+function _aaRenderTable(findings) {
+  const tbody = document.getElementById('aa-tbody');
+  if (!findings.length) {
+    tbody.innerHTML = `<tr><td colspan="8" style="text-align:center;padding:24px;color:var(--dim)">No findings match the current filter.</td></tr>`;
+    document.getElementById('aa-count-label').textContent = '0 findings';
+    return;
+  }
+  const _CAT_LABEL = {anti_debug:'Anti-Debug', anti_vm:'Anti-VM', timing:'Timing', evasion:'Evasion'};
+  tbody.innerHTML = findings.map(f => `
+    <tr>
+      <td><span class="aa-badge aa-sev-${f.severity}">${f.severity}</span></td>
+      <td class="aa-name">${_escHtml(f.name)}</td>
+      <td><span class="aa-cat-badge">${_CAT_LABEL[f.category] || f.category}</span></td>
+      <td><span class="aa-mitre-id">${f.mitre}</span></td>
+      <td style="font-family:monospace;font-size:11px;color:var(--text2)">${_escHtml(f.section)}</td>
+      <td class="aa-offset">${hex8(f.offset)}<br><span style="color:var(--dim)">${f.va}</span></td>
+      <td class="aa-bytes">${_escHtml(f.bytes)}</td>
+      <td class="aa-desc">${_escHtml(f.desc)}</td>
+    </tr>`
+  ).join('');
+  document.getElementById('aa-count-label').textContent = `${findings.length} finding${findings.length !== 1 ? 's' : ''}`;
+}
+
+function hex8(n) { return '0x' + n.toString(16).padStart(8,'0'); }
+
+// --- filter ---
+
+function aaSetFilter(cat) {
+  _aaFilter = cat;
+  _aaSetFilterBtns(cat);
+  aaFilter();
+}
+
+function _aaSetFilterBtns(active) {
+  ['all','anti_debug','anti_vm','timing','evasion'].forEach(c => {
+    const el = document.getElementById('aa-f-' + c);
+    if (el) el.className = 'btn btn-sm ' + (c === active ? 'btn-primary' : 'btn-ghost');
+  });
+}
+
+function aaFilter() {
+  const q   = (document.getElementById('aa-search').value || '').toLowerCase();
+  const cat = _aaFilter;
+  const vis = _aaFindings.filter(f => {
+    if (cat !== 'all' && f.category !== cat) return false;
+    if (!q) return true;
+    return (f.name + f.category + f.mitre + f.id + f.desc + f.section).toLowerCase().includes(q);
+  });
+  _aaRenderTable(vis);
+}
+
+// --- export ---
+
+function aaExport() {
+  const blob = new Blob([JSON.stringify({findings: _aaFindings}, null, 2)], {type:'application/json'});
+  const a    = document.createElement('a');
+  a.href     = URL.createObjectURL(blob);
+  a.download = 'anti_analysis_findings.json';
   a.click();
 }
 </script>
