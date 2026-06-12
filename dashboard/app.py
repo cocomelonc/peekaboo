@@ -845,7 +845,7 @@ def c2_deliver_virustotal():
         # 3. Post ONE resolver comment.
         #    VT needs time to index the SHA256 after upload before the
         #    file/{sha256}/comments endpoint accepts writes.
-        #    Retry with back-off: 5 s → 10 s → 15 s → 20 s (50 s total max).
+        #    Retry with back-off: 5 s -> 10 s -> 15 s -> 20 s (50 s total max).
         comment_posted = False
         comment_error  = ""
         waited_secs    = 0
@@ -866,7 +866,7 @@ def c2_deliver_virustotal():
                                                                f"HTTP {cr.status_code}")
             except Exception:
                 comment_error = f"HTTP {cr.status_code}"
-            # 404 = not indexed yet, 429 = rate limit → keep retrying
+            # 404 = not indexed yet, 429 = rate limit -> keep retrying
             if cr.status_code not in (404, 429):
                 break
 

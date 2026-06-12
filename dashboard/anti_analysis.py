@@ -25,7 +25,7 @@ import re
 from pathlib import Path
 
 # ---------------------------------------------------------------------------
-# Pattern catalog  (id → metadata)
+# Pattern catalog  (id -> metadata)
 # ---------------------------------------------------------------------------
 
 CATALOG: list[dict] = [

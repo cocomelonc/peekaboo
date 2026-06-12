@@ -7512,7 +7512,7 @@ def run_hellsgate() -> None:
             out = Path(arg).expanduser()
             try:
                 out.write_text(generated)
-                console.print(f"  [ok]saved → {out}[/ok]\n")
+                console.print(f"  [ok]saved -> {out}[/ok]\n")
             except Exception as e:
                 console.print(f"  [err][=^..^=] {e}[/err]\n")
 
@@ -7714,7 +7714,7 @@ def run_scemu() -> None:
                 else:
                     console.print()
                     for s in strs:
-                        console.print(f"  [ok]→[/ok] [cmd]{s}[/cmd]")
+                        console.print(f"  [ok]->[/ok] [cmd]{s}[/cmd]")
                     console.print()
 
             elif cmd == "api":
@@ -8075,7 +8075,7 @@ def run_antianalysis() -> None:
             out = Path(arg).expanduser()
             try:
                 out.write_text(_json.dumps({"findings": findings}, indent=2))
-                console.print(f"  [ok]exported {len(findings)} findings → {out}[/ok]\n")
+                console.print(f"  [ok]exported {len(findings)} findings -> {out}[/ok]\n")
             except Exception as e:
                 console.print(f"  [err][=^..^=] {e}[/err]\n")
 
@@ -8454,7 +8454,7 @@ def run_rop() -> None:
             out = Path(arg).expanduser()
             try:
                 out.write_text(generated)
-                console.print(f"  [ok]saved → {out}[/ok]\n")
+                console.print(f"  [ok]saved -> {out}[/ok]\n")
             except Exception as e:
                 console.print(f"  [err][=^..^=] {e}[/err]\n")
 

@@ -140,7 +140,7 @@ def _find_gadgets(data: bytes, arch: str, base_va: int,
     # Disassemble the whole section once into a list for offset lookup
     insns = list(md.disasm(data, base_va))
 
-    # Build offset→index map for fast reverse lookup
+    # Build offset->index map for fast reverse lookup
     addr_to_idx: dict[int, int] = {ins.address: i for i, ins in enumerate(insns)}
 
     gadgets: list[dict] = []

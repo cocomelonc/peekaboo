@@ -319,7 +319,7 @@ def _setup_fakes(mu, ux, x64: bool):
     peb_addr = _HEAP_BASE + 0x100
     ldr_addr = _HEAP_BASE + 0x200
 
-    # PEB.Ldr → points back to itself with three valid InMemoryOrder links
+    # PEB.Ldr -> points back to itself with three valid InMemoryOrder links
     # This is a simplified stub; real shellcode will read further but
     # Unicorn will just return zeros (which most PEB-walkers handle).
     if x64:

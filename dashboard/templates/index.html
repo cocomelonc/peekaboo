@@ -545,6 +545,8 @@ code{font-family:var(--mono);font-size:12px;background:var(--bg4);padding:1px 5p
 .msg-ai td{padding:6px 10px;border-bottom:1px solid rgba(61,56,96,.3);font-size:12px;vertical-align:top}
 .msg-ai tr:last-child td{border-bottom:none}
 .msg-ai blockquote{border-left:3px solid var(--purple);margin:8px 0;padding:6px 12px;background:rgba(181,123,255,.07);border-radius:0 var(--rs) var(--rs) 0;font-style:italic;color:var(--text2)}
+.msg-ai a{color:var(--cyan);text-decoration:none;border-bottom:1px solid rgba(114,217,245,.3);transition:color .15s,border-color .15s}
+.msg-ai a:hover{color:#fff;border-bottom-color:rgba(114,217,245,.7)}
 .chat-input-row{display:flex;gap:8px;padding:14px 0 0;border-top:1px solid var(--sep);margin-top:12px;flex-wrap:wrap}
 .chat-input{flex:1;min-width:160px}
 .chat-provider{display:flex;gap:6px;flex-wrap:wrap}
@@ -553,10 +555,13 @@ code{font-family:var(--mono);font-size:12px;background:var(--bg4);padding:1px 5p
 .chat-suggestions{display:flex;flex-wrap:wrap;gap:6px;padding:8px 0 4px}
 .chat-suggestion{padding:5px 11px;border-radius:20px;border:1px solid var(--sep);background:var(--bg3);color:var(--text2);font-size:11px;cursor:pointer;transition:all .15s;white-space:nowrap}
 .chat-suggestion:hover{border-color:var(--purple);color:var(--purple);background:rgba(181,123,255,.1)}
+.chat-suggestion.instant{border-color:rgba(114,217,245,.3);color:var(--cyan)}
+.chat-suggestion.instant:hover{border-color:var(--cyan);color:var(--cyan);background:rgba(114,217,245,.1)}
 .chat-status{font-size:11px;color:var(--dim);padding:4px 0 2px;display:flex;align-items:center;gap:6px;min-height:20px;transition:opacity .2s}
 .chat-status-dot{width:6px;height:6px;border-radius:50%;background:var(--purple);animation:pulse 1s infinite;flex-shrink:0}
 .chat-status-dot.thinking{background:var(--yellow)}
 .chat-status-dot.rag{background:var(--cyan)}
+.chat-status-dot.instant{background:var(--green)}
 @keyframes pulse{0%,100%{opacity:1}50%{opacity:.3}}
 
 /* -- modals -- */
@@ -2829,19 +2834,22 @@ code{font-family:var(--mono);font-size:12px;background:var(--bg4);padding:1px 5p
         <div class="msg msg-ai">Hi! I'm your malware research assistant. Ask me about techniques, TTPs, or the codebase.</div>
       </div>
       <div id="chat-suggestions" class="chat-suggestions">
-        <span class="chat-suggestion" onclick="askSuggestion(this)">What is peekaboo?</span>
-        <span class="chat-suggestion" onclick="askSuggestion(this)">How does Telegram C2 work?</span>
-        <span class="chat-suggestion" onclick="askSuggestion(this)">Process injection techniques</span>
+        <!-- onboarding: answered instantly from canned responses -->
+        <span class="chat-suggestion instant" onclick="askSuggestion(this)">what is Peekaboo?</span>
+        <span class="chat-suggestion instant" onclick="askSuggestion(this)">what can you do?</span>
+        <span class="chat-suggestion instant" onclick="askSuggestion(this)">how to set up Ollama?</span>
+        <span class="chat-suggestion instant" onclick="askSuggestion(this)">which repos for knowledge base?</span>
+        <!-- technical: routed through RAG -> LLM -->
+        <span class="chat-suggestion" onclick="askSuggestion(this)">how does Telegram C2 work?</span>
+        <span class="chat-suggestion" onclick="askSuggestion(this)">process injection techniques</span>
         <span class="chat-suggestion" onclick="askSuggestion(this)">AV/EDR evasion methods</span>
-        <span class="chat-suggestion" onclick="askSuggestion(this)">MITRE ATT&amp;CK coverage</span>
-        <span class="chat-suggestion" onclick="askSuggestion(this)">Persistence techniques</span>
       </div>
       <div id="chat-status" class="chat-status" style="opacity:0"></div>
       <div class="chat-input-row">
         <div class="chat-provider">
-          <button class="provider-btn active" id="prov-claude" onclick="setProvider('claude')">Claude</button>
+          <button class="provider-btn active" id="prov-ollama" onclick="setProvider('ollama')">Ollama</button>
           <button class="provider-btn" id="prov-gemini" onclick="setProvider('gemini')">Gemini</button>
-          <button class="provider-btn" id="prov-ollama" onclick="setProvider('ollama')">Ollama</button>
+          <button class="provider-btn" id="prov-claude" onclick="setProvider('claude')">Claude</button>
         </div>
         <input class="chat-input" type="text" id="chat-input" placeholder="Ask about TTPs, techniques, code…" onkeydown="if(event.key==='Enter')sendChat()">
         <button class="btn btn-primary btn-sm" onclick="sendChat()" id="chat-send-btn">Send</button>
@@ -2968,7 +2976,7 @@ let libModules     = [];
 let libCatFilter   = 'all';
 let libPlatFilter  = 'all';
 let libSearchQ     = '';
-let chatProvider   = 'claude';
+let chatProvider   = 'ollama';
 let chatHistory    = [];
 let currentBuildId = null;
 let buildPoll      = null;
@@ -5707,7 +5715,7 @@ function _c2GetSourceBody() {
     return {source: 'build',   build_id: _c2BuildId, fname: _c2BuildFname || undefined};
   if (_c2SrcTab === 'session' && _c2SessionId && _c2SessionFname)
     return {source: 'session', session_id: _c2SessionId, filename: _c2SessionFname};
-  return {};   // fallback → latest build
+  return {};   // fallback -> latest build
 }
 
 function c2HandleDrop(event) {
@@ -5989,7 +5997,7 @@ async function sendChat() {
     const reader = resp.body.getReader();
     const dec    = new TextDecoder();
     let buf = '', full = '';
-    while (true) {
+    stream: while (true) {
       const {done, value} = await reader.read();
       if (done) break;
       buf += dec.decode(value, {stream:true});
@@ -5998,13 +6006,13 @@ async function sendChat() {
       for (const line of lines) {
         if (!line.startsWith('data:')) continue;
         const raw = line.slice(5).trim();
-        if (raw === '[DONE]') { setChatStatus('', ''); break; }
+        if (raw === '[DONE]') { setChatStatus('', ''); break stream; }
         try {
           const ev = JSON.parse(raw);
-          if (ev.status === 'canned')     { setChatStatus('rag',      '⚡ instant answer'); }
-          else if (ev.status === 'rag')   { setChatStatus('rag',      ev.msg || 'searching knowledge base…'); }
-          else if (ev.status === 'connecting') { setChatStatus('',   ev.msg || 'connecting…'); }
-          else if (ev.status === 'generating') { setChatStatus('',   ev.msg || 'generating…'); }
+          if (ev.status === 'canned')          { setChatStatus('instant', '⚡ instant'); }
+          else if (ev.status === 'rag')        { setChatStatus('rag',     ev.msg || 'searching knowledge base…'); }
+          else if (ev.status === 'connecting') { setChatStatus('',        ev.msg || 'connecting…'); }
+          else if (ev.status === 'generating') { setChatStatus('',        ev.msg || 'generating…'); }
           else if (ev.thinking === true)  { setChatStatus('thinking', 'thinking…'); }
           else if (ev.thinking === false) { setChatStatus('',         'responding…'); }
           else if (ev.text) {

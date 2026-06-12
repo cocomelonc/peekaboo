@@ -227,7 +227,7 @@ def _disasm(stub: bytes) -> list[str]:
 
         elif b == 0xE9 and i + 5 <= len(stub):
             rel = struct.unpack_from("<i", stub, i + 1)[0]
-            lines.append(f"jmp {rel + 5:+#x}   ; EDR hook →")
+            lines.append(f"jmp {rel + 5:+#x}   ; EDR hook ->")
             i += 5
 
         elif stub[i : i + 2] == b"\xFF\x25":
