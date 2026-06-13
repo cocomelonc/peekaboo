@@ -1,0 +1,6 @@
+{
+  "compile_each": false,
+  "ollama_narration": false,
+  "ollama_base_url": "http://localhost:11434",
+  "ollama_model": "qwen3:0.6b"
+}

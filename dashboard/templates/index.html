@@ -1470,6 +1470,7 @@ code{font-family:var(--mono);font-size:12px;background:var(--bg4);padding:1px 5p
       <div class="card-title">Past Sessions</div>
       <span class="text-xs text-dim">click a row to inspect</span>
       <button class="btn btn-ghost btn-sm ms-auto" onclick="loadPipelineSessions()">↻ Refresh</button>
+      <button class="btn btn-del btn-sm" onclick="clearPipelineSessions()">🗑 Clear all</button>
     </div>
     <div class="tbl-wrap">
       <table class="tbl">
@@ -3861,22 +3862,56 @@ async function runPipeline() {
           }
         }
 
-        // step 5 done -> binary section
+        // step 5 done -> per-stage kill-chain artefacts
         if (ev.step === 5 && ev.status === 'done') {
-          const data = ev.data || {};
-          const sid  = data.session_id || '';
-          const files = data.files || [];
+          const data   = ev.data || {};
+          const sid    = data.session_id || '';
+          const files  = data.files  || [];
+          const stages = data.stages || [];
           const div = document.createElement('div');
           div.className = 'card card-sm apt-result-card';
-          const dlBtns = files.map(f =>
-            `<a href="/api/samples/${sid}/download/${encodeURIComponent(f)}" class="btn btn-green btn-sm">⬇ ${escHtml(f)}</a>`).join(' ');
-          div.innerHTML = `<div class="apt-sec-label">COMPILED BINARY</div>
+
+          // header
+          let html = `<div class="apt-sec-label">KILL-CHAIN ARTEFACTS (${stages.length || files.length})</div>
             <div class="apt-dl-row">
-              <span class="badge badge-green">✓ compiled</span>
+              <span class="badge badge-green">✓ assembled</span>
               <span class="mono text-xs text-dim">session: ${escHtml(sid)}</span>
               <button class="btn btn-ghost btn-sm ms-auto" onclick="openSessionDrawer('${escAttr(sid)}')">🔍 Inspect</button>
-            </div>
-            ${dlBtns ? `<div class="apt-dl-btns">${dlBtns}</div>` : ''}`;
+            </div>`;
+
+          // per-stage rows when the new pipeline emits stages[]
+          if (stages.length) {
+            const stageRows = stages.map(s => {
+              const col = TACTIC_COLORS[s.tactic] || TACTIC_COLORS.unknown;
+              const out = s._out_src || '';
+              const dl  = out
+                ? `<a href="/api/samples/${sid}/download/${encodeURIComponent(out)}" class="btn btn-green btn-sm ms-auto">⬇ source</a>`
+                : '';
+              const blog = s.blog_url
+                ? `<a href="${escAttr(s.blog_url)}" target="_blank" class="text-xs" style="color:var(--cyan)">writeup</a>`
+                : '';
+              return `<div class="apt-mod-row" style="flex-wrap:wrap;gap:8px">
+                <span class="badge text-xs mono" style="background:#2a2238;color:var(--purple)">stage ${s.stage_num}</span>
+                <span class="badge badge-red text-xs">${escHtml(s.ttp_id)}</span>
+                <span class="badge text-xs" style="background:${col}22;color:${col}">${escHtml(s.tactic)}</span>
+                <span class="text-sm" style="flex:1;min-width:200px">${escHtml(s.module_title || s.module_id)}</span>
+                ${blog}
+                ${dl}
+              </div>`;
+            }).join('');
+            html += `<div class="apt-inner-list">${stageRows}</div>`;
+            // manifest + bundle download
+            html += `<div class="apt-dl-btns" style="margin-top:10px">
+              <a href="/api/samples/${sid}/download/manifest.json" class="btn btn-ghost btn-sm">⬇ manifest.json</a>
+            </div>`;
+          } else {
+            // legacy fallback: flat file list
+            const dlBtns = files.map(f =>
+              `<a href="/api/samples/${sid}/download/${encodeURIComponent(f)}" class="btn btn-green btn-sm">⬇ ${escHtml(f)}</a>`).join(' ');
+            html += dlBtns ? `<div class="apt-dl-btns">${dlBtns}</div>` : '';
+          }
+
+          div.innerHTML = html;
           resultsEl.appendChild(div);
         }
 
@@ -3925,6 +3960,32 @@ async function loadPipelineSessions() {
         if (el) el.textContent = (d.reports||[]).length;
       }).catch(()=>{});
   });
+}
+
+async function clearPipelineSessions() {
+  if (!confirm('Clear ALL APT pipeline sessions?\n\nThis deletes:\n• every samples/<session>/ folder (source files + binaries)\n• every reports DB row\n• every pipeline_sessions / samples DB row\n\nThis cannot be undone.')) {
+    return;
+  }
+  try {
+    const r = await fetch('/api/pipeline/clear', {method:'POST'});
+    const d = await r.json();
+    if (d.ok || d.deleted_dirs >= 0) {
+      const msg = `cleared ${d.deleted_dirs} session folder(s) (${d.deleted_files} file(s)), ` +
+                 `${d.db_cleared.pipeline_sessions} pipeline row(s), ` +
+                 `${d.db_cleared.samples} sample row(s)`;
+      // tiny toast — fall back to alert if no toast helper present
+      if (typeof showToast === 'function') showToast(msg, 'ok');
+      else console.log(msg);
+      // also wipe the live results area so the user sees a clean slate
+      const resultsEl = document.getElementById('apt-results');
+      if (resultsEl) resultsEl.innerHTML = '';
+      loadPipelineSessions();
+    } else {
+      alert('Clear failed:\n' + (d.errors || []).join('\n'));
+    }
+  } catch (e) {
+    alert('Clear failed: ' + e.message);
+  }
 }
 
 // -----------------------------------------------------------------

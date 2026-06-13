@@ -8,6 +8,7 @@ import hashlib
 import json
 import os
 import re
+import shutil
 import subprocess
 import threading
 import time
@@ -1182,16 +1183,22 @@ def api_chat():
         return jsonify({"error": "no messages provided"}), 400
 
     def generate():
+        # Never yield in `finally` of an SSE generator (see api_pipeline_run).
         try:
             for chunk in stream_chat(messages, provider=provider):
                 if isinstance(chunk, dict):
                     yield f"data: {json.dumps(chunk)}\n\n"
                 else:
                     yield f"data: {json.dumps({'text': chunk})}\n\n"
-        except Exception as e:
-            yield f"data: {json.dumps({'error': str(e)})}\n\n"
-        finally:
             yield "data: [DONE]\n\n"
+        except GeneratorExit:
+            raise
+        except Exception as e:
+            try:
+                yield f"data: {json.dumps({'error': str(e)})}\n\n"
+                yield "data: [DONE]\n\n"
+            except GeneratorExit:
+                raise
 
     return Response(
         stream_with_context(generate()),
@@ -1694,6 +1701,11 @@ def api_pipeline_run():
         return jsonify({"error": "actor_id required"}), 400
 
     def generate():
+        # NOTE: never yield inside `finally` of an SSE generator. When the client
+        # disconnects, Flask injects GeneratorExit at the current suspended yield;
+        # yielding again from `finally` raises "generator ignored GeneratorExit"
+        # (the BrokenPipeError noise we were seeing). The [DONE] sentinel is
+        # emitted only on the normal exit paths below.
         try:
             sys.path.insert(0, str(BASE_DIR / "pipeline"))
             from apt_pipeline import run_pipeline
@@ -1704,7 +1716,6 @@ def api_pipeline_run():
                     d = event.get("data", {})
                     sid = d.get("session_id", "")
                     if sid:
-                        # scan actual files on disk (complete event carries no file list)
                         files, total = [], 0
                         sample_path = SAMPLES_DIR / sid
                         if sample_path.exists():
@@ -1713,7 +1724,6 @@ def api_pipeline_run():
                                     sz = fp.stat().st_size
                                     files.append({"name": fp.name, "size": sz})
                                     total += sz
-                        # ttps count from DB (already stored by the pipeline)
                         sess = _db.get_pipeline_session(sid)
                         ttps_count = len(sess.get("ttps", [])) if sess else 0
                         _db.save_sample({
@@ -1724,10 +1734,16 @@ def api_pipeline_run():
                             "ttps":       ttps_count,
                             "status":     "success",
                         })
-        except Exception as e:
-            yield f"data: {json.dumps({'step': 0, 'status': 'error', 'msg': str(e)})}\n\n"
-        finally:
             yield "data: [DONE]\n\n"
+        except GeneratorExit:
+            # client closed the EventSource — must re-raise without yielding
+            raise
+        except Exception as e:
+            try:
+                yield f"data: {json.dumps({'step': 0, 'status': 'error', 'msg': str(e)})}\n\n"
+                yield "data: [DONE]\n\n"
+            except GeneratorExit:
+                raise
 
     return Response(
         stream_with_context(generate()),
@@ -1739,6 +1755,52 @@ def api_pipeline_run():
 @app.route("/api/pipeline/sessions")
 def api_pipeline_sessions():
     return jsonify(_db.get_pipeline_sessions())
+
+
+@app.route("/api/pipeline/clear", methods=["POST"])
+def api_pipeline_clear():
+    """
+    Wipe APT pipeline state: per-session sample folders, reports, samples DB
+    rows, and pipeline_sessions DB rows. The samples/ directory tree itself is
+    preserved so future runs can write into it again.
+    """
+    deleted_dirs    = 0
+    deleted_files   = 0
+    errors: list[str] = []
+
+    if SAMPLES_DIR.exists():
+        for child in SAMPLES_DIR.iterdir():
+            if not child.is_dir():
+                continue
+            # only wipe session-id-shaped dirs (8 hex chars), defensive guard
+            if not re.match(r"^[a-f0-9]{8}$", child.name):
+                continue
+            try:
+                file_count = sum(1 for _ in child.rglob("*") if _.is_file())
+                shutil.rmtree(child)
+                deleted_dirs  += 1
+                deleted_files += file_count
+            except Exception as e:
+                errors.append(f"{child.name}: {e}")
+
+    db_counts = {
+        "pipeline_sessions": len(_db.get_pipeline_sessions()),
+        "samples":           len(_db.get_samples()),
+    }
+    try:
+        _db.clear_pipeline_sessions()
+        _db.clear_reports()
+        _db.clear_samples()
+    except Exception as e:
+        errors.append(f"db: {e}")
+
+    return jsonify({
+        "ok":             not errors,
+        "deleted_dirs":   deleted_dirs,
+        "deleted_files":  deleted_files,
+        "db_cleared":     db_counts,
+        "errors":         errors,
+    })
 
 
 @app.route("/api/pipeline/session/<session_id>")

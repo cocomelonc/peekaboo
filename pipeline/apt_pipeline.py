@@ -1,6 +1,16 @@
 """
 peekaboo APT simulation pipeline
-Malpedia -> Reports -> TTPs -> Modules -> Build
+Malpedia -> Reports -> TTPs -> per-stage malware (one per TTP).
+
+Local-only by design: no Claude / Gemini APIs are called from this pipeline.
+TTP extraction uses regex (reliable for ATT&CK IDs). Per-stage source files
+come straight from ~/hacking/meow via discovery.scan_all(). Compilation is
+opt-in via config; default is source-only so a CPU box can run the whole
+kill chain in under a minute.
+
+Optional: a tiny local Ollama narration per stage (config flag, OFF by
+default) writes a 1-2 sentence "why this module fits this TTP" line into
+the per-session manifest.json.
 """
 from __future__ import annotations
 import json
@@ -21,21 +31,59 @@ _CFG      = _BASE / "config"
 sys.path.insert(0, str(_BASE / "dashboard"))
 import db as _db
 
-ATTACK_RE = re.compile(r'\bT1\d{3}(?:\.\d{3})?\b')
+ATTACK_RE = re.compile(r"\bT1\d{3}(?:\.\d{3})?\b")
 
+# Curated MITRE ID -> tactic map. Covers the most common APT report TTPs.
+# Sub-techniques inherit from their base (T1547.001 → persistence via T1547).
 _TACTIC_MAP = {
-    "T1059": "execution",      "T1106": "execution",      "T1204": "execution",
-    "T1027": "defense-evasion","T1055": "defense-evasion","T1562": "defense-evasion",
-    "T1564": "defense-evasion","T1622": "defense-evasion","T1112": "defense-evasion",
-    "T1036": "defense-evasion","T1070": "defense-evasion",
-    "T1547": "persistence",    "T1546": "persistence",    "T1053": "persistence",
-    "T1543": "persistence",    "T1183": "persistence",
-    "T1102": "command-and-control","T1041": "command-and-control",
-    "T1071": "command-and-control","T1567": "command-and-control",
-    "T1134": "privilege-escalation","T1055": "privilege-escalation",
-    "T1003": "credential-access",
-    "T1082": "discovery",      "T1012": "discovery",
+    # execution
+    "T1059": "execution",            "T1106": "execution",
+    "T1204": "execution",            "T1129": "execution",
+    "T1047": "execution",            "T1569": "execution",
+    # defense evasion
+    "T1027": "defense-evasion",      "T1055": "defense-evasion",
+    "T1562": "defense-evasion",      "T1564": "defense-evasion",
+    "T1622": "defense-evasion",      "T1112": "defense-evasion",
+    "T1036": "defense-evasion",      "T1070": "defense-evasion",
+    "T1574": "defense-evasion",      "T1140": "defense-evasion",
+    # persistence
+    "T1547": "persistence",          "T1546": "persistence",
+    "T1053": "persistence",          "T1543": "persistence",
+    "T1183": "persistence",          "T1136": "persistence",
+    # privilege escalation
+    "T1134": "privilege-escalation",
+    # credential access
+    "T1003": "credential-access",    "T1555": "credential-access",
+    "T1056": "credential-access",
+    # discovery
+    "T1082": "discovery",            "T1012": "discovery",
+    "T1057": "discovery",            "T1083": "discovery",
+    "T1518": "discovery",
+    # command and control
+    "T1102": "command-and-control",  "T1041": "command-and-control",
+    "T1071": "command-and-control",  "T1567": "command-and-control",
+    "T1090": "command-and-control",  "T1573": "command-and-control",
+    "T1132": "command-and-control",
+    # exfiltration
+    "T1029": "exfiltration",         "T1048": "exfiltration",
+    # impact
+    "T1486": "impact",               "T1490": "impact",
+    "T1489": "impact",
 }
+
+# Kill-chain ordering: stages render in this order in the manifest and UI.
+_KILL_CHAIN_ORDER = [
+    "discovery",
+    "execution",
+    "privilege-escalation",
+    "defense-evasion",
+    "credential-access",
+    "persistence",
+    "command-and-control",
+    "exfiltration",
+    "impact",
+    "unknown",
+]
 
 
 def _load_cfg(name: str) -> dict:
@@ -53,7 +101,6 @@ def _load_cfg(name: str) -> dict:
 def agent_fetch(actor_id: str) -> tuple[bool, dict]:
     try:
         import malpedia
-        # try actor first, then family
         if "/" in actor_id or "win." in actor_id or "elf." in actor_id:
             data = malpedia.get_family(actor_id)
         else:
@@ -68,7 +115,7 @@ def agent_fetch(actor_id: str) -> tuple[bool, dict]:
 # --- Agent 2: Report downloader ----------------------------------------------
 
 def agent_download(actor_data: dict, session_id: str):
-    """Download reports, store each in DB, yield SSE-style dicts as they land."""
+    """Download a handful of family/ref URLs, persist to DB, yield SSE events."""
     try:
         import requests as _req
     except ImportError:
@@ -85,12 +132,10 @@ def agent_download(actor_data: dict, session_id: str):
         try:
             r = _req.get(url, timeout=15, headers={"User-Agent": "Mozilla/5.0"})
             if r.status_code == 200:
-                # store raw HTML so the frontend can render it properly
                 raw_html = r.text[:120000]
                 _db.save_report(session_id, idx, url, raw_html)
-                # plain text for the live event preview only
-                plain = re.sub(r'<[^>]+>', ' ', raw_html)
-                plain = re.sub(r'\s+', ' ', plain).strip()
+                plain = re.sub(r"<[^>]+>", " ", raw_html)
+                plain = re.sub(r"\s+", " ", plain).strip()
                 yield {"report_idx": idx, "url": url,
                        "preview": plain[:300], "chars": len(raw_html)}
                 idx += 1
@@ -98,177 +143,275 @@ def agent_download(actor_data: dict, session_id: str):
             continue
 
 
-# --- Agent 3: TTP extractor --------------------------------------------------
+# --- Agent 3: TTP extractor (regex-only, no LLM API) -------------------------
 
-def _extract_regex(contents: list[str]) -> list[dict]:
-    found: dict[str, dict] = {}
-    for i, text in enumerate(contents):
-        for m in ATTACK_RE.finditer(text):
-            aid = m.group()
-            if aid not in found:
-                base   = aid.split(".")[0]
-                tactic = _TACTIC_MAP.get(aid) or _TACTIC_MAP.get(base) or "unknown"
-                found[aid] = {"id": aid, "name": aid, "tactic": tactic,
-                               "source": f"report_{i:02d}"}
-    return list(found.values())
-
-
-def _extract_claude(contents: list[str]) -> list[dict]:
+def _ttp_name(aid: str) -> str:
+    """Use the curated peekaboo MITRE library for a human-readable name."""
     try:
-        import anthropic
-        cfg     = _load_cfg("anthropic_config")
-        api_key = cfg.get("api_key") or cfg.get("anthropic_api_key", "")
-        if not api_key or "xxx" in api_key:
-            return []
-
-        chunks = [c[:8000] for c in contents[:4] if c]
-        if not chunks:
-            return []
-
-        text = "\n\n---\n\n".join(chunks)[:24000]
-
-        client = anthropic.Anthropic(api_key=api_key)
-        msg = client.messages.create(
-            model="claude-sonnet-4-6",
-            max_tokens=2048,
-            messages=[{
-                "role": "user",
-                "content": (
-                    "Extract MITRE ATT&CK TTPs from this threat intelligence report.\n"
-                    "Focus on execution, defense-evasion, persistence, command-and-control.\n\n"
-                    "Return ONLY a JSON array:\n"
-                    '[{"id":"T1055","name":"Process Injection","tactic":"defense-evasion",'
-                    '"evidence":"short quote from report"}]\n\n'
-                    "No markdown, no explanation, just the JSON array.\n\n"
-                    f"Report:\n{text}"
-                ),
-            }],
-        )
-
-        raw = msg.content[0].text.strip()
-        m   = re.search(r'\[.*\]', raw, re.DOTALL)
-        if m:
-            return json.loads(m.group())
+        sys.path.insert(0, str(_BASE / "dashboard"))
+        from mitre import PEEKABOO_MODULES  # local fast lookup
+        info = PEEKABOO_MODULES.get(aid) or PEEKABOO_MODULES.get(aid.split(".")[0])
+        if isinstance(info, dict) and info.get("name"):
+            return info["name"]
     except Exception:
         pass
-    return []
+    return aid
 
 
 def agent_extract_ttps(report_contents: list[str], actor_data: dict) -> list[dict]:
-    ttps = _extract_claude(report_contents)
-    if not ttps:
-        ttps = _extract_regex(report_contents)
+    """
+    Regex-based MITRE ATT&CK ID extraction across all report bodies.
+    Sorted by appearance frequency (most-cited TTPs first).
+    Optionally enriched from actor.attack_ids if Malpedia returned them.
+    """
+    counts: dict[str, int]            = {}
+    evidence_map: dict[str, str]      = {}
 
-    seen: set[str]      = set()
-    validated: list[dict] = []
-    for t in ttps:
-        aid = t.get("id", "")
-        if not re.match(r'^T1\d{3}(\.\d{3})?$', aid):
+    for i, text in enumerate(report_contents):
+        if not text:
             continue
-        if aid in seen:
-            continue
-        seen.add(aid)
-        base = aid.split(".")[0]
-        if not t.get("tactic"):
-            t["tactic"] = _TACTIC_MAP.get(aid) or _TACTIC_MAP.get(base) or "unknown"
-        if not t.get("name") or t["name"] == aid:
-            t["name"] = aid
-        validated.append(t)
+        for m in ATTACK_RE.finditer(text):
+            aid = m.group()
+            counts[aid] = counts.get(aid, 0) + 1
+            if aid not in evidence_map:
+                start = max(0, m.start() - 60)
+                end   = min(len(text), m.end() + 80)
+                snippet = text[start:end].strip().replace("\n", " ")
+                snippet = re.sub(r"\s+", " ", snippet)
+                evidence_map[aid] = snippet
 
-    return validated
+    # actor-level Malpedia metadata sometimes lists TTPs directly
+    for aid in actor_data.get("attack_ids", []) or []:
+        if ATTACK_RE.fullmatch(aid):
+            counts[aid] = counts.get(aid, 0) + 1
+
+    ttps: list[dict] = []
+    for aid, n in counts.items():
+        base   = aid.split(".")[0]
+        tactic = _TACTIC_MAP.get(aid) or _TACTIC_MAP.get(base) or "unknown"
+        ttps.append({
+            "id":       aid,
+            "name":     _ttp_name(aid),
+            "tactic":   tactic,
+            "evidence": evidence_map.get(aid, "")[:160],
+            "mentions": n,
+        })
+
+    # sort: kill-chain order first, then by mention count desc
+    order_key = {t: i for i, t in enumerate(_KILL_CHAIN_ORDER)}
+    ttps.sort(key=lambda t: (order_key.get(t["tactic"], 99), -t["mentions"]))
+    return ttps
 
 
-# --- Agent 4: Module selector ------------------------------------------------
+# --- Agent 4: per-TTP module selection ---------------------------------------
 
-def agent_select_modules(ttps: list[dict]) -> dict:
+def _index_registry() -> tuple[list[dict], dict[str, list[dict]]]:
+    """Return (full_registry, attack_id -> [modules])."""
     import discovery
-
     registry = discovery.scan_all()
-
     by_aid: dict[str, list[dict]] = {}
     for mod in registry:
-        for aid in mod["attack_ids"]:
+        for aid in mod.get("attack_ids", []):
             by_aid.setdefault(aid, []).append(mod)
+    return registry, by_aid
 
-    params: dict = {
-        "payload":    "meow",
-        "encryption": "speck",
-        "malware":    "injection",
-        "injection":  "virtualallocex",
-        "stealer":    "telegram",
-        "persistence":"none",
-        "selected_modules": [],
+
+def _score_module(mod: dict, ttp: dict) -> int:
+    """Prefer modules whose category aligns with the TTP tactic."""
+    cat_to_tactic = {
+        "persistence":  "persistence",
+        "injection":    "defense-evasion",
+        "evasion":      "defense-evasion",
+        "cryptography": "defense-evasion",
+        "syscalls":     "defense-evasion",
+        "c2":           "command-and-control",
+        "privesc":      "privilege-escalation",
+        "shellcoding":  "execution",
+        "hooking":      "credential-access",
     }
+    score = 0
+    if cat_to_tactic.get(mod.get("category", "")) == ttp.get("tactic"):
+        score += 5
+    if mod.get("platform") == "windows":
+        score += 1  # demo target is Windows
+    if mod.get("has_post"):
+        score += 1  # prefer documented modules
+    return score
+
+
+def agent_select_modules(ttps: list[dict]) -> dict:
+    """
+    For each TTP, pick the best KB module and produce a self-contained 'stage'
+    record. Stages are numbered by kill-chain order so the output looks like a
+    real adversary kill chain.
+    """
+    registry, by_aid = _index_registry()
+    stages: list[dict] = []
 
     for ttp in ttps:
         aid  = ttp["id"]
         base = aid.split(".")[0]
-        mods = by_aid.get(aid, []) or by_aid.get(base, [])
-        if mods:
-            best = mods[0]
-            params["selected_modules"].append({
-                "attack_id": aid,
-                "module_id": best["id"],
-                "title":     best["title"],
-                "category":  best["category"],
-                "platform":  best["platform"],
-            })
+        candidates = by_aid.get(aid, []) or by_aid.get(base, [])
+        if not candidates:
+            continue
 
-    # map category -> build param overrides
-    cats = {m["category"] for m in params["selected_modules"]}
-    if "cryptography" in cats:
-        # find a suitable crypto module from peekaboo templates
-        from mitre import PEEKABOO_MODULES
-        crypto_algos = [a for a in ["speck", "mars", "lucifer", "feal8", "treyfer"]
-                        if (Path(_BASE) / "malware/crypto" / a).exists()]
-        if crypto_algos:
-            params["encryption"] = crypto_algos[0]
+        best = max(candidates, key=lambda m: _score_module(m, ttp))
+        stages.append({
+            "stage_num":   len(stages) + 1,
+            "ttp_id":      aid,
+            "ttp_name":    ttp.get("name", aid),
+            "tactic":      ttp.get("tactic", "unknown"),
+            "evidence":    ttp.get("evidence", ""),
+            "mentions":    ttp.get("mentions", 1),
+            "module_id":   best["id"],
+            "module_title": best["title"],
+            "category":    best["category"],
+            "platform":    best["platform"],
+            "compiler":    best.get("compiler", ""),
+            "extra_libs":  best.get("extra_libs", []),
+            "src_path":    best["src_path"],
+            "src_name":    best["src_name"],
+            "blog_url":    best.get("blog_url", ""),
+            "snippet":     (best.get("snippet") or "")[:600],
+        })
 
-    return params
+    # legacy shape kept so the existing frontend can still render a flat list
+    selected_modules = [{
+        "attack_id": s["ttp_id"],
+        "module_id": s["module_id"],
+        "title":     s["module_title"],
+        "category":  s["category"],
+        "platform":  s["platform"],
+    } for s in stages]
+
+    return {"stages": stages, "selected_modules": selected_modules}
 
 
-# --- Agent 5: Builder --------------------------------------------------------
+# --- Agent 5: per-stage assembly ---------------------------------------------
 
-def agent_build(params: dict, session_id: str) -> tuple[bool, str, list[Path]]:
-    samples_dir = _SAMPLES / session_id
-    samples_dir.mkdir(parents=True, exist_ok=True)
+_INVALID = re.compile(r"[^A-Za-z0-9_.-]+")
 
-    cmd = [
-        sys.executable, str(_BASE / "peekaboo.py"),
-        "-p", params.get("payload", "meow"),
-        "-e", params.get("encryption", "speck"),
-        "-m", params.get("malware", "injection"),
-        "-i", params.get("injection", "virtualallocex"),
-        "-s", params.get("stealer", "telegram"),
-        "-r", params.get("persistence", "none"),
-    ]
+
+def _safe(name: str) -> str:
+    return _INVALID.sub("_", name).strip("_") or "stage"
+
+
+def _compile_one(stage: dict, out_dir: Path) -> Path | None:
+    """Best-effort compile of a single stage. Failure is logged, not fatal."""
+    compiler = stage.get("compiler", "")
+    src      = Path(stage["src_path"])
+    out      = out_dir / f"{Path(stage['_out_src']).stem}.exe"
+
+    cmd: list[str] = []
+    if compiler == "mingw-gcc":
+        cmd = ["x86_64-w64-mingw32-gcc", str(src), "-o", str(out)]
+    elif compiler == "mingw-gpp":
+        cmd = ["x86_64-w64-mingw32-g++", str(src), "-o", str(out)]
+    elif compiler == "gcc":
+        cmd = ["gcc", str(src), "-o", str(out.with_suffix(""))]
+    elif compiler == "gpp":
+        cmd = ["g++", str(src), "-o", str(out.with_suffix(""))]
+    else:
+        return None
+    cmd += stage.get("extra_libs", [])
 
     try:
-        result = subprocess.run(cmd, capture_output=True, text=True, timeout=120, cwd=str(_BASE))
-        log    = result.stdout + result.stderr
+        r = subprocess.run(cmd, capture_output=True, text=True, timeout=45)
+        if r.returncode == 0 and out.exists():
+            return out
+    except Exception:
+        pass
+    return None
 
-        if result.returncode == 0:
-            # copy produced binaries to samples dir
-            malware_dir   = _BASE / "malware"
-            injection_type = params.get("injection", "virtualallocex")
-            src_dir        = malware_dir / "injection" / injection_type
-            if params.get("malware") == "stealer":
-                src_dir = malware_dir / "stealer" / params.get("stealer", "telegram")
 
-            copied: list[Path] = []
-            for name in ("peekaboo.exe", "persistence.exe"):
-                src = src_dir / name
-                if src.exists():
-                    dst = samples_dir / name
-                    shutil.copy2(src, dst)
-                    copied.append(dst)
+def agent_build_stages(stages: list[dict], session_id: str,
+                       compile_each: bool = False) -> tuple[list[Path], dict]:
+    """
+    Copy each stage's source into samples/{sid}/ with a kill-chain prefix and
+    write a manifest.json. Optionally invoke the matching compiler per stage.
 
-            return True, log, copied
-        return False, log, []
-    except subprocess.TimeoutExpired:
-        return False, "build timed out (120s)", []
-    except Exception as e:
-        return False, str(e), []
+    Returns (produced_files, manifest).
+    """
+    out_dir = _SAMPLES / session_id
+    out_dir.mkdir(parents=True, exist_ok=True)
+
+    produced: list[Path] = []
+    seen_names: set[str] = set()
+
+    for s in stages:
+        src = Path(s["src_path"])
+        if not src.exists():
+            continue
+
+        # name: stage_03_persistence_T1547_pers.c (sortable, descriptive)
+        tactic_tag = _safe(s["tactic"])
+        aid_tag    = _safe(s["ttp_id"])
+        base       = f"stage_{s['stage_num']:02d}_{tactic_tag}_{aid_tag}_{_safe(src.stem)}{src.suffix}"
+        # collision guard (shouldn't usually fire, kill-chain order is unique)
+        name = base
+        n    = 1
+        while name in seen_names:
+            name = f"{base[:-len(src.suffix)]}_{n}{src.suffix}"
+            n   += 1
+        seen_names.add(name)
+
+        dst = out_dir / name
+        try:
+            shutil.copy2(src, dst)
+            s["_out_src"] = dst.name
+            produced.append(dst)
+        except Exception:
+            continue
+
+        if compile_each:
+            bin_path = _compile_one(s, out_dir)
+            if bin_path is not None:
+                produced.append(bin_path)
+                s["_out_bin"] = bin_path.name
+
+    manifest = {
+        "session_id":  session_id,
+        "built_at":    datetime.now().isoformat(),
+        "kill_chain":  _KILL_CHAIN_ORDER,
+        "compile_each": compile_each,
+        "stages":      stages,
+    }
+    (out_dir / "manifest.json").write_text(json.dumps(manifest, indent=2))
+    produced.append(out_dir / "manifest.json")
+
+    return produced, manifest
+
+
+# --- Optional Ollama per-stage narrator (local, off by default) --------------
+
+def _ollama_narrate(stage: dict, base_url: str, model: str, timeout: int = 25) -> str:
+    """
+    Tiny local Ollama call. ~80-token output describing why this module fits
+    the TTP. Returns "" on any error so the pipeline never breaks because of it.
+    """
+    import urllib.request as _ur
+    prompt = (
+        "You are a malware research assistant. In 2 short sentences explain why "
+        f"the module '{stage['module_title']}' (category {stage['category']}) is "
+        f"a reasonable implementation for MITRE ATT&CK technique {stage['ttp_id']} "
+        f"({stage['ttp_name']}, tactic: {stage['tactic']}). Be concrete, no fluff."
+    )
+    payload = json.dumps({
+        "model":  model,
+        "stream": False,
+        "think":  False,
+        "options": {"temperature": 0.2, "num_predict": 120, "num_ctx": 1024},
+        "messages": [{"role": "user", "content": prompt}],
+    }).encode()
+    try:
+        req = _ur.Request(f"{base_url.rstrip('/')}/api/chat", data=payload,
+                          headers={"Content-Type": "application/json"},
+                          method="POST")
+        with _ur.urlopen(req, timeout=timeout) as resp:
+            data = json.loads(resp.read())
+            return (data.get("message", {}).get("content") or "").strip()
+    except Exception:
+        return ""
 
 
 # --- Main pipeline -----------------------------------------------------------
@@ -279,13 +422,18 @@ def run_pipeline(actor_id: str) -> Generator[dict, None, None]:
     session_dir.mkdir(parents=True, exist_ok=True)
     started = datetime.now().isoformat()
 
-    # persist session skeleton immediately so the UI can track it
     _db.save_pipeline_session({
         "session_id": session_id, "actor_id": actor_id,
         "started": started, "status": "running",
     })
 
-    # 1. Fetch
+    pipeline_cfg = _load_cfg("apt_pipeline_config")
+    compile_each = bool(pipeline_cfg.get("compile_each", False))
+    use_ollama   = bool(pipeline_cfg.get("ollama_narration", False))
+    ollama_url   = pipeline_cfg.get("ollama_base_url", "http://localhost:11434")
+    ollama_model = pipeline_cfg.get("ollama_model", "qwen3:0.6b")
+
+    # 1. Fetch actor / family
     yield {"step": 1, "status": "running", "msg": f"fetching actor data: {actor_id}"}
     ok, actor_data = agent_fetch(actor_id)
     if not ok:
@@ -295,15 +443,16 @@ def run_pipeline(actor_id: str) -> Generator[dict, None, None]:
         return
     actor_name = actor_data.get("name", actor_id)
     yield {"step": 1, "status": "done", "msg": f"fetched: {actor_name}",
-           "data": {k: v for k, v in actor_data.items() if k not in ("snippet", "related_posts")}}
+           "data": {k: v for k, v in actor_data.items()
+                    if k not in ("snippet", "related_posts")}}
 
-    # 2. Download reports - stream one event per report as they land in DB
+    # 2. Download reports
     yield {"step": 2, "status": "running", "msg": "downloading threat reports…"}
     report_contents: list[str] = []
     for ev in agent_download(actor_data, session_id):
         raw = _db.get_reports(session_id)[ev["report_idx"]]["content"]
-        plain = re.sub(r'<[^>]+>', ' ', raw)
-        plain = re.sub(r'\s+', ' ', plain).strip()[:60000]
+        plain = re.sub(r"<[^>]+>", " ", raw)
+        plain = re.sub(r"\s+", " ", plain).strip()[:60000]
         report_contents.append(plain)
         yield {"step": 2, "status": "running",
                "msg": f"downloaded report {ev['report_idx']+1}: {ev['url'][:60]}",
@@ -312,30 +461,61 @@ def run_pipeline(actor_id: str) -> Generator[dict, None, None]:
            "msg": f"{len(report_contents)} report(s) downloaded",
            "data": {"count": len(report_contents)}}
 
-    # 3. Extract TTPs
-    yield {"step": 3, "status": "running", "msg": "extracting TTPs (Claude API + regex)…"}
+    # 3. Extract TTPs (local regex only — no API calls)
+    yield {"step": 3, "status": "running", "msg": "extracting TTPs (regex, local)…"}
     ttps = agent_extract_ttps(report_contents, actor_data)
     _db.update_pipeline_session(session_id, ttps=ttps)
-    yield {"step": 3, "status": "done", "msg": f"{len(ttps)} TTPs extracted", "data": ttps}
+    yield {"step": 3, "status": "done",
+           "msg": f"{len(ttps)} TTP(s) extracted", "data": ttps}
 
-    # 4. Select modules
-    yield {"step": 4, "status": "running", "msg": "mapping TTPs to modules…"}
-    params = agent_select_modules(ttps)
-    _db.update_pipeline_session(session_id, params=params)
+    # 4. Select per-TTP modules
+    yield {"step": 4, "status": "running", "msg": "mapping each TTP to a KB module…"}
+    sel = agent_select_modules(ttps)
+    stages = sel["stages"]
+    _db.update_pipeline_session(session_id, params=sel)
     yield {"step": 4, "status": "done",
-           "msg": f"{len(params['selected_modules'])} module(s) selected", "data": params}
+           "msg": f"{len(stages)} kill-chain stage(s) mapped",
+           "data": sel}
 
-    # 5. Build
-    yield {"step": 5, "status": "running", "msg": "compiling sample binary…"}
-    ok, log, files = agent_build(params, session_id)
+    if not stages:
+        finished = datetime.now().isoformat()
+        _db.update_pipeline_session(session_id, status="failed", finished=finished)
+        yield {"step": 5, "status": "error",
+               "msg": "no KB modules matched any extracted TTP — try a different actor"}
+        return
+
+    # 5. Assemble per-stage malware (one artefact per TTP)
+    yield {"step": 5, "status": "running",
+           "msg": f"assembling {len(stages)} per-TTP artefact(s) "
+                  f"({'compile' if compile_each else 'source-only'})…"}
+
+    if use_ollama:
+        for s in stages:
+            yield {"step": 5, "status": "running",
+                   "msg": f"narrating stage {s['stage_num']}/{len(stages)}: "
+                          f"{s['ttp_id']} → {s['module_title'][:40]}"}
+            s["narration"] = _ollama_narrate(s, ollama_url, ollama_model)
+
+    files, manifest = agent_build_stages(stages, session_id,
+                                         compile_each=compile_each)
     finished = datetime.now().isoformat()
-    if ok:
-        _db.update_pipeline_session(session_id, status="success", finished=finished)
-        yield {"step": 5, "status": "done", "msg": f"binary compiled ({len(files)} file(s))",
-               "data": {"session_id": session_id, "files": [f.name for f in files]}}
+
+    if files:
+        _db.update_pipeline_session(session_id, status="success",
+                                    finished=finished, params=sel)
+        yield {"step": 5, "status": "done",
+               "msg": f"{len(stages)} stage artefact(s) written "
+                      f"({len(files)} file(s) total)",
+               "data": {
+                   "session_id": session_id,
+                   "files":      [f.name for f in files],
+                   "stages":     stages,
+                   "manifest":   "manifest.json",
+               }}
     else:
         _db.update_pipeline_session(session_id, status="failed", finished=finished)
-        yield {"step": 5, "status": "error", "msg": log[:300]}
+        yield {"step": 5, "status": "error",
+               "msg": "no source files could be copied (check ~/hacking/meow paths)"}
         return
 
     yield {"step": 0, "status": "complete", "msg": "pipeline complete",
