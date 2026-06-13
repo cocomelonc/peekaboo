@@ -1,6 +1,6 @@
 {
-  "session_id": "77113656",
-  "built_at": "2026-06-13T08:55:20.770933",
+  "session_id": "08514ed4",
+  "built_at": "2026-06-13T16:48:36.626218",
   "kill_chain": [
     "discovery",
     "execution",
@@ -13,7 +13,7 @@
     "impact",
     "unknown"
   ],
-  "compile_each": false,
+  "compile_each": true,
   "stages": [
     {
       "stage_num": 1,
@@ -32,7 +32,11 @@
       "src_name": "hack.c",
       "blog_url": "https://cocomelonc.github.io/malware/2023/11/23/malware-cryptography-22.html",
       "snippet": "/*\n * hack.c\n * with decrypt payload via XTEA\n * author: @cocomelonc\n * https://cocomelonc.github.io/malware/2023/11/23/malware-cryptography-22.html\n*/\n#include <stdio.h>\n#include <stdlib.h>\n#include <string.h>\n#include <windows.h>\n\n#define KEY_SIZE 16\n#define ROUNDS 32\n\nvoid xtea_encrypt(unsigned int *data, unsigned int *key) {\n  unsigned int v0 = data[0], v1 = data[1];\n  unsigned int sum = 0, delta = 0x9e3779b9;\n\n  for (int i = 0; i < ROUNDS; i++) {\n    v0 += (((v1 << 4) ^ (v1 >> 5)) + v1) ^ (sum + key[sum & 3]);\n    sum += delta;\n    v1 += (((v0 << 4) ^ (v0 >> 5)) + v0) ^ (sum + key[(sum >>",
-      "_out_src": "stage_01_defense-evasion_T1027_hack.c"
+      "_out_src": "stage_01_defense-evasion_T1027_hack.c",
+      "_out_src_size": 3598,
+      "_out_bin": "stage_01_defense-evasion_T1027_hack.exe",
+      "_out_bin_kind": "exe",
+      "_out_bin_size": 40960
     },
     {
       "stage_num": 2,
@@ -51,7 +55,11 @@
       "src_name": "pet.cpp",
       "blog_url": "https://cocomelonc.github.io/tutorial/2022/03/08/basic-hooking-2.html",
       "snippet": "/*\npet.dll\n*/\n\n#include <windows.h>\n#pragma comment (lib, \"user32.lib\")\n\nBOOL APIENTRY DllMain(HMODULE hModule,  DWORD  ul_reason_for_call, LPVOID lpReserved) {\n  switch (ul_reason_for_call) {\n    case DLL_PROCESS_ATTACH:\n      break;\n    case DLL_PROCESS_DETACH:\n      break;\n    case DLL_THREAD_ATTACH:\n      break;\n    case DLL_THREAD_DETACH:\n      break;\n  }\n  return TRUE;\n}\n\nextern \"C\" {\n  __declspec(dllexport) int _cdecl Cat(LPCTSTR say) {\n    MessageBox(NULL, say, \"=^..^=\", MB_OK);\n    return 1;\n  }\n}\n\nextern \"C\" {\n  __declspec(dllexport) int _cdecl Mouse(LPCTSTR say) {",
-      "_out_src": "stage_02_credential-access_T1056.003_pet.cpp"
+      "_out_src": "stage_02_credential-access_T1056.003_pet.cpp",
+      "_out_src_size": 908,
+      "_out_bin": "stage_02_credential-access_T1056.003_pet.dll",
+      "_out_bin_kind": "dll",
+      "_out_bin_size": 12800
     },
     {
       "stage_num": 3,
@@ -70,7 +78,16 @@
       "src_name": "vuln.c",
       "blog_url": "https://cocomelonc.github.io/pwn/2021/10/19/buffer-overflow-1.html",
       "snippet": "#include <stdlib.h>\n#include <stdio.h>\n#include <string.h>\n\nint overflow(char *input) {\n  char buf[256];\n  strcpy(buf, input);\n  return 1;\n}\n\nint main(int argc, char *argv[]) {\n  overflow(argv[1]);\n  printf(\"meow =^..^=\\n\");\n  return 1;\n}",
-      "_out_src": "stage_03_unknown_T1203_vuln.c"
+      "_out_src": "stage_03_unknown_T1203_vuln.c",
+      "_out_src_size": 239,
+      "_out_bin": "stage_03_unknown_T1203_vuln.exe",
+      "_out_bin_kind": "exe",
+      "_out_bin_size": 39936
     }
-  ]
+  ],
+  "counts": {
+    "source": 3,
+    "binary": 3,
+    "failed": 0
+  }
 }

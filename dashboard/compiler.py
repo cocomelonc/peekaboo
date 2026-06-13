@@ -182,11 +182,29 @@ class BuildSpec:
     apply_creds:    bool           = True
     timeout:        int            = DEFAULT_TIMEOUT
     auto_detect_libs: bool         = True
+    is_dll:         bool           = False   # adds -shared, forces .dll extension
 
     def __post_init__(self):
         self.src_path = Path(self.src_path)
         self.out_path = Path(self.out_path)
         self.extra_sources = [Path(p) for p in self.extra_sources]
+        # Honour is_dll: rewrite the extension so callers can't pick the wrong one
+        if self.is_dll and self.out_path.suffix.lower() != ".dll":
+            self.out_path = self.out_path.with_suffix(".dll")
+
+
+_DLL_PATTERNS = re.compile(
+    r"\bDllMain\b|\bAPIENTRY\b|\bDllRegisterServer\b|\bDllGetClassObject\b"
+)
+
+
+def looks_like_dll(src_path: Path) -> bool:
+    """Heuristic: detect DLL sources (DllMain / APIENTRY) by scanning the head."""
+    try:
+        head = Path(src_path).read_text(encoding="utf-8", errors="replace")[:6000]
+    except Exception:
+        return False
+    return bool(_DLL_PATTERNS.search(head))
 
 
 @dataclass
@@ -200,8 +218,13 @@ class BuildResult:
 
 
 def _compile_cmd(compiler_path: str, kind: str, src: Path, out: Path,
-                 extra_libs: list[str]) -> list[str]:
-    flags = MINGW_FLAGS if kind.startswith("mingw") else GCC_FLAGS
+                 extra_libs: list[str], is_dll: bool) -> list[str]:
+    flags = list(MINGW_FLAGS if kind.startswith("mingw") else GCC_FLAGS)
+    if is_dll:
+        # -shared makes a DLL; --kill-at strips the @N suffix from exports.
+        flags += ["-shared"]
+        if kind.startswith("mingw"):
+            flags += ["-Wl,--kill-at"]
     return [compiler_path, *flags, str(src), "-o", str(out), *extra_libs]
 
 
@@ -263,7 +286,8 @@ def build(spec: BuildSpec) -> BuildResult:
                 if flag not in libs:
                     libs.append(flag)
 
-        cmd = _compile_cmd(compiler_path, spec.compiler, primary_tmp, spec.out_path, libs)
+        cmd = _compile_cmd(compiler_path, spec.compiler, primary_tmp,
+                           spec.out_path, libs, spec.is_dll)
         log.append(f"[compile] {' '.join(cmd)}")
 
         try:

@@ -3904,53 +3904,106 @@ async function runPipeline() {
           }
         }
 
-        // step 5 done -> per-stage kill-chain artefacts
+        // step 5 done -> per-stage kill-chain artefacts (Source + Binaries)
         if (ev.step === 5 && ev.status === 'done') {
           const data   = ev.data || {};
           const sid    = data.session_id || '';
           const files  = data.files  || [];
           const stages = data.stages || [];
+
+          // Reusable bits
+          const dlBtn = (label, fname, cls = 'btn-green') =>
+            fname ? `<a href="/api/samples/${sid}/download/${encodeURIComponent(fname)}" class="btn ${cls} btn-sm ms-auto">⬇ ${escHtml(label)}</a>` : '';
+
+          const stageRow = (s, fname, fsize, kindLabel) => {
+            const col = TACTIC_COLORS[s.tactic] || TACTIC_COLORS.unknown;
+            const sizeStr = fsize ? ` <span class="text-xs text-dim">${(fsize/1024).toFixed(1)} KB</span>` : '';
+            const blog = s.blog_url
+              ? `<a href="${escAttr(s.blog_url)}" target="_blank" class="text-xs" style="color:var(--cyan)">writeup</a>`
+              : '';
+            return `<div class="apt-mod-row" style="flex-wrap:wrap;gap:8px">
+              <span class="badge text-xs mono" style="background:#2a2238;color:var(--purple)">stage ${s.stage_num}</span>
+              <span class="badge badge-red text-xs">${escHtml(s.ttp_id)}</span>
+              <span class="badge text-xs" style="background:${col}22;color:${col}">${escHtml(s.tactic)}</span>
+              <span class="text-sm" style="flex:1;min-width:180px">${escHtml(s.module_title || s.module_id)}</span>
+              <span class="badge text-xs mono" style="background:#1a1a28;color:var(--dim)">${escHtml(fname)}${sizeStr}</span>
+              ${blog}
+              ${dlBtn(kindLabel, fname)}
+            </div>`;
+          };
+
           const div = document.createElement('div');
           div.className = 'card card-sm apt-result-card';
 
-          // header
-          let html = `<div class="apt-sec-label">KILL-CHAIN ARTEFACTS (${stages.length || files.length})</div>
+          // header — counts come straight from manifest.counts when present
+          const counts = data.counts || {
+            source: stages.filter(s => s._out_src).length,
+            binary: stages.filter(s => s._out_bin).length,
+            failed: stages.filter(s => s._compile_error).length,
+          };
+          let html = `<div class="apt-sec-label">KILL-CHAIN ARTEFACTS (${stages.length})</div>
             <div class="apt-dl-row">
               <span class="badge badge-green">✓ assembled</span>
+              <span class="text-xs text-dim">${counts.source} source · ${counts.binary} binary${counts.failed ? ` · <span style="color:var(--red)">${counts.failed} failed</span>` : ''}</span>
               <span class="mono text-xs text-dim">session: ${escHtml(sid)}</span>
               <button class="btn btn-ghost btn-sm ms-auto" onclick="openSessionDrawer('${escAttr(sid)}')">🔍 Inspect</button>
             </div>`;
 
-          // per-stage rows when the new pipeline emits stages[]
           if (stages.length) {
-            const stageRows = stages.map(s => {
-              const col = TACTIC_COLORS[s.tactic] || TACTIC_COLORS.unknown;
-              const out = s._out_src || '';
-              const dl  = out
-                ? `<a href="/api/samples/${sid}/download/${encodeURIComponent(out)}" class="btn btn-green btn-sm ms-auto">⬇ source</a>`
-                : '';
-              const blog = s.blog_url
-                ? `<a href="${escAttr(s.blog_url)}" target="_blank" class="text-xs" style="color:var(--cyan)">writeup</a>`
-                : '';
-              return `<div class="apt-mod-row" style="flex-wrap:wrap;gap:8px">
+            // -- SOURCE FILES section -------------------------------------
+            const srcRows = stages
+              .filter(s => s._out_src)
+              .map(s => stageRow(s, s._out_src, s._out_src_size, 'source'))
+              .join('');
+            html += `<div style="margin-top:12px"><div class="apt-sec-label" style="margin-bottom:6px">📄 Source files (${counts.source})</div>
+              <div class="apt-inner-list">${srcRows || '<div class="text-dim text-xs" style="padding:8px 12px">no source files copied</div>'}</div></div>`;
+
+            // -- COMPILED BINARIES section --------------------------------
+            // Group by kind so .exe and .dll show in distinct lists
+            const binStages = stages.filter(s => s._out_bin);
+            const exes      = binStages.filter(s => s._out_bin_kind === 'exe' || !s._out_bin_kind);
+            const dlls      = binStages.filter(s => s._out_bin_kind === 'dll');
+            const elfs      = binStages.filter(s => s._out_bin_kind === 'elf');
+
+            const renderBinGroup = (label, list, kindLabel) => {
+              if (!list.length) return '';
+              const rows = list.map(s => stageRow(s, s._out_bin, s._out_bin_size, kindLabel)).join('');
+              return `<div style="margin-top:10px"><div class="text-xs text-dim" style="padding:0 4px 4px">${label} (${list.length})</div>
+                <div class="apt-inner-list">${rows}</div></div>`;
+            };
+
+            html += `<div style="margin-top:14px"><div class="apt-sec-label" style="margin-bottom:6px">⚙ Compiled binaries (${counts.binary})</div>`;
+            if (!binStages.length) {
+              html += `<div class="text-dim text-xs" style="padding:8px 12px;background:rgba(255,255,255,.02);border-radius:6px">no binaries produced — set <code>compile_each: true</code> in <code>config/apt_pipeline_config.json</code></div>`;
+            } else {
+              html += renderBinGroup('🪟 Windows EXE', exes, 'exe');
+              html += renderBinGroup('🧩 Windows DLL', dlls, 'dll');
+              html += renderBinGroup('🐧 Linux ELF',   elfs, 'elf');
+            }
+            html += `</div>`;
+
+            // -- COMPILE FAILURES (if any) --------------------------------
+            const failed = stages.filter(s => s._compile_error);
+            if (failed.length) {
+              const failRows = failed.map(s => `<div class="apt-mod-row">
                 <span class="badge text-xs mono" style="background:#2a2238;color:var(--purple)">stage ${s.stage_num}</span>
                 <span class="badge badge-red text-xs">${escHtml(s.ttp_id)}</span>
-                <span class="badge text-xs" style="background:${col}22;color:${col}">${escHtml(s.tactic)}</span>
-                <span class="text-sm" style="flex:1;min-width:200px">${escHtml(s.module_title || s.module_id)}</span>
-                ${blog}
-                ${dl}
-              </div>`;
-            }).join('');
-            html += `<div class="apt-inner-list">${stageRows}</div>`;
-            // manifest + bundle download
-            html += `<div class="apt-dl-btns" style="margin-top:10px">
+                <span class="text-sm" style="flex:1">${escHtml(s.module_title || s.module_id)}</span>
+                <span class="text-xs mono" style="color:var(--red);max-width:340px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap" title="${escAttr(s._compile_error)}">${escHtml(s._compile_error)}</span>
+              </div>`).join('');
+              html += `<div style="margin-top:14px"><div class="apt-sec-label" style="margin-bottom:6px;color:var(--red)">⚠ Compile failures (${failed.length})</div>
+                <div class="apt-inner-list">${failRows}</div></div>`;
+            }
+
+            // manifest download
+            html += `<div class="apt-dl-btns" style="margin-top:14px">
               <a href="/api/samples/${sid}/download/manifest.json" class="btn btn-ghost btn-sm">⬇ manifest.json</a>
             </div>`;
           } else {
-            // legacy fallback: flat file list
+            // legacy fallback: flat file list (pre-stages manifests)
             const dlBtns = files.map(f =>
               `<a href="/api/samples/${sid}/download/${encodeURIComponent(f)}" class="btn btn-green btn-sm">⬇ ${escHtml(f)}</a>`).join(' ');
-            html += dlBtns ? `<div class="apt-dl-btns">${dlBtns}</div>` : '';
+            html += dlBtns ? `<div class="apt-dl-btns" style="margin-top:10px">${dlBtns}</div>` : '';
           }
 
           div.innerHTML = html;
@@ -6314,24 +6367,28 @@ function _artRenderTactics() {
   `).join('');
 }
 
+// Single source of truth for tactic icons + labels (long & short).
+// Used by both the filter pills and the per-card pills.
+const _ART_TACTICS = {
+  'initial-access':       {icon: '🚪', short: 'InitialAccess', long: 'Initial Access'},
+  'execution':            {icon: '⚡', short: 'Execution',     long: 'Execution'},
+  'persistence':          {icon: '🔩', short: 'Persistence',   long: 'Persistence'},
+  'privilege-escalation': {icon: '⬆️', short: 'PrivEsc',       long: 'Priv Esc'},
+  'defense-evasion':      {icon: '🫥', short: 'DefEvasion',    long: 'Defense Evasion'},
+  'credential-access':    {icon: '🔑', short: 'CredAccess',    long: 'Cred Access'},
+  'discovery':            {icon: '🔍', short: 'Discovery',     long: 'Discovery'},
+  'lateral-movement':     {icon: '↔️', short: 'LateralMvt',    long: 'Lateral Mvt'},
+  'collection':           {icon: '📦', short: 'Collection',    long: 'Collection'},
+  'command-and-control':  {icon: '📡', short: 'C2',            long: 'C2'},
+  'exfiltration':         {icon: '📤', short: 'Exfiltration',  long: 'Exfiltration'},
+  'impact':               {icon: '💥', short: 'Impact',        long: 'Impact'},
+  'reconnaissance':       {icon: '🕵️', short: 'Recon',         long: 'Recon'},
+  'resource-development': {icon: '🏗️', short: 'ResourceDev',   long: 'Resource Dev'},
+};
+
 function _artFmtTactic(t) {
-  const map = {
-    'execution': '⚡ Execution',
-    'persistence': '🔩 Persistence',
-    'privilege-escalation': '⬆️ Priv Esc',
-    'defense-evasion': '🫥 Defense Evasion',
-    'credential-access': '🔑 Cred Access',
-    'discovery': '🔍 Discovery',
-    'lateral-movement': '↔️ Lateral Mvt',
-    'collection': '📦 Collection',
-    'command-and-control': '📡 C2',
-    'exfiltration': '📤 Exfiltration',
-    'impact': '💥 Impact',
-    'initial-access': '🚪 Initial Access',
-    'reconnaissance': '🕵️ Recon',
-    'resource-development': '🏗️ Resource Dev',
-  };
-  return map[t] || t;
+  const x = _ART_TACTICS[t];
+  return x ? `${x.icon} ${x.long}` : t;
 }
 
 function artSetTactic(t) {
@@ -6401,16 +6458,7 @@ function _artCardHTML(e) {
 }
 
 function _artFmtTacticShort(t) {
-  const map = {
-    'execution': 'Execution', 'persistence': 'Persistence',
-    'privilege-escalation': 'PrivEsc', 'defense-evasion': 'DefEvasion',
-    'credential-access': 'CredAccess', 'discovery': 'Discovery',
-    'lateral-movement': 'LateralMvt', 'collection': 'Collection',
-    'command-and-control': 'C2', 'exfiltration': 'Exfiltration',
-    'impact': 'Impact', 'initial-access': 'InitialAccess',
-    'reconnaissance': 'Recon', 'resource-development': 'ResourceDev',
-  };
-  return map[t] || t;
+  return _ART_TACTICS[t]?.short || t;
 }
 
 // -- detail modal ----------------------------------------------
@@ -6984,14 +7032,13 @@ function artRebuild() {
   btn.disabled = true;
   btn.textContent = '⏳ Building…';
   row.style.display = '';
-  fill.style.width = '5%';
+  fill.style.width = '2%';
   msg.textContent = 'Connecting to Sigma parser…';
 
-  let pct = 5;
+  // Real progress comes from the SSE 'running' events (current/total). We
+  // still keep a tiny floor so the bar moves the moment the connection opens.
   const es = new EventSource('/api/artifacts/rebuild');
-  const tick = setInterval(() => {
-    if (pct < 90) { pct += 0.8; fill.style.width = pct + '%'; }
-  }, 400);
+  let tick = null;   // legacy slot kept so the existing onmessage code can clearInterval(tick)
 
   es.onmessage = ev => {
     if (ev.data === '[DONE]') {
@@ -7005,7 +7052,14 @@ function artRebuild() {
     }
     try {
       const d = JSON.parse(ev.data);
-      if (d.status === 'running') { msg.textContent = d.msg; }
+      if (d.status === 'running') {
+        msg.textContent = d.msg;
+        // backend now emits current/total — wire that to the bar (clamped 2-95%)
+        if (d.total > 0) {
+          const pct = Math.max(2, Math.min(95, Math.round(d.current / d.total * 100)));
+          fill.style.width = pct + '%';
+        }
+      }
       else if (d.status === 'done') {
         msg.textContent = '✓ ' + d.msg;
         fill.style.width = '100%';

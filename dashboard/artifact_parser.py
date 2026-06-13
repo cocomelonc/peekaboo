@@ -1,12 +1,30 @@
 """
-artifact_parser.py - parse Sigma rules into a technique -> artifact map for peekaboo
-walks ~/hacking/sigma recursively, extracts ATT&CK T-IDs, event IDs, registry keys,
-process names, and command-line patterns, aggregated per technique ID.
+artifact_parser.py — Sigma → ATT&CK technique artifact map.
+
+Walks ~/hacking/sigma recursively, parses each .yml rule, extracts the
+technique IDs, event IDs, registry keys, process images, and command-line
+patterns referenced in `detection:`, and aggregates everything per technique.
+
+Design:
+  * One pure parse phase  — Path → ParsedRule (or None)
+  * One pure extract phase — Sigma detection block → 3 artifact lists,
+                              driven by an _EXTRACTORS registry instead of
+                              three nearly-identical functions
+  * One aggregate phase   — observe(rule) into a _TechniqueAcc, finalize once
+
+Public API preserved:
+  - build_artifact_map(sigma_dir, progress_cb) -> list[dict]
+  - HAS_YAML constant
+
+The legacy _TNAME map (built-in human-readable technique names) sits at the
+bottom so the top of the file is the working code, not 250 dict entries.
 """
 from __future__ import annotations
+
 import re
+from dataclasses import dataclass, field
 from pathlib import Path
-from typing import Callable, Optional
+from typing import Callable, Iterable, Optional
 
 try:
     import yaml
@@ -14,7 +32,368 @@ try:
 except ImportError:
     HAS_YAML = False
 
-# -- static T-ID -> name map (most common techniques) -------------------------
+
+# =============================================================================
+# 1. Patterns & lookups — pure data, easy to tune without touching code
+# =============================================================================
+
+_TID_RE  = re.compile(r"^attack\.(t\d{4}(?:\.\d{3})?)", re.IGNORECASE)
+_TACT_RE = re.compile(r"^attack\.([a-z\-]+)$",          re.IGNORECASE)
+
+_KNOWN_TACTICS = {
+    "initial-access", "execution", "persistence", "privilege-escalation",
+    "defense-evasion", "credential-access", "discovery", "lateral-movement",
+    "collection", "command-and-control", "exfiltration", "impact",
+    "reconnaissance", "resource-development",
+}
+
+# Sysmon / Security category → representative event ID(s).
+# Used as a fallback when the rule's `detection:` block has no explicit EventID.
+_CAT_EVENTS: dict[str, list[int]] = {
+    "process_creation":     [1, 4688],
+    "image_load":           [7],
+    "create_remote_thread": [8],
+    "raw_access_read":      [9],
+    "process_access":       [10],
+    "file_event":           [11],
+    "registry_add":         [12],
+    "registry_set":         [13],
+    "registry_delete":      [12, 13],
+    "registry_rename":      [14],
+    "pipe_created":         [17, 18],
+    "dns_query":            [22],
+    "file_delete":          [23, 26],
+    "network_connection":   [3],
+    "driver_load":          [6],
+    "process_tampering":    [25],
+    "file_access":          [11],
+    "wmi_event":            [19, 20, 21],
+    "ps_script":            [4104],
+    "ps_module":            [4103],
+    "ps_classic_script":    [400, 800],
+    "security":             [],
+}
+
+
+# =============================================================================
+# 2. Artifact extractors — three "find values in detection blocks that look
+#    like X" passes, expressed as data instead of three hand-rolled functions.
+# =============================================================================
+
+@dataclass(frozen=True)
+class Extractor:
+    """A pattern-driven artifact extractor over Sigma `detection:` blocks."""
+    name:        str
+    fields:      tuple[str, ...]                # Sigma field names to scan
+    predicate:   Callable[[str], bool]          # "this looks like one of these"
+    clean:       Callable[[str], str]           # canonicalise
+    cap:         int                            # max items kept per rule
+
+
+def _looks_like_reg_key(s: str) -> bool:
+    return any(x in s for x in (
+        "\\SOFTWARE\\", "\\SYSTEM\\", "\\HKEY", "\\CurrentVersion\\",
+        "HKLM", "HKCU", "HKCR", "\\Run", "\\Services\\", "\\Policies\\",
+    ))
+
+
+def _clean_reg_key(s: str) -> str:
+    return re.sub(r"\|[a-z]+$", "", s).strip()
+
+
+def _looks_like_process(s: str) -> bool:
+    if re.search(r"\.exe$", s, re.IGNORECASE):
+        return True
+    return "\\" in s and bool(re.search(r"\\\w+\.exe", s, re.IGNORECASE))
+
+
+def _clean_process(s: str) -> str:
+    return s.strip().replace("\\\\", "\\")
+
+
+_CMDLINE_HINTS = (" -", " /", "/c ", "/k ", "cmd", "powershell",
+                  "Invoke", "bypass", "-enc", "-nop", "-w ")
+
+
+def _looks_like_cmdline(s: str) -> bool:
+    s = s.strip()
+    if not (4 <= len(s) <= 120):
+        return False
+    if s.startswith("\\") or s.startswith("C:\\"):
+        return False
+    return any(h in s for h in _CMDLINE_HINTS)
+
+
+_EXTRACTORS: tuple[Extractor, ...] = (
+    Extractor(
+        name="reg_keys",
+        # TargetObject is the Sigma field for registry path; also scan
+        # everywhere as a safety net for rules that put the key in detail strings.
+        fields=("TargetObject",),
+        predicate=_looks_like_reg_key, clean=_clean_reg_key, cap=20,
+    ),
+    Extractor(
+        name="processes",
+        fields=("Image", "ParentImage", "SourceImage"),
+        predicate=_looks_like_process, clean=_clean_process, cap=20,
+    ),
+    Extractor(
+        name="cmdlines",
+        fields=("CommandLine",),
+        predicate=_looks_like_cmdline, clean=str.strip, cap=15,
+    ),
+)
+
+
+# =============================================================================
+# 3. Detection-block walkers
+# =============================================================================
+
+def _flat_strings(obj, out: list[str]) -> None:
+    """Collect every string value from a nested dict/list structure."""
+    if isinstance(obj, str):
+        out.append(obj)
+    elif isinstance(obj, list):
+        for item in obj:
+            _flat_strings(item, out)
+    elif isinstance(obj, dict):
+        for v in obj.values():
+            _flat_strings(v, out)
+
+
+def _collect_field(detection: dict, field_name: str) -> list[str]:
+    """Find string values associated with a specific Sigma field name."""
+    if not isinstance(detection, dict):
+        return []
+
+    out: list[str] = []
+    for key, val in detection.items():
+        if key == "condition":
+            continue
+        if isinstance(val, dict):
+            for sub_key, sub_val in val.items():
+                if sub_key == field_name or sub_key.startswith(field_name + "|"):
+                    _flat_strings(sub_val, out)
+            out.extend(_collect_field(val, field_name))
+        elif isinstance(val, list):
+            for item in val:
+                if isinstance(item, dict):
+                    out.extend(_collect_field(item, field_name))
+    return out
+
+
+def _collect_event_ids(detection: dict) -> list[int]:
+    """Numeric EventID values declared anywhere in the detection block."""
+    raw: set[int] = set()
+    for v in _collect_field(detection, "EventID"):
+        try:
+            raw.add(int(v))
+        except (ValueError, TypeError):
+            pass
+    return sorted(raw)
+
+
+def _run_extractor(detection: dict, all_strings: list[str], ex: Extractor) -> list[str]:
+    """Apply one Extractor to a detection block; dedup preserving order."""
+    pool: list[str] = []
+    for f in ex.fields:
+        pool.extend(_collect_field(detection, f))
+    pool.extend(all_strings)
+
+    seen: set[str] = set()
+    out:  list[str] = []
+    for raw in pool:
+        if not ex.predicate(raw):
+            continue
+        cleaned = ex.clean(raw)
+        if not cleaned or len(cleaned) < 4 or cleaned in seen:
+            continue
+        seen.add(cleaned)
+        out.append(cleaned)
+        if len(out) >= ex.cap:
+            break
+    return out
+
+
+# =============================================================================
+# 4. Parsed rule — one Sigma .yml's distilled facts
+# =============================================================================
+
+@dataclass
+class ParsedRule:
+    tids:       list[str]
+    tactics:    list[str]
+    event_ids:  list[int]
+    artifacts:  dict[str, list[str]]    # extractor.name → values
+    meta:       dict                     # rule_meta dict embedded under each technique
+
+
+def _parse_rule_file(fpath: Path, sigma_root: Path) -> Optional[ParsedRule]:
+    """Parse one .yml file into a ParsedRule, or None if it isn't a Sigma rule."""
+    try:
+        raw = fpath.read_text(encoding="utf-8", errors="replace")
+        docs = list(yaml.safe_load_all(raw))
+    except Exception:
+        return None
+
+    rule = next((d for d in docs if isinstance(d, dict) and "title" in d), None)
+    if rule is None:
+        return None
+
+    tags = rule.get("tags") or []
+    if not tags:
+        return None
+
+    tids:    list[str] = []
+    tactics: list[str] = []
+    for tag in tags:
+        s = str(tag)
+        if (m := _TID_RE.match(s)):
+            tids.append(m.group(1).upper())
+        elif (m2 := _TACT_RE.match(s)):
+            t = m2.group(1).lower()
+            if t in _KNOWN_TACTICS:
+                tactics.append(t)
+    if not tids:
+        return None
+
+    logsource = rule.get("logsource") or {}
+    detection = rule.get("detection") or {}
+    category  = logsource.get("category", "")
+
+    event_ids = _collect_event_ids(detection)
+    if not event_ids and category in _CAT_EVENTS:
+        event_ids = list(_CAT_EVENTS[category])
+
+    all_strings: list[str] = []
+    _flat_strings(detection, all_strings)
+
+    artifacts = {ex.name: _run_extractor(detection, all_strings, ex)
+                 for ex in _EXTRACTORS}
+
+    desc = rule.get("description", "") or ""
+    if isinstance(desc, str):
+        desc = desc[:200]
+
+    meta = {
+        "title":    rule.get("title", ""),
+        "id":       rule.get("id", ""),
+        "level":    rule.get("level", ""),
+        "status":   rule.get("status", ""),
+        "author":   (rule.get("author", "") or "")[:80],
+        "file":     str(fpath.relative_to(sigma_root)),
+        "desc":     desc,
+        "category": category,
+        "product":  logsource.get("product", ""),
+    }
+
+    return ParsedRule(
+        tids=tids, tactics=tactics, event_ids=event_ids,
+        artifacts=artifacts, meta=meta,
+    )
+
+
+# =============================================================================
+# 5. Aggregator — observe(rule) per TID, then finalize() into the API shape
+# =============================================================================
+
+@dataclass
+class _TechniqueAcc:
+    tid:        str
+    name:       str
+    tactics:    set[str]                       = field(default_factory=set)
+    rule_count: int                            = 0
+    event_ids:  set[int]                       = field(default_factory=set)
+    categories: set[str]                       = field(default_factory=set)
+    # ordered-dedup buckets keyed by extractor.name
+    artifacts:  dict[str, dict[str, None]]     = field(default_factory=dict)
+    rules:      list[dict]                     = field(default_factory=list)
+
+    def observe(self, r: ParsedRule, max_rules: int = 30) -> None:
+        self.rule_count += 1
+        self.tactics.update(r.tactics)
+        self.event_ids.update(r.event_ids)
+        if r.meta.get("category"):
+            self.categories.add(r.meta["category"])
+        for name, vals in r.artifacts.items():
+            bucket = self.artifacts.setdefault(name, {})
+            for v in vals:
+                bucket.setdefault(v, None)
+        if len(self.rules) < max_rules:
+            self.rules.append(r.meta)
+
+    def to_dict(self) -> dict:
+        # Cap each artifact list to the matching extractor's cap so the
+        # technique-level view doesn't balloon past what the per-rule view shows.
+        caps = {ex.name: ex.cap for ex in _EXTRACTORS}
+        artifacts_out: dict[str, list[str]] = {}
+        for name, bucket in self.artifacts.items():
+            artifacts_out[name] = list(bucket.keys())[:caps.get(name, 20)]
+        return {
+            "tid":        self.tid,
+            "name":       self.name,
+            "tactic":     ",".join(sorted(self.tactics)),
+            "rule_count": self.rule_count,
+            "event_ids":  sorted(self.event_ids),
+            "categories": sorted(self.categories),
+            "reg_keys":   artifacts_out.get("reg_keys",  []),
+            "processes":  artifacts_out.get("processes", []),
+            "cmdlines":   artifacts_out.get("cmdlines",  []),
+            "rules":      self.rules,
+        }
+
+
+def _aggregate(rules: Iterable[ParsedRule]) -> list[dict]:
+    by_tid: dict[str, _TechniqueAcc] = {}
+    for r in rules:
+        for tid in r.tids:
+            acc = by_tid.get(tid)
+            if acc is None:
+                acc = _TechniqueAcc(tid=tid, name=_TNAME.get(tid, ""))
+                by_tid[tid] = acc
+            acc.observe(r)
+    out = [acc.to_dict() for acc in by_tid.values()]
+    out.sort(key=lambda e: -e["rule_count"])
+    return out
+
+
+# =============================================================================
+# 6. Public entry point — same signature as before.
+# =============================================================================
+
+def build_artifact_map(
+    sigma_dir:    str | Path,
+    progress_cb:  Optional[Callable[[int, int, str], None]] = None,
+) -> list[dict]:
+    """
+    Walk `sigma_dir` recursively, parse all .yml rules, aggregate by technique.
+    `progress_cb(current, total, filename)` fires every 50 files plus a final
+    `progress_cb(total, total, "done")`.
+    """
+    if not HAS_YAML:
+        raise RuntimeError("pyyaml is required: pip install pyyaml")
+
+    sigma_root = Path(sigma_dir)
+    yml_files  = sorted(sigma_root.rglob("*.yml"))
+    total      = len(yml_files)
+
+    parsed: list[ParsedRule] = []
+    for idx, fpath in enumerate(yml_files):
+        if progress_cb and idx % 50 == 0:
+            progress_cb(idx, total, fpath.name)
+        rule = _parse_rule_file(fpath, sigma_root)
+        if rule is not None:
+            parsed.append(rule)
+
+    if progress_cb:
+        progress_cb(total, total, "done")
+
+    return _aggregate(parsed)
+
+
+# =============================================================================
+# 7. T-ID → human name lookup (pure data, intentionally at the bottom).
+# =============================================================================
 
 _TNAME: dict[str, str] = {
     "T1001": "Data Obfuscation",
@@ -245,295 +624,3 @@ _TNAME: dict[str, str] = {
     "T1674": "Input Injection",
     "T1685": "Unknown",
 }
-
-# Sysmon/Security category -> representative event ID(s)
-_CAT_EVENTS: dict[str, list[int]] = {
-    "process_creation":       [1, 4688],
-    "image_load":             [7],
-    "create_remote_thread":   [8],
-    "raw_access_read":        [9],
-    "process_access":         [10],
-    "file_event":             [11],
-    "registry_add":           [12],
-    "registry_set":           [13],
-    "registry_delete":        [12, 13],
-    "registry_rename":        [14],
-    "pipe_created":           [17, 18],
-    "dns_query":              [22],
-    "file_delete":            [23, 26],
-    "network_connection":     [3],
-    "driver_load":            [6],
-    "process_tampering":      [25],
-    "file_access":            [11],
-    "wmi_event":              [19, 20, 21],
-    "ps_script":              [4104],
-    "ps_module":              [4103],
-    "ps_classic_script":      [400, 800],
-    "security":               [],
-}
-
-_KNOWN_TACTICS = {
-    "initial-access", "execution", "persistence", "privilege-escalation",
-    "defense-evasion", "credential-access", "discovery", "lateral-movement",
-    "collection", "command-and-control", "exfiltration", "impact",
-    "reconnaissance", "resource-development",
-}
-
-_TID_RE   = re.compile(r'^attack\.(t\d{4}(?:\.\d{3})?)', re.IGNORECASE)
-_TACT_RE  = re.compile(r'^attack\.([a-z\-]+)$', re.IGNORECASE)
-
-
-# -- helpers -------------------------------------------------------------------
-
-def _flat_strings(obj, out: list[str]) -> None:
-    """Recursively collect all string values from a nested structure."""
-    if isinstance(obj, str):
-        out.append(obj)
-    elif isinstance(obj, list):
-        for item in obj:
-            _flat_strings(item, out)
-    elif isinstance(obj, dict):
-        for v in obj.values():
-            _flat_strings(v, out)
-
-
-def _collect_field(detection: dict, field: str) -> list[str]:
-    """Find values associated with a specific field name anywhere in detection."""
-    results: list[str] = []
-    if not isinstance(detection, dict):
-        return results
-
-    for key, val in detection.items():
-        if key == "condition":
-            continue
-        if isinstance(val, dict):
-            for k2, v2 in val.items():
-                # match 'Field', 'Field|contains', 'Field|endswith' etc.
-                if k2 == field or k2.startswith(field + "|"):
-                    _flat_strings(v2, results)
-            # recurse
-            deeper = _collect_field(val, field)
-            results.extend(deeper)
-        elif isinstance(val, list):
-            for item in val:
-                if isinstance(item, dict):
-                    deeper = _collect_field(item, field)
-                    results.extend(deeper)
-    return results
-
-
-def _collect_event_ids(detection: dict) -> list[int]:
-    raw = _collect_field(detection, "EventID")
-    ids: set[int] = set()
-    for v in raw:
-        try:
-            ids.add(int(v))
-        except (ValueError, TypeError):
-            pass
-    return sorted(ids)
-
-
-def _extract_reg_keys(strings: list[str]) -> list[str]:
-    """Keep strings that look like registry key paths."""
-    out = []
-    for s in strings:
-        if any(x in s for x in ["\\SOFTWARE\\", "\\SYSTEM\\", "\\HKEY", "\\CurrentVersion\\",
-                                  "HKLM", "HKCU", "HKCR", "\\Run", "\\Services\\",
-                                  "\\Policies\\"]):
-            # strip YARA-style modifiers and normalize
-            clean = re.sub(r'\|[a-z]+$', '', s).strip()
-            if len(clean) > 6:
-                out.append(clean)
-    return list(dict.fromkeys(out))[:15]   # dedup, cap 15
-
-
-def _extract_processes(strings: list[str]) -> list[str]:
-    """Keep strings that look like process image paths or names."""
-    out = []
-    for s in strings:
-        if re.search(r'\.exe$', s, re.IGNORECASE) or (
-            '\\' in s and re.search(r'\\\w+\.exe', s, re.IGNORECASE)
-        ):
-            name = s.strip().replace('\\\\', '\\')
-            if 3 < len(name) < 100:
-                out.append(name)
-    return list(dict.fromkeys(out))[:12]
-
-
-def _extract_cmdlines(strings: list[str]) -> list[str]:
-    """Keep strings that look like command-line arguments or patterns."""
-    out = []
-    for s in strings:
-        s = s.strip()
-        if len(s) < 4 or len(s) > 120:
-            continue
-        # skip pure paths / registry keys
-        if s.startswith('\\') or s.startswith('C:\\'):
-            continue
-        if any(c in s for c in [' -', ' /', '/c ', '/k ', 'cmd', 'powershell',
-                                  'Invoke', 'bypass', '-enc', '-nop', '-w ']):
-            out.append(s)
-    return list(dict.fromkeys(out))[:10]
-
-
-# -- main parser ---------------------------------------------------------------
-
-def build_artifact_map(
-    sigma_dir: str | Path,
-    progress_cb: Optional[Callable[[int, int, str], None]] = None,
-) -> list[dict]:
-    """
-    Walk sigma_dir recursively, parse all .yml rules, aggregate by technique ID.
-    progress_cb(current, total, filename) called every 50 files.
-    Returns list of entry dicts ready for db.save_artifact_entries().
-    """
-    if not HAS_YAML:
-        raise RuntimeError("pyyaml is required: pip install pyyaml")
-
-    sigma_dir = Path(sigma_dir)
-    yml_files = sorted(sigma_dir.rglob("*.yml"))
-    total = len(yml_files)
-
-    # tid -> aggregated entry
-    by_tid: dict[str, dict] = {}
-
-    for idx, fpath in enumerate(yml_files):
-        if progress_cb and idx % 50 == 0:
-            progress_cb(idx, total, fpath.name)
-
-        try:
-            raw = fpath.read_text(encoding="utf-8", errors="replace")
-            # some sigma files have multiple documents; take the first real rule
-            docs = list(yaml.safe_load_all(raw))
-            rule = next((d for d in docs if isinstance(d, dict) and "title" in d), None)
-            if rule is None:
-                continue
-        except Exception:
-            continue
-
-        tags = rule.get("tags") or []
-        if not tags:
-            continue
-
-        # extract technique IDs and tactics
-        tids: list[str] = []
-        tactics: list[str] = []
-        for tag in tags:
-            tag_s = str(tag)
-            m = _TID_RE.match(tag_s)
-            if m:
-                tids.append(m.group(1).upper())
-                continue
-            m2 = _TACT_RE.match(tag_s)
-            if m2 and m2.group(1).lower() in _KNOWN_TACTICS:
-                tactics.append(m2.group(1).lower())
-
-        if not tids:
-            continue
-
-        logsource  = rule.get("logsource") or {}
-        detection  = rule.get("detection")  or {}
-        category   = logsource.get("category", "")
-        product    = logsource.get("product", "")
-        service    = logsource.get("service", "")
-        level      = rule.get("level", "")
-        status_    = rule.get("status", "")
-        title      = rule.get("title", "")
-        rule_id    = rule.get("id", "")
-        author     = rule.get("author", "")
-        desc       = rule.get("description", "")
-        if isinstance(desc, str):
-            desc = desc[:200]
-
-        # explicit event IDs from detection
-        event_ids = _collect_event_ids(detection)
-
-        # infer event IDs from logsource category
-        if not event_ids and category in _CAT_EVENTS:
-            event_ids = _CAT_EVENTS[category]
-
-        # collect raw strings from detection for artifact extraction
-        all_det_strings: list[str] = []
-        _flat_strings(detection, all_det_strings)
-
-        # collect TargetObject for registry keys
-        target_objs = _collect_field(detection, "TargetObject")
-        reg_keys    = _extract_reg_keys(target_objs + all_det_strings)
-
-        # collect Image for processes
-        images   = _collect_field(detection, "Image")
-        images  += _collect_field(detection, "ParentImage")
-        images  += _collect_field(detection, "SourceImage")
-        processes = _extract_processes(images + all_det_strings)
-
-        # collect CommandLine patterns
-        cmdlines_raw = _collect_field(detection, "CommandLine")
-        cmdlines     = _extract_cmdlines(cmdlines_raw)
-
-        rule_meta = {
-            "title":    title,
-            "id":       rule_id,
-            "level":    level,
-            "status":   status_,
-            "author":   author[:80],
-            "file":     str(fpath.relative_to(sigma_dir)),
-            "desc":     desc[:200] if isinstance(desc, str) else "",
-            "category": category,
-            "product":  product,
-        }
-
-        for tid in tids:
-            if tid not in by_tid:
-                by_tid[tid] = {
-                    "tid":        tid,
-                    "name":       _TNAME.get(tid, ""),
-                    "tactics":    set(),
-                    "rule_count": 0,
-                    "event_ids":  set(),
-                    "categories": set(),
-                    "reg_keys":   [],
-                    "processes":  [],
-                    "cmdlines":   [],
-                    "rules":      [],
-                }
-            e = by_tid[tid]
-            e["tactics"].update(tactics)
-            e["rule_count"] += 1
-            e["event_ids"].update(event_ids)
-            if category:
-                e["categories"].add(category)
-            # accumulate unique artifacts
-            for rk in reg_keys:
-                if rk not in e["reg_keys"]:
-                    e["reg_keys"].append(rk)
-            for pr in processes:
-                if pr not in e["processes"]:
-                    e["processes"].append(pr)
-            for cl in cmdlines:
-                if cl not in e["cmdlines"]:
-                    e["cmdlines"].append(cl)
-            # keep up to 30 rules per technique
-            if len(e["rules"]) < 30:
-                e["rules"].append(rule_meta)
-
-    if progress_cb:
-        progress_cb(total, total, "done")
-
-    # convert sets to lists, cap lengths, sort by rule_count desc
-    entries = []
-    for e in by_tid.values():
-        entries.append({
-            "tid":        e["tid"],
-            "name":       e["name"],
-            "tactic":     ",".join(sorted(e["tactics"])),
-            "rule_count": e["rule_count"],
-            "event_ids":  sorted(e["event_ids"]),
-            "categories": sorted(e["categories"]),
-            "reg_keys":   e["reg_keys"][:20],
-            "processes":  e["processes"][:20],
-            "cmdlines":   e["cmdlines"][:15],
-            "rules":      e["rules"],
-        })
-
-    entries.sort(key=lambda x: -x["rule_count"])
-    return entries

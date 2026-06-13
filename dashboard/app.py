@@ -15,6 +15,7 @@ import time
 import uuid
 from datetime import datetime
 from pathlib import Path
+from typing import Optional
 
 import sys
 
@@ -1953,34 +1954,47 @@ except ImportError:
     HAS_SHELLCODE = False
 
 
+_SC_MAX_INPUT_BYTES = 8 * 1024 * 1024   # 8 MB applies to text input and uploads
+
+
+def _sc_get_text_input() -> tuple[Optional[str], Optional[tuple[dict, int]]]:
+    """Pull and validate the {input: str} payload shared by /process and /analyse."""
+    if not HAS_SHELLCODE:
+        return None, ({"ok": False, "error": "shellcode module not available"}, 503)
+    data = request.get_json(force=True, silent=True) or {}
+    raw  = data.get("input", "")
+    if not isinstance(raw, str) or not raw:
+        return None, ({"ok": False, "error": "input is required"}, 400)
+    if len(raw) > _SC_MAX_INPUT_BYTES:
+        return None, ({"ok": False, "error": "input too large (max 8 MB)"}, 413)
+    return raw, None
+
+
 @app.route("/api/shellcode/process", methods=["POST"])
 def api_shellcode_process():
-    if not HAS_SHELLCODE:
-        return jsonify({"ok": False, "error": "shellcode module not available"}), 503
-    data = request.get_json(force=True) or {}
-    raw        = data.get("input", "")
+    raw, err = _sc_get_text_input()
+    if err:
+        body, code = err
+        return jsonify(body), code
+
+    data       = request.get_json(force=True, silent=True) or {}
     fmt        = data.get("output_format", "c")
-    transform  = data.get("transform", "none")
-    xor_key    = data.get("xor_key", "")
-    var_name   = data.get("var_name", "buf")
-    if not raw:
-        return jsonify({"ok": False, "error": "input is required"}), 400
+    transform  = data.get("transform",     "none")
+    xor_key    = data.get("xor_key",       "")
+    var_name   = data.get("var_name",      "buf")
+
     if fmt not in _shellcode.VALID_FORMATS:
         return jsonify({"ok": False, "error": f"unknown format '{fmt}'"}), 400
-    result = _shellcode.process(raw, fmt, transform, xor_key, var_name)
-    return jsonify(result)
+    return jsonify(_shellcode.process(raw, fmt, transform, xor_key, var_name))
 
 
 @app.route("/api/shellcode/analyse", methods=["POST"])
 def api_shellcode_analyse():
-    if not HAS_SHELLCODE:
-        return jsonify({"ok": False, "error": "shellcode module not available"}), 503
-    data = request.get_json(force=True) or {}
-    raw = data.get("input", "")
-    if not raw:
-        return jsonify({"ok": False, "error": "input is required"}), 400
-    result = _shellcode.analyse_only(raw)
-    return jsonify(result)
+    raw, err = _sc_get_text_input()
+    if err:
+        body, code = err
+        return jsonify(body), code
+    return jsonify(_shellcode.analyse_only(raw))
 
 
 @app.route("/api/shellcode/upload", methods=["POST"])
@@ -1991,12 +2005,15 @@ def api_shellcode_upload():
     f = request.files.get("file")
     if not f:
         return jsonify({"ok": False, "error": "no file provided"}), 400
-    data = f.read(1024 * 1024 * 8)  # cap at 8 MB
-    if not data:
+    # +1 so we can detect the "too large" case rather than silently truncating
+    blob = f.read(_SC_MAX_INPUT_BYTES + 1)
+    if not blob:
         return jsonify({"ok": False, "error": "empty file"}), 400
-    stats = _shellcode.analyse(data)
-    stats["ok"] = True
-    stats["hex"] = data.hex()
+    if len(blob) > _SC_MAX_INPUT_BYTES:
+        return jsonify({"ok": False, "error": "file too large (max 8 MB)"}), 413
+    stats = _shellcode.analyse(blob)
+    stats["ok"]  = True
+    stats["hex"] = blob.hex()
     return jsonify(stats)
 
 
@@ -2171,10 +2188,21 @@ except ImportError:
 _SIGMA_DIR = Path.home() / "hacking" / "sigma"
 
 
+_TID_RE_API = re.compile(r"^T\d{4}(\.\d{3})?$")
+
+
+def _artifacts_empty_stats() -> dict:
+    return {
+        "total_techniques": 0, "total_rules": 0,
+        "unique_tactics":   0, "unique_event_ids": 0,
+        "tactics": [], "built": False,
+    }
+
+
 @app.route("/api/artifacts")
 def api_artifacts():
     tactic = request.args.get("tactic", "all").strip()
-    q      = request.args.get("q", "").strip()
+    q      = request.args.get("q",      "").strip()
     if _db.count_artifact_entries() == 0:
         return jsonify([])
     return jsonify(_db.get_artifact_entries(tactic, q))
@@ -2183,11 +2211,7 @@ def api_artifacts():
 @app.route("/api/artifacts/stats")
 def api_artifacts_stats():
     if _db.count_artifact_entries() == 0:
-        return jsonify({
-            "total_techniques": 0, "total_rules": 0,
-            "unique_tactics": 0, "unique_event_ids": 0,
-            "tactics": [], "built": False,
-        })
+        return jsonify(_artifacts_empty_stats())
     stats = _db.get_artifact_stats()
     stats["built"] = True
     return jsonify(stats)
@@ -2195,6 +2219,8 @@ def api_artifacts_stats():
 
 @app.route("/api/artifacts/<tid>")
 def api_artifact_entry(tid: str):
+    if not _TID_RE_API.match(tid):
+        return jsonify({"error": "invalid technique id"}), 400
     entry = _db.get_artifact_entry(tid)
     if not entry:
         return jsonify({"error": "not found"}), 404
@@ -2203,42 +2229,85 @@ def api_artifact_entry(tid: str):
 
 @app.route("/api/artifacts/rebuild")
 def api_artifacts_rebuild():
-    """SSE stream: parse Sigma rules and populate artifact_map table."""
+    """
+    SSE stream that emits real progress updates while parsing the Sigma corpus.
+
+    The parser is run on a background thread because build_artifact_map() is a
+    blocking call and we want the SSE consumer to see incremental progress.
+    The progress_cb pushes (current, total) into a queue that the main thread
+    drains and forwards as SSE events.
+    """
     if not HAS_ARTIFACT:
         return jsonify({"error": "artifact_parser module not available"}), 503
 
-    def generate():
-        def evt(status: str, msg: str, **kw):
-            obj = {"status": status, "msg": msg, **kw}
-            return f"data: {json.dumps(obj)}\n\n"
+    import queue as _q
 
-        sigma_path = _SIGMA_DIR
+    sigma_path = _SIGMA_DIR
+
+    def generate():
+        def evt(status: str, msg: str, **kw) -> str:
+            return f"data: {json.dumps({'status': status, 'msg': msg, **kw})}\n\n"
+
         if not sigma_path.exists():
             yield evt("error", f"sigma dir not found: {sigma_path}")
             yield "data: [DONE]\n\n"
             return
 
-        yield evt("running", f"scanning {sigma_path} …")
+        yield evt("running", f"scanning {sigma_path} …", current=0, total=0)
 
-        last_progress = [0]
+        events: _q.Queue = _q.Queue()
+        result: dict = {"entries": None, "error": None}
 
-        def progress(current: int, total: int, filename: str):
-            last_progress[0] = current
-            # don't yield from inside a callback in a generator - collect instead
-            pass
+        def progress(current: int, total: int, filename: str) -> None:
+            events.put({"type": "progress", "current": current,
+                        "total": total, "file": filename})
+
+        def runner() -> None:
+            try:
+                result["entries"] = _artifact_parser.build_artifact_map(
+                    sigma_path, progress,
+                )
+            except Exception as exc:
+                result["error"] = str(exc)
+            finally:
+                events.put(None)   # sentinel: runner finished
+
+        threading.Thread(target=runner, daemon=True).start()
 
         try:
-            entries = _artifact_parser.build_artifact_map(sigma_path, progress)
-            _db.save_artifact_entries(entries)
-            stats = _db.get_artifact_stats()
-            yield evt("done",
-                      f"built artifact map: {stats['total_techniques']} techniques "
-                      f"from {stats['total_rules']} Sigma rules",
-                      stats=stats)
-        except Exception as e:
-            yield evt("error", str(e))
+            while True:
+                try:
+                    ev = events.get(timeout=20)
+                except _q.Empty:
+                    yield evt("running", "still parsing…", heartbeat=True)
+                    continue
+                if ev is None:
+                    break
+                if ev["type"] == "progress":
+                    pct = int(ev["current"] / ev["total"] * 100) if ev["total"] else 0
+                    yield evt("running",
+                              f"parsed {ev['current']}/{ev['total']} rules ({pct}%)",
+                              current=ev["current"], total=ev["total"], file=ev["file"])
 
-        yield "data: [DONE]\n\n"
+            if result["error"]:
+                yield evt("error", result["error"])
+                yield "data: [DONE]\n\n"
+                return
+
+            _db.save_artifact_entries(result["entries"] or [])
+            stats = _db.get_artifact_stats()
+            yield evt(
+                "done",
+                f"built artifact map: {stats['total_techniques']} techniques "
+                f"from {stats['total_rules']} Sigma rules",
+                stats=stats,
+            )
+            yield "data: [DONE]\n\n"
+        except GeneratorExit:
+            # client navigated away — runner thread will still finish and
+            # save_artifact_entries on its own iff we're past the runner call,
+            # but at this point we're between events so just propagate cleanly.
+            raise
 
     return Response(
         stream_with_context(generate()),

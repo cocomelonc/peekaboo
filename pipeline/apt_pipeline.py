@@ -296,32 +296,50 @@ def _safe(name: str) -> str:
     return _INVALID.sub("_", name).strip("_") or "stage"
 
 
-def _compile_one(stage: dict, out_dir: Path) -> Path | None:
-    """Best-effort compile of a single stage. Failure is logged, not fatal."""
-    compiler = stage.get("compiler", "")
-    src      = Path(stage["src_path"])
-    out      = out_dir / f"{Path(stage['_out_src']).stem}.exe"
+def _compile_one(stage: dict, out_dir: Path) -> tuple[Path | None, str, str]:
+    """
+    Build one stage via dashboard/compiler.build(). Failure is logged on the
+    stage, not raised. Returns (out_path | None, kind, log).
 
-    cmd: list[str] = []
-    if compiler == "mingw-gcc":
-        cmd = ["x86_64-w64-mingw32-gcc", str(src), "-o", str(out)]
-    elif compiler == "mingw-gpp":
-        cmd = ["x86_64-w64-mingw32-g++", str(src), "-o", str(out)]
-    elif compiler == "gcc":
-        cmd = ["gcc", str(src), "-o", str(out.with_suffix(""))]
-    elif compiler == "gpp":
-        cmd = ["g++", str(src), "-o", str(out.with_suffix(""))]
-    else:
-        return None
-    cmd += stage.get("extra_libs", [])
+    `kind` is "exe", "dll", or "elf" so the manifest / frontend can group output
+    by what was actually produced.
+    """
+    src      = Path(stage["src_path"])
+    compiler = stage.get("compiler", "")
+    if compiler not in ("mingw-gcc", "mingw-gpp", "gcc", "gpp"):
+        return None, "", f"unsupported compiler: {compiler}"
 
     try:
-        r = subprocess.run(cmd, capture_output=True, text=True, timeout=45)
-        if r.returncode == 0 and out.exists():
-            return out
-    except Exception:
-        pass
-    return None
+        sys.path.insert(0, str(_BASE / "dashboard"))
+        from compiler import build, BuildSpec, looks_like_dll  # type: ignore
+    except Exception as e:
+        return None, "", f"compiler import failed: {e}"
+
+    is_dll  = compiler.startswith("mingw") and looks_like_dll(src)
+    windows = compiler.startswith("mingw")
+    if is_dll:
+        ext, kind = ".dll", "dll"
+    elif windows:
+        ext, kind = ".exe", "exe"
+    else:
+        ext, kind = "",     "elf"
+
+    out = out_dir / f"{Path(stage['_out_src']).stem}{ext}"
+
+    spec = BuildSpec(
+        name=stage["module_id"],
+        src_path=src,
+        out_path=out,
+        compiler=compiler,
+        extra_libs=list(stage.get("extra_libs", [])),
+        is_dll=is_dll,
+        # Pipeline stages don't carry secrets and the cred-sub layer is for the
+        # build form; keep it off here for predictability + speed.
+        apply_creds=False,
+        timeout=45,
+    )
+    r = build(spec)
+    return (r.out_path if r.ok else None), kind, r.log
 
 
 def agent_build_stages(stages: list[dict], session_id: str,
@@ -358,16 +376,21 @@ def agent_build_stages(stages: list[dict], session_id: str,
         dst = out_dir / name
         try:
             shutil.copy2(src, dst)
-            s["_out_src"] = dst.name
+            s["_out_src"]      = dst.name
+            s["_out_src_size"] = dst.stat().st_size
             produced.append(dst)
         except Exception:
             continue
 
         if compile_each:
-            bin_path = _compile_one(s, out_dir)
+            bin_path, kind, log = _compile_one(s, out_dir)
             if bin_path is not None:
                 produced.append(bin_path)
-                s["_out_bin"] = bin_path.name
+                s["_out_bin"]      = bin_path.name
+                s["_out_bin_kind"] = kind   # exe | dll | elf
+                s["_out_bin_size"] = bin_path.stat().st_size
+            else:
+                s["_compile_error"] = (log or "compile failed").splitlines()[-1][:200]
 
     manifest = {
         "session_id":  session_id,
@@ -375,6 +398,12 @@ def agent_build_stages(stages: list[dict], session_id: str,
         "kill_chain":  _KILL_CHAIN_ORDER,
         "compile_each": compile_each,
         "stages":      stages,
+        # quick rollups so the UI can render counts without re-scanning stages
+        "counts":      {
+            "source": sum(1 for s in stages if s.get("_out_src")),
+            "binary": sum(1 for s in stages if s.get("_out_bin")),
+            "failed": sum(1 for s in stages if s.get("_compile_error")),
+        },
     }
     (out_dir / "manifest.json").write_text(json.dumps(manifest, indent=2))
     produced.append(out_dir / "manifest.json")

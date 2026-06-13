@@ -1,6 +1,8 @@
 *.bin
 *.dll
 *.exe
+*.elf
+*samples/*
 dashboard/__pycache__/
 dashboard/peekaboo.db*
 dashboard/builds.json
