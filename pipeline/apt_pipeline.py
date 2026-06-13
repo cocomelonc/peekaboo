@@ -34,7 +34,7 @@ import db as _db
 ATTACK_RE = re.compile(r"\bT1\d{3}(?:\.\d{3})?\b")
 
 # Curated MITRE ID -> tactic map. Covers the most common APT report TTPs.
-# Sub-techniques inherit from their base (T1547.001 → persistence via T1547).
+# Sub-techniques inherit from their base (T1547.001 -> persistence via T1547).
 _TACTIC_MAP = {
     # execution
     "T1059": "execution",            "T1106": "execution",
@@ -461,7 +461,7 @@ def run_pipeline(actor_id: str) -> Generator[dict, None, None]:
            "msg": f"{len(report_contents)} report(s) downloaded",
            "data": {"count": len(report_contents)}}
 
-    # 3. Extract TTPs (local regex only — no API calls)
+    # 3. Extract TTPs (local regex only - no API calls)
     yield {"step": 3, "status": "running", "msg": "extracting TTPs (regex, local)…"}
     ttps = agent_extract_ttps(report_contents, actor_data)
     _db.update_pipeline_session(session_id, ttps=ttps)
@@ -481,7 +481,7 @@ def run_pipeline(actor_id: str) -> Generator[dict, None, None]:
         finished = datetime.now().isoformat()
         _db.update_pipeline_session(session_id, status="failed", finished=finished)
         yield {"step": 5, "status": "error",
-               "msg": "no KB modules matched any extracted TTP — try a different actor"}
+               "msg": "no KB modules matched any extracted TTP - try a different actor"}
         return
 
     # 5. Assemble per-stage malware (one artefact per TTP)
@@ -493,7 +493,7 @@ def run_pipeline(actor_id: str) -> Generator[dict, None, None]:
         for s in stages:
             yield {"step": 5, "status": "running",
                    "msg": f"narrating stage {s['stage_num']}/{len(stages)}: "
-                          f"{s['ttp_id']} → {s['module_title'][:40]}"}
+                          f"{s['ttp_id']} -> {s['module_title'][:40]}"}
             s["narration"] = _ollama_narrate(s, ollama_url, ollama_model)
 
     files, manifest = agent_build_stages(stages, session_id,

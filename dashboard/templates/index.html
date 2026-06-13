@@ -3527,29 +3527,71 @@ function setBuildStatus(state, label) {
   else dot.style.animation = '';
 }
 
+let buildStream = null;
+
 function pollBuild(build_id) {
-  if (buildPoll) clearInterval(buildPoll);
-  buildPoll = setInterval(async () => {
-    const job = await fetch(`/api/build/${build_id}`).then(r=>r.json()).catch(()=>null);
-    if (!job) return;
-    const out = document.getElementById('build-output');
-    out.innerHTML = ansiToHtml(job.output || '');
-    out.scrollTop = out.scrollHeight;
-    if (job.status === 'success' || job.status === 'failed' || job.status === 'error') {
-      clearInterval(buildPoll);
-      setBuildStatus(job.status, job.status);
+  // SSE replacement for the old 1s polling loop.
+  // Backend pushes {type:'state'|'line'|'end'} events; we render each as it lands.
+  if (buildStream) { try { buildStream.close(); } catch(_){} buildStream = null; }
+  if (buildPoll)   { clearInterval(buildPoll); buildPoll = null; }
+
+  const out = document.getElementById('build-output');
+  const lines = [];
+  out.innerHTML = '';
+
+  buildStream = new EventSource(`/api/build/${build_id}/stream`);
+
+  buildStream.onmessage = (e) => {
+    if (e.data === '[DONE]') { try { buildStream.close(); } catch(_){} buildStream = null; return; }
+    let ev; try { ev = JSON.parse(e.data); } catch (_) { return; }
+
+    if (ev.type === 'state') {
+      // status transition (running, heartbeat, etc.) - refresh the dot only
+      setBuildStatus(ev.status === 'running' ? 'running' : ev.status, ev.status);
+      return;
+    }
+    if (ev.type === 'line') {
+      // append incrementally instead of replacing the whole buffer each tick
+      lines.push(ev.text);
+      out.innerHTML = ansiToHtml(lines.join('\n'));
+      out.scrollTop = out.scrollHeight;
+      return;
+    }
+    if (ev.type === 'end') {
+      setBuildStatus(ev.status, ev.status);
       const btn = document.getElementById('build-btn');
       btn.disabled = false;
       btn.innerHTML = '<span>⚡</span> Build Binary';
-      if (job.status === 'success') {
+      if (ev.status === 'success') {
         loadBuildFiles(build_id);
         toast('Build succeeded!', 'ok');
       } else {
-        toast('Build failed', 'err');
+        toast('Build ' + ev.status, 'err');
       }
       loadBuildHistory();
+      try { buildStream.close(); } catch(_){}
+      buildStream = null;
     }
-  }, 1000);
+  };
+
+  buildStream.onerror = () => {
+    // EventSource auto-reconnects, but if the server already finished we'll
+    // never get an [DONE]; fall back to one polling fetch to pick up final state.
+    fetch(`/api/build/${build_id}`).then(r => r.json()).then(job => {
+      if (!job || !job.status) return;
+      if (['success','failed','error','timeout'].includes(job.status)) {
+        try { buildStream.close(); } catch(_){}
+        buildStream = null;
+        out.innerHTML = ansiToHtml(job.output || lines.join('\n'));
+        setBuildStatus(job.status, job.status);
+        const btn = document.getElementById('build-btn');
+        btn.disabled = false;
+        btn.innerHTML = '<span>⚡</span> Build Binary';
+        if (job.status === 'success') loadBuildFiles(build_id);
+        loadBuildHistory();
+      }
+    }).catch(() => {});
+  };
 }
 
 async function loadBuildFiles(build_id) {
@@ -3973,7 +4015,7 @@ async function clearPipelineSessions() {
       const msg = `cleared ${d.deleted_dirs} session folder(s) (${d.deleted_files} file(s)), ` +
                  `${d.db_cleared.pipeline_sessions} pipeline row(s), ` +
                  `${d.db_cleared.samples} sample row(s)`;
-      // tiny toast — fall back to alert if no toast helper present
+      // tiny toast - fall back to alert if no toast helper present
       if (typeof showToast === 'function') showToast(msg, 'ok');
       else console.log(msg);
       // also wipe the live results area so the user sees a clean slate
