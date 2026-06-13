@@ -2026,43 +2026,59 @@ except ImportError:
     HAS_EVASION = False
 
 
+_EVASION_MAX_BYTES = 32 * 1024 * 1024   # 32 MB cap on uploads + reads
+
+
+def _evasion_load_from_request_body(data: dict) -> tuple[Optional[bytes], Optional[str], Optional[tuple[str, int]]]:
+    """
+    Resolve a binary to analyse / patch from a JSON body. Returns
+    (bytes, display_name, None) on success or (None, None, (error, code)) on failure.
+    Accepts:
+      {build_id, fname?}             - pick a build artefact
+      {session_id, filename}         - pick an APT-session artefact
+    """
+    build_id   = (data.get("build_id",   "") or "").strip()
+    session_id = (data.get("session_id", "") or "").strip()
+    filename   = (data.get("filename",   "") or "").strip()
+    fname      = (data.get("fname",      "") or "").strip()
+
+    if build_id:
+        job = _build_mgr.get(build_id) or {}
+        if not job or job.get("status") != "success":
+            return None, None, ("build not found or not successful", 404)
+        p = _build_mgr.resolve_binary(job)
+        if not p:
+            return None, None, ("binary not found on disk", 404)
+        if fname and fname != p.name:
+            if "/" in fname or "\\" in fname or not fname.lower().endswith((".exe", ".dll")):
+                return None, None, ("invalid fname", 400)
+            alt = p.parent / fname
+            if not alt.exists():
+                return None, None, (f"{fname} not found on disk", 404)
+            p = alt
+        return p.read_bytes(), p.name, None
+
+    if session_id and filename:
+        filepath = (SAMPLES_DIR / session_id / filename).resolve()
+        if not str(filepath).startswith(str(SAMPLES_DIR.resolve())):
+            return None, None, ("invalid path", 400)
+        if not filepath.exists():
+            return None, None, ("file not found", 404)
+        return filepath.read_bytes(), filename, None
+
+    return None, None, ("build_id or (session_id + filename) required", 400)
+
+
 @app.route("/api/evasion/analyse", methods=["POST"])
 def api_evasion_analyse():
     if not HAS_EVASION:
         return jsonify({"ok": False, "error": "evasion module not available"}), 503
-    data = request.get_json(force=True) or {}
-
-    build_id = data.get("build_id", "").strip()
-    if build_id:
-        job = _build_mgr.get(build_id) or {}
-        if not job or job.get("status") != "success":
-            return jsonify({"ok": False, "error": "build not found or not successful"}), 404
-        p = _resolve_build_binary(job)
-        if not p:
-            return jsonify({"ok": False, "error": "binary not found on disk"}), 404
-        fname = data.get("fname", "").strip()
-        if fname and fname != p.name:
-            if "/" in fname or "\\" in fname or not fname.lower().endswith(".exe"):
-                return jsonify({"ok": False, "error": "invalid fname"}), 400
-            alt = p.parent / fname
-            if not alt.exists():
-                return jsonify({"ok": False, "error": f"{fname} not found on disk"}), 404
-            p = alt
-        result = _evasion.analyse(p.read_bytes(), p.name)
-        return jsonify(result)
-
-    session_id = data.get("session_id", "").strip()
-    filename   = data.get("filename", "").strip()
-    if not session_id or not filename:
-        return jsonify({"ok": False, "error": "session_id and filename required"}), 400
-    filepath = (SAMPLES_DIR / session_id / filename).resolve()
-    if not str(filepath).startswith(str(SAMPLES_DIR.resolve())):
-        return jsonify({"ok": False, "error": "invalid path"}), 400
-    if not filepath.exists():
-        return jsonify({"ok": False, "error": "file not found"}), 404
-    raw = filepath.read_bytes()
-    result = _evasion.analyse(raw, filename)
-    return jsonify(result)
+    data = request.get_json(force=True, silent=True) or {}
+    raw, name, err = _evasion_load_from_request_body(data)
+    if err:
+        msg, code = err
+        return jsonify({"ok": False, "error": msg}), code
+    return jsonify(_evasion.analyse(raw, name))
 
 
 @app.route("/api/evasion/upload", methods=["POST"])
@@ -2072,11 +2088,12 @@ def api_evasion_upload():
     f = request.files.get("file")
     if not f:
         return jsonify({"ok": False, "error": "no file uploaded"}), 400
-    raw = f.read(1024 * 1024 * 32)  # 32 MB cap
+    raw = f.read(_EVASION_MAX_BYTES + 1)
     if not raw:
         return jsonify({"ok": False, "error": "empty file"}), 400
-    result = _evasion.analyse(raw, f.filename or "uploaded")
-    return jsonify(result)
+    if len(raw) > _EVASION_MAX_BYTES:
+        return jsonify({"ok": False, "error": "file too large (max 32 MB)"}), 413
+    return jsonify(_evasion.analyse(raw, f.filename or "uploaded"))
 
 
 @app.route("/api/evasion/patch", methods=["POST"])
@@ -2085,61 +2102,40 @@ def api_evasion_patch():
     if not HAS_EVASION:
         return jsonify({"ok": False, "error": "evasion module not available"}), 503
 
-    patch_ids: list[str] = []
-    raw: bytes = b""
-    out_name = "patched.exe"
+    raw:       bytes      = b""
+    patch_ids: list[str]  = []
+    out_name:  str        = "patched.exe"
 
     if request.content_type and "multipart" in request.content_type:
         f = request.files.get("file")
         if not f:
             return jsonify({"ok": False, "error": "no file"}), 400
-        raw = f.read(1024 * 1024 * 32)
+        raw = f.read(_EVASION_MAX_BYTES + 1)
+        if len(raw) > _EVASION_MAX_BYTES:
+            return jsonify({"ok": False, "error": "file too large (max 32 MB)"}), 413
         out_name = "patched_" + (f.filename or "binary")
         try:
-            patch_ids = json.loads(request.form.get("patches", "[]"))
+            patch_ids = json.loads(request.form.get("patches", "[]")) or []
         except Exception:
             patch_ids = []
     else:
-        data = request.get_json(force=True) or {}
-        patch_ids  = data.get("patches", [])
-        build_id   = data.get("build_id", "").strip()
-        session_id = data.get("session_id", "").strip()
-        filename   = data.get("filename", "").strip()
-        if build_id:
-            job = _build_mgr.get(build_id) or {}
-            if job and job.get("status") == "success":
-                p = _resolve_build_binary(job)
-                if p:
-                    fname = data.get("fname", "").strip()
-                    if fname and fname != p.name:
-                        if "/" not in fname and "\\" not in fname and fname.lower().endswith(".exe"):
-                            alt = p.parent / fname
-                            if alt.exists():
-                                p = alt
-                    raw = p.read_bytes()
-                    out_name = "patched_" + p.name
-        elif session_id and filename:
-            filepath = (SAMPLES_DIR / session_id / filename).resolve()
-            if not str(filepath).startswith(str(SAMPLES_DIR.resolve())):
-                return jsonify({"ok": False, "error": "invalid path"}), 400
-            if filepath.exists():
-                raw = filepath.read_bytes()
-                out_name = "patched_" + filename
+        data       = request.get_json(force=True, silent=True) or {}
+        patch_ids  = list(data.get("patches", []) or [])
+        raw, name, err = _evasion_load_from_request_body(data)
+        if err:
+            msg, code = err
+            return jsonify({"ok": False, "error": msg}), code
+        out_name = "patched_" + (name or "binary")
 
     if not raw:
         return jsonify({"ok": False, "error": "no binary data"}), 400
     if not patch_ids:
         return jsonify({"ok": False, "error": "no patches requested"}), 400
 
-    allowed_patches = {
-        "timestamp", "fake_timestamp", "rich_header", "debug_dir",
-        "section_rename", "checksum", "dos_stub", "stomp_dos_header",
-        "entropy_padding", "set_aslr_dep", "clear_high_entropy_va",
-        "flip_subsystem", "stomp_rwx_flags", "spoof_imagebase",
-        "wipe_overlay", "zero_bound_imports", "zero_load_config",
-        "zero_exports", "zero_security_dir",
-    }
-    patch_ids = [p for p in patch_ids if p in allowed_patches]
+    # Single source of truth: ask the evasion module which patch IDs exist.
+    patch_ids = [p for p in patch_ids if p in _evasion.PATCH_IDS]
+    if not patch_ids:
+        return jsonify({"ok": False, "error": "no recognised patches in request"}), 400
 
     score_before = 0
     try:
@@ -2304,7 +2300,7 @@ def api_artifacts_rebuild():
             )
             yield "data: [DONE]\n\n"
         except GeneratorExit:
-            # client navigated away — runner thread will still finish and
+            # client navigated away - runner thread will still finish and
             # save_artifact_entries on its own iff we're past the runner call,
             # but at this point we're between events so just propagate cleanly.
             raise

@@ -3935,7 +3935,7 @@ async function runPipeline() {
           const div = document.createElement('div');
           div.className = 'card card-sm apt-result-card';
 
-          // header — counts come straight from manifest.counts when present
+          // header - counts come straight from manifest.counts when present
           const counts = data.counts || {
             source: stages.filter(s => s._out_src).length,
             binary: stages.filter(s => s._out_bin).length,
@@ -3974,7 +3974,7 @@ async function runPipeline() {
 
             html += `<div style="margin-top:14px"><div class="apt-sec-label" style="margin-bottom:6px">⚙ Compiled binaries (${counts.binary})</div>`;
             if (!binStages.length) {
-              html += `<div class="text-dim text-xs" style="padding:8px 12px;background:rgba(255,255,255,.02);border-radius:6px">no binaries produced — set <code>compile_each: true</code> in <code>config/apt_pipeline_config.json</code></div>`;
+              html += `<div class="text-dim text-xs" style="padding:8px 12px;background:rgba(255,255,255,.02);border-radius:6px">no binaries produced - set <code>compile_each: true</code> in <code>config/apt_pipeline_config.json</code></div>`;
             } else {
               html += renderBinGroup('🪟 Windows EXE', exes, 'exe');
               html += renderBinGroup('🧩 Windows DLL', dlls, 'dll');
@@ -7054,7 +7054,7 @@ function artRebuild() {
       const d = JSON.parse(ev.data);
       if (d.status === 'running') {
         msg.textContent = d.msg;
-        // backend now emits current/total — wire that to the bar (clamped 2-95%)
+        // backend now emits current/total - wire that to the bar (clamped 2-95%)
         if (d.total > 0) {
           const pct = Math.max(2, Math.min(95, Math.round(d.current / d.total * 100)));
           fill.style.width = pct + '%';

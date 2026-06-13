@@ -1,16 +1,16 @@
 """
-artifact_parser.py — Sigma → ATT&CK technique artifact map.
+artifact_parser.py - Sigma -> ATT&CK technique artifact map.
 
 Walks ~/hacking/sigma recursively, parses each .yml rule, extracts the
 technique IDs, event IDs, registry keys, process images, and command-line
 patterns referenced in `detection:`, and aggregates everything per technique.
 
 Design:
-  * One pure parse phase  — Path → ParsedRule (or None)
-  * One pure extract phase — Sigma detection block → 3 artifact lists,
+  * One pure parse phase  - Path -> ParsedRule (or None)
+  * One pure extract phase - Sigma detection block -> 3 artifact lists,
                               driven by an _EXTRACTORS registry instead of
                               three nearly-identical functions
-  * One aggregate phase   — observe(rule) into a _TechniqueAcc, finalize once
+  * One aggregate phase   - observe(rule) into a _TechniqueAcc, finalize once
 
 Public API preserved:
   - build_artifact_map(sigma_dir, progress_cb) -> list[dict]
@@ -34,7 +34,7 @@ except ImportError:
 
 
 # =============================================================================
-# 1. Patterns & lookups — pure data, easy to tune without touching code
+# 1. Patterns & lookups - pure data, easy to tune without touching code
 # =============================================================================
 
 _TID_RE  = re.compile(r"^attack\.(t\d{4}(?:\.\d{3})?)", re.IGNORECASE)
@@ -47,7 +47,7 @@ _KNOWN_TACTICS = {
     "reconnaissance", "resource-development",
 }
 
-# Sysmon / Security category → representative event ID(s).
+# Sysmon / Security category -> representative event ID(s).
 # Used as a fallback when the rule's `detection:` block has no explicit EventID.
 _CAT_EVENTS: dict[str, list[int]] = {
     "process_creation":     [1, 4688],
@@ -76,7 +76,7 @@ _CAT_EVENTS: dict[str, list[int]] = {
 
 
 # =============================================================================
-# 2. Artifact extractors — three "find values in detection blocks that look
+# 2. Artifact extractors - three "find values in detection blocks that look
 #    like X" passes, expressed as data instead of three hand-rolled functions.
 # =============================================================================
 
@@ -216,7 +216,7 @@ def _run_extractor(detection: dict, all_strings: list[str], ex: Extractor) -> li
 
 
 # =============================================================================
-# 4. Parsed rule — one Sigma .yml's distilled facts
+# 4. Parsed rule - one Sigma .yml's distilled facts
 # =============================================================================
 
 @dataclass
@@ -224,7 +224,7 @@ class ParsedRule:
     tids:       list[str]
     tactics:    list[str]
     event_ids:  list[int]
-    artifacts:  dict[str, list[str]]    # extractor.name → values
+    artifacts:  dict[str, list[str]]    # extractor.name -> values
     meta:       dict                     # rule_meta dict embedded under each technique
 
 
@@ -294,7 +294,7 @@ def _parse_rule_file(fpath: Path, sigma_root: Path) -> Optional[ParsedRule]:
 
 
 # =============================================================================
-# 5. Aggregator — observe(rule) per TID, then finalize() into the API shape
+# 5. Aggregator - observe(rule) per TID, then finalize() into the API shape
 # =============================================================================
 
 @dataclass
@@ -358,7 +358,7 @@ def _aggregate(rules: Iterable[ParsedRule]) -> list[dict]:
 
 
 # =============================================================================
-# 6. Public entry point — same signature as before.
+# 6. Public entry point - same signature as before.
 # =============================================================================
 
 def build_artifact_map(
@@ -392,7 +392,7 @@ def build_artifact_map(
 
 
 # =============================================================================
-# 7. T-ID → human name lookup (pure data, intentionally at the bottom).
+# 7. T-ID -> human name lookup (pure data, intentionally at the bottom).
 # =============================================================================
 
 _TNAME: dict[str, str] = {

@@ -1,5 +1,5 @@
 """
-shellcode.py — peekaboo's shellcode swiss-army knife.
+shellcode.py - peekaboo's shellcode swiss-army knife.
 
 Pipeline:
     parse_input(text) -> bytes (auto-detect format)
@@ -8,13 +8,13 @@ Pipeline:
                      -> analyse()           (entropy, arch, top bytes, hashes)
 
 Design goals of this rewrite:
-  * One row-batching helper (_grouped) — the seven near-identical
+  * One row-batching helper (_grouped) - the seven near-identical
     to_c_array/to_python/to_powershell/... funcs collapsed into typed
     Formatter records.
   * Typed Formatter and Transform dataclasses so the dispatch is data
     not control flow (no more "if output_format in (...)" specials).
   * Public API kept stable: parse_input, parse_xor_key, xor_encode,
-    analyse, analyse_only, process, VALID_FORMATS — all importable
+    analyse, analyse_only, process, VALID_FORMATS - all importable
     exactly as before.
 """
 from __future__ import annotations
@@ -31,7 +31,7 @@ from typing import Callable, Optional
 
 
 # =============================================================================
-# 1. Input parsers — each tries to decode `text` as a specific format.
+# 1. Input parsers - each tries to decode `text` as a specific format.
 #    A parser returns the bytes on a confident match, or None otherwise.
 #    They're tried in `_PARSERS` order: most specific first, base64 last.
 # =============================================================================
@@ -115,12 +115,12 @@ def parse_input(raw: str) -> tuple[bytes, str]:
         if result is not None and len(result) > 0:
             return result, label
     raise ValueError(
-        "could not detect format — try: 0x90,0x90 · \\x90\\x90 · 9090 · base64"
+        "could not detect format - try: 0x90,0x90 · \\x90\\x90 · 9090 · base64"
     )
 
 
 # =============================================================================
-# 2. XOR key parser — separate from input parsing because the key has its
+# 2. XOR key parser - separate from input parsing because the key has its
 #    own grammar (single byte, multi-byte, or passphrase).
 # =============================================================================
 
@@ -150,7 +150,7 @@ def parse_xor_key(s: str) -> bytes:
 
 
 # =============================================================================
-# 3. Formatters — typed records so the dispatcher is just data.
+# 3. Formatters - typed records so the dispatcher is just data.
 #    `_grouped()` is the single byte-row helper that replaced the seven
 #    near-identical to_* functions.
 # =============================================================================
@@ -234,7 +234,7 @@ def _fmt_vba(data: bytes, var: str) -> str:
 
 
 # Var-less raw formats. var argument is accepted but ignored so every
-# formatter has the same signature — the dispatcher needs no special-cases.
+# formatter has the same signature - the dispatcher needs no special-cases.
 def _fmt_base64(data: bytes, var: str = "") -> str: return base64.b64encode(data).decode("ascii")
 def _fmt_hex_0x(data: bytes, var: str = "") -> str: return " ".join(f"0x{b:02x}" for b in data)
 def _fmt_hex_raw(data: bytes, var: str = "") -> str: return data.hex()
@@ -267,7 +267,7 @@ VALID_FORMATS = list(_FORMATTERS.keys())
 
 
 # =============================================================================
-# 4. Transforms — typed records, dispatched by registry instead of if/elif.
+# 4. Transforms - typed records, dispatched by registry instead of if/elif.
 # =============================================================================
 
 def xor_encode(data: bytes, key: bytes) -> bytes:
@@ -323,7 +323,7 @@ _TRANSFORMS: dict[str, Transform] = {
 
 
 # =============================================================================
-# 5. Analysis — pure inspection, no transforms.
+# 5. Analysis - pure inspection, no transforms.
 # =============================================================================
 
 @dataclass(frozen=True)
@@ -479,7 +479,7 @@ def process(
     except Exception as e:
         return {"ok": False, "error": f"transform failed: {e}"}
 
-    # 3. format — unified signature, no per-format special-cases
+    # 3. format - unified signature, no per-format special-cases
     fmt = _FORMATTERS.get(output_format)
     if fmt is None:
         return {"ok": False, "error": f"unknown output format '{output_format}'"}
