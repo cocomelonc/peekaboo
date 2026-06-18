@@ -146,16 +146,16 @@ class BuildManager:
 
         try:
             while True:
-                ev = q.get(timeout=30)
+                try:
+                    ev = q.get(timeout=30)
+                except queue.Empty:
+                    # 30s of silence — peekaboo.py is doing heavy work.
+                    # Send a heartbeat to keep the SSE connection alive and loop.
+                    yield {"type": EV_STATE, "status": "running", "heartbeat": True}
+                    continue
                 yield ev
                 if ev.get("type") == EV_END:
                     return
-        except queue.Empty:
-            # 30s of silence - peekaboo.py might be doing heavy work; loop back
-            # by yielding a heartbeat keeps the SSE connection warm without
-            # confusing the consumer.
-            yield {"type": EV_STATE, "status": "running", "heartbeat": True}
-            yield from self.tail(build_id)  # tail-recurse onto fresh state
         finally:
             with self._lock:
                 if q in live.subscribers:

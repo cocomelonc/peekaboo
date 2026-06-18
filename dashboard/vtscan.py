@@ -1,10 +1,9 @@
 """
 VirusTotal v3 scanner - peekaboo dashboard module
-Reads API key from config/virustotal_config.json
+Reads API key from .env via cfg.py (VT_API_KEY -> virustotal_config.vt_api_key).
 """
 from __future__ import annotations
 import hashlib
-import json
 from pathlib import Path
 
 try:
@@ -13,16 +12,13 @@ try:
 except ImportError:
     HAS_REQUESTS = False
 
-_CFG = Path(__file__).parent.parent / "config" / "virustotal_config.json"
+import cfg as _cfg
+
 _VT_URL = "https://www.virustotal.com/api/v3"
 
 
 def _api_key() -> str:
-    try:
-        cfg = json.loads(_CFG.read_text())
-        return cfg.get("vt_api_key", "")
-    except Exception:
-        return ""
+    return (_cfg.get("virustotal_config") or {}).get("vt_api_key", "")
 
 
 def _headers() -> dict:

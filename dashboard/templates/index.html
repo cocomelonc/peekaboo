@@ -2183,7 +2183,7 @@ async function openModModal(moduleId) {
         const btn = document.createElement('button');
         btn.className = 'btn btn-ghost btn-xs' + (i===0?' active':'');
         btn.textContent = s.name;
-        btn.onclick = () => loadSourceTab(s.path, btn);
+        btn.onclick = () => loadSourceTab(m.id, s.name, btn);
         tabs.appendChild(btn);
       });
     }
@@ -2196,13 +2196,14 @@ async function openModModal(moduleId) {
   }
 }
 
-async function loadSourceTab(path, btn) {
+async function loadSourceTab(moduleId, srcName, btn) {
   document.querySelectorAll('#mm-source-tabs .btn').forEach(b => b.classList.remove('active'));
   btn.classList.add('active');
   try {
-    // path is absolute - fetch via module detail with src_name
     document.getElementById('mm-code').textContent = 'loading…';
-    const src = await fetch(`/api/library/source?path=${encodeURIComponent(path)}`).then(r => r.text()).catch(() => '');
+    const src = await fetch(
+      `/api/library/source?module_id=${encodeURIComponent(moduleId)}&src_name=${encodeURIComponent(srcName)}`
+    ).then(r => r.text()).catch(() => '');
     document.getElementById('mm-code').textContent = src;
     if (typeof hljs !== 'undefined') { const el = document.getElementById('mm-code'); delete el.dataset.highlighted; hljs.highlightElement(el); }
   } catch(e) {}
