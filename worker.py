@@ -934,6 +934,300 @@ def cmd_sigma(args: argparse.Namespace) -> None:
     print(f"[sigma] done: {done} ok, {failed} failed", flush=True)
 
 
+def _build_apt_prompt(sess: dict) -> str:
+    actor   = sess.get("actor_id", "unknown")
+    ttps    = sess.get("ttps", [])
+    params  = sess.get("params", {})
+    started = (sess.get("started") or "")[:10]
+
+    tids    = [t.get("id") or t if isinstance(t, str) else "" for t in ttps][:15]
+    names   = [t.get("name", "") for t in ttps if isinstance(t, dict)][:10]
+    tactics = list({t.get("tactic", "") for t in ttps if isinstance(t, dict) and t.get("tactic")})[:6]
+
+    mods  = [m.get("title", m.get("module_id", "")) for m in params.get("selected_modules", []) if m][:8]
+    enc   = params.get("encryption", "")
+    inj   = params.get("injection", "")
+    mal   = params.get("malware", "")
+
+    parts = [f"APT Actor: {actor}", f"Campaign date: {started}"]
+    if tids:
+        parts.append("ATT&CK techniques: " + ", ".join(t for t in tids if t))
+    if tactics:
+        parts.append("Tactics covered: " + ", ".join(tactics))
+    if names:
+        parts.append("Key technique names: " + "; ".join(n for n in names if n)[:200])
+    if mods:
+        parts.append("Implant modules: " + ", ".join(mods))
+    if enc:
+        parts.append(f"Encryption: {enc}")
+    if inj:
+        parts.append(f"Injection: {inj}")
+    if mal:
+        parts.append(f"Malware family: {mal}")
+
+    context = "\n".join(parts)
+    return (
+        "You are a threat intelligence analyst.\n"
+        "Write exactly 3 plain sentences summarizing this APT simulation campaign.\n"
+        "Sentence 1: who the actor is and what they targeted.\n"
+        "Sentence 2: the key MITRE ATT&CK techniques and tactics used.\n"
+        "Sentence 3: the highest-priority detection recommendation for defenders.\n"
+        "No markdown, no lists, no headers. Hard limit: 420 characters total.\n\n"
+        f"{context}"
+    )
+
+
+def cmd_apt(args: argparse.Namespace) -> None:
+    """Precompute campaign briefs for finished APT pipeline sessions."""
+    model    = args.model
+    base_url = args.url
+    timeout  = args.timeout
+
+    db.init()
+
+    if getattr(args, "rebuild", False):
+        import sqlite3
+        with sqlite3.connect(db.DB_PATH) as conn:
+            n = conn.execute(
+                "DELETE FROM session_summaries WHERE model=?", (model,)
+            ).rowcount
+        print(f"[apt] --rebuild: wiped {n} summary rows for model={model}", flush=True)
+
+    pending = db.get_sessions_without_summary(model)
+    if not pending:
+        total = db.count_session_summaries()
+        print(f"[apt] all sessions already have briefs ({total} total)", flush=True)
+        return
+
+    ok, installed = _ollama_has_model(model, base_url)
+    if not ok:
+        print(f"[apt] model not available: {model}", flush=True)
+        print(f"[apt] installed: {', '.join(installed) or '(none)'}", flush=True)
+        print(f"[apt] fix: ollama pull {model}", flush=True)
+        sys.exit(1)
+
+    print(f"[apt] {len(pending)} session(s) to brief with {model} …", flush=True)
+    done = failed = 0
+
+    for i, sess in enumerate(pending, 1):
+        sid    = sess["session_id"]
+        actor  = sess.get("actor_id", "?")
+        prompt = _build_apt_prompt(sess)
+        raw    = _chat_text(prompt, model, base_url, timeout, label="apt")
+        if raw is None:
+            failed += 1
+            print(f"[apt] {i}/{len(pending)} FAIL  {sid} ({actor})", flush=True)
+            continue
+        summary = _normalize_summary(raw)
+        db.upsert_session_summary(sid, model, summary, raw)
+        done += 1
+        print(f"[apt] {i}/{len(pending)} ok    {sid}  ({actor})", flush=True)
+
+    print(f"[apt] done: {done} ok, {failed} failed", flush=True)
+
+
+def _build_actor_prompt(actor: dict) -> str:
+    name       = actor.get("name") or actor.get("id", "unknown")
+    country    = actor.get("country", "")
+    desc       = (actor.get("description") or "")[:600]
+    targets    = actor.get("targets", [])[:5]
+    victims    = actor.get("victims", [])[:5]
+    synonyms   = actor.get("synonyms", [])[:4]
+    families   = [f.get("id", "") if isinstance(f, dict) else str(f) for f in actor.get("families", [])][:6]
+    inc_type   = actor.get("incident_type", "")
+
+    parts = [f"Threat Actor: {name}"]
+    if country:
+        parts.append(f"Suspected origin: {country}")
+    if synonyms:
+        parts.append("Also known as: " + ", ".join(synonyms))
+    if targets:
+        parts.append("Target sectors: " + ", ".join(targets))
+    if victims:
+        parts.append("Known victims: " + ", ".join(victims))
+    if inc_type:
+        parts.append(f"Incident type: {inc_type}")
+    if families:
+        parts.append("Associated malware families: " + ", ".join(families))
+    if desc:
+        parts.append("Description: " + desc)
+
+    context = "\n".join(parts)
+    return (
+        "You are a threat intelligence analyst.\n"
+        "Write exactly 3 plain sentences profiling this threat actor.\n"
+        "Sentence 1: who the actor is, suspected origin, and motivation.\n"
+        "Sentence 2: typical targets and known malware families used.\n"
+        "Sentence 3: one behavioral signature defenders should hunt for.\n"
+        "No markdown, no lists, no headers. Hard limit: 420 characters total.\n\n"
+        f"{context}"
+    )
+
+
+def cmd_actor(args: argparse.Namespace) -> None:
+    """Precompute threat profile briefs for Malpedia actors."""
+    import sys as _sys
+    _sys.path.insert(0, str(Path(__file__).parent / "dashboard"))
+
+    model    = args.model
+    base_url = args.url
+    timeout  = args.timeout
+
+    db.init()
+
+    try:
+        import malpedia as _malp
+    except ImportError:
+        print("[actor] malpedia module not available", flush=True)
+        sys.exit(1)
+
+    if not _malp.available():
+        print("[actor] malpediaclient not installed (pip install malpediaclient)", flush=True)
+        sys.exit(1)
+
+    if getattr(args, "rebuild", False):
+        import sqlite3
+        with sqlite3.connect(db.DB_PATH) as conn:
+            n = conn.execute(
+                "DELETE FROM actor_summaries WHERE model=?", (model,)
+            ).rowcount
+        print(f"[actor] --rebuild: wiped {n} summary rows for model={model}", flush=True)
+
+    print("[actor] fetching actor list …", flush=True)
+    actor_ids = _malp.list_actors()
+    if not actor_ids:
+        print("[actor] no actors found (check malpedia_config.api_token)", flush=True)
+        return
+
+    pending = db.get_actor_ids_without_summary(actor_ids, model)
+    if not pending:
+        print(f"[actor] all {len(actor_ids)} actors already have briefs for {model}", flush=True)
+        return
+
+    ok, installed = _ollama_has_model(model, base_url)
+    if not ok:
+        print(f"[actor] model not available: {model}", flush=True)
+        print(f"[actor] fix: ollama pull {model}", flush=True)
+        sys.exit(1)
+
+    print(f"[actor] {len(pending)}/{len(actor_ids)} actors to brief with {model} …", flush=True)
+    done = failed = 0
+
+    for i, actor_id in enumerate(pending, 1):
+        actor = _malp.get_actor(actor_id)
+        if actor.get("error"):
+            failed += 1
+            print(f"[actor] {i}/{len(pending)} SKIP  {actor_id}  ({actor['error']})", flush=True)
+            continue
+        prompt = _build_actor_prompt(actor)
+        raw    = _chat_text(prompt, model, base_url, timeout, label="actor")
+        if raw is None:
+            failed += 1
+            print(f"[actor] {i}/{len(pending)} FAIL  {actor_id}", flush=True)
+            continue
+        summary = _normalize_summary(raw)
+        db.upsert_actor_summary(actor_id, model, summary, raw)
+        done += 1
+        print(f"[actor] {i}/{len(pending)} ok    {actor_id}  ({actor.get('name','')})", flush=True)
+
+    print(f"[actor] done: {done} ok, {failed} failed", flush=True)
+
+
+def _build_family_prompt(family: dict) -> str:
+    name       = family.get("name") or family.get("id", "unknown")
+    desc       = (family.get("description") or "")[:600]
+    alt_names  = family.get("alt_names", [])[:4]
+    attribution = family.get("attribution", [])[:4]
+
+    parts = [f"Malware Family: {name}"]
+    if alt_names:
+        parts.append("Also known as: " + ", ".join(alt_names))
+    if attribution:
+        parts.append("Attributed to: " + ", ".join(str(a) for a in attribution))
+    if desc:
+        parts.append("Description: " + desc)
+
+    context = "\n".join(parts)
+    return (
+        "You are a malware analyst.\n"
+        "Write exactly 3 plain sentences describing this malware family.\n"
+        "Sentence 1: what the malware does and its primary capabilities.\n"
+        "Sentence 2: how it persists, evades detection, or moves laterally.\n"
+        "Sentence 3: the most actionable detection or hunting recommendation.\n"
+        "No markdown, no lists, no headers. Hard limit: 420 characters total.\n\n"
+        f"{context}"
+    )
+
+
+def cmd_family(args: argparse.Namespace) -> None:
+    """Precompute behavioral briefs for Malpedia malware families."""
+    import sys as _sys
+    _sys.path.insert(0, str(Path(__file__).parent / "dashboard"))
+
+    model    = args.model
+    base_url = args.url
+    timeout  = args.timeout
+
+    db.init()
+
+    try:
+        import malpedia as _malp
+    except ImportError:
+        print("[family] malpedia module not available", flush=True)
+        sys.exit(1)
+
+    if not _malp.available():
+        print("[family] malpediaclient not installed (pip install malpediaclient)", flush=True)
+        sys.exit(1)
+
+    if getattr(args, "rebuild", False):
+        import sqlite3
+        with sqlite3.connect(db.DB_PATH) as conn:
+            n = conn.execute(
+                "DELETE FROM family_summaries WHERE model=?", (model,)
+            ).rowcount
+        print(f"[family] --rebuild: wiped {n} summary rows for model={model}", flush=True)
+
+    print("[family] fetching family list …", flush=True)
+    family_ids = _malp.list_families()
+    if not family_ids:
+        print("[family] no families found (check malpedia_config.api_token)", flush=True)
+        return
+
+    pending = db.get_family_ids_without_summary(family_ids, model)
+    if not pending:
+        print(f"[family] all {len(family_ids)} families already have briefs for {model}", flush=True)
+        return
+
+    ok, installed = _ollama_has_model(model, base_url)
+    if not ok:
+        print(f"[family] model not available: {model}", flush=True)
+        print(f"[family] fix: ollama pull {model}", flush=True)
+        sys.exit(1)
+
+    print(f"[family] {len(pending)}/{len(family_ids)} families to brief with {model} …", flush=True)
+    done = failed = 0
+
+    for i, family_id in enumerate(pending, 1):
+        family = _malp.get_family(family_id)
+        if family.get("error"):
+            failed += 1
+            print(f"[family] {i}/{len(pending)} SKIP  {family_id}  ({family['error']})", flush=True)
+            continue
+        prompt = _build_family_prompt(family)
+        raw    = _chat_text(prompt, model, base_url, timeout, label="family")
+        if raw is None:
+            failed += 1
+            print(f"[family] {i}/{len(pending)} FAIL  {family_id}", flush=True)
+            continue
+        summary = _normalize_summary(raw)
+        db.upsert_family_summary(family_id, model, summary, raw)
+        done += 1
+        print(f"[family] {i}/{len(pending)} ok    {family_id}  ({family.get('name','')})", flush=True)
+
+    print(f"[family] done: {done} ok, {failed} failed", flush=True)
+
+
 def cmd_status(args: argparse.Namespace) -> None:
     db.init()
     s = db.kb_stats()
@@ -1012,6 +1306,28 @@ def cmd_status(args: argparse.Namespace) -> None:
         print(f"artifact_summ  : 0  (techniques in map: {art_total})")
     for r in art_sum_rows:
         print(f"artifact_summ  : {r['n']}  ({r['model']})  pending: {art_total - r['n']}")
+
+    with sqlite3.connect(db.DB_PATH) as conn:
+        conn.row_factory = sqlite3.Row
+        sess_total  = conn.execute("SELECT COUNT(*) FROM pipeline_sessions WHERE status='success'").fetchone()[0]
+        sess_rows   = conn.execute("SELECT model, COUNT(*) n FROM session_summaries GROUP BY model").fetchall()
+        actor_rows  = conn.execute("SELECT model, COUNT(*) n FROM actor_summaries GROUP BY model").fetchall()
+        family_rows = conn.execute("SELECT model, COUNT(*) n FROM family_summaries GROUP BY model").fetchall()
+
+    if not sess_rows:
+        print(f"session_summ   : 0  (finished sessions: {sess_total})")
+    for r in sess_rows:
+        print(f"session_summ   : {r['n']}  ({r['model']})  pending: {sess_total - r['n']}")
+
+    if not actor_rows:
+        print(f"actor_summ     : 0")
+    for r in actor_rows:
+        print(f"actor_summ     : {r['n']}  ({r['model']})")
+
+    if not family_rows:
+        print(f"family_summ    : 0")
+    for r in family_rows:
+        print(f"family_summ    : {r['n']}  ({r['model']})")
 
 
 def cmd_refresh(args: argparse.Namespace) -> None:
@@ -1177,6 +1493,27 @@ def _build_parser() -> argparse.ArgumentParser:
     sp.add_argument("--rebuild-changed", action="store_true", dest="rebuild_changed",
                     help="re-summarize docs whose meow source is newer than summarized_at")
 
+    aptp = sub.add_parser("apt", help="precompute campaign briefs for finished pipeline sessions (LLM)")
+    aptp.add_argument("--model",   default="qwen3:14b",              help="Ollama chat model")
+    aptp.add_argument("--url",     default="http://localhost:11434", help="Ollama base URL")
+    aptp.add_argument("--timeout", type=int, default=120,            help="per-call timeout (s)")
+    aptp.add_argument("--rebuild", action="store_true",
+                      help="wipe existing session briefs and redo all")
+
+    acp = sub.add_parser("actor", help="precompute threat profile briefs for Malpedia actors (LLM)")
+    acp.add_argument("--model",   default="qwen3:14b",              help="Ollama chat model")
+    acp.add_argument("--url",     default="http://localhost:11434", help="Ollama base URL")
+    acp.add_argument("--timeout", type=int, default=120,            help="per-call timeout (s)")
+    acp.add_argument("--rebuild", action="store_true",
+                     help="wipe existing actor briefs and redo all")
+
+    fap = sub.add_parser("family", help="precompute behavioral briefs for Malpedia malware families (LLM)")
+    fap.add_argument("--model",   default="qwen3:14b",              help="Ollama chat model")
+    fap.add_argument("--url",     default="http://localhost:11434", help="Ollama base URL")
+    fap.add_argument("--timeout", type=int, default=120,            help="per-call timeout (s)")
+    fap.add_argument("--rebuild", action="store_true",
+                     help="wipe existing family briefs and redo all")
+
     sgp = sub.add_parser("sigma", help="parse Sigma rules + precompute detection briefs (LLM)")
     sgp.add_argument("--sigma-path", default=None, dest="sigma_path",
                      metavar="PATH",
@@ -1225,6 +1562,12 @@ if __name__ == "__main__":
         cmd_ttp(args)
     elif args.cmd == "summarize":
         cmd_summarize(args)
+    elif args.cmd == "apt":
+        cmd_apt(args)
+    elif args.cmd == "actor":
+        cmd_actor(args)
+    elif args.cmd == "family":
+        cmd_family(args)
     elif args.cmd == "sigma":
         cmd_sigma(args)
     elif args.cmd == "refresh":

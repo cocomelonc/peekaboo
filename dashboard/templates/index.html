@@ -504,13 +504,6 @@ code{font-family:var(--mono);font-size:12px;background:var(--bg4);padding:1px 5p
 @keyframes pulse{0%,100%{opacity:1}50%{opacity:.3}}
 
 /* -- modals -- */
-/* -- settings panel -- */
-.settings-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(280px,1fr));gap:14px;align-items:stretch}
-.settings-grid > .card{display:flex;flex-direction:column}
-.sett-card-head{display:flex;align-items:center;gap:8px;margin-bottom:14px}
-.sett-name-badge{margin-left:auto;flex-shrink:0}
-.sett-fields{display:flex;flex-direction:column;gap:10px;flex:1;margin-bottom:14px}
-.cfg-field{display:flex;flex-direction:column}
 .modal-bg{position:fixed;inset:0;background:rgba(8,6,18,.82);z-index:200;display:flex;align-items:center;justify-content:center;padding:20px;opacity:0;pointer-events:none;transition:opacity .2s}
 .modal-bg.open{opacity:1;pointer-events:all}
 .modal{background:var(--bg2);border:1px solid var(--sep);border-radius:14px;width:100%;max-width:760px;max-height:85vh;display:flex;flex-direction:column;overflow:hidden;transform:scale(.96);transition:transform .2s}
@@ -734,11 +727,6 @@ code{font-family:var(--mono);font-size:12px;background:var(--bg4);padding:1px 5p
     </div>
   </div>
 
-  <div class="sb-section">
-    <div class="nav-item" onclick="showPanel('settings')" id="nav-settings">
-      <span class="nav-icon">⚙️</span> Settings
-    </div>
-  </div>
 
   <div class="sb-footer" style="flex-direction:column;align-items:flex-start;gap:5px">
     <div style="display:flex;align-items:center;gap:6px">
@@ -1071,7 +1059,7 @@ code{font-family:var(--mono);font-size:12px;background:var(--bg4);padding:1px 5p
     </div>
     <div class="tbl-wrap">
       <table class="tbl">
-        <thead><tr><th>Session</th><th>Actor</th><th>Reports</th><th>TTPs</th><th>Status</th><th>Started</th></tr></thead>
+        <thead><tr><th>Session</th><th>Actor</th><th>Reports</th><th>TTPs</th><th>Status</th><th>Started</th><th></th></tr></thead>
         <tbody id="sessions-tbody"></tbody>
       </table>
     </div>
@@ -1665,10 +1653,6 @@ code{font-family:var(--mono);font-size:12px;background:var(--bg4);padding:1px 5p
   </div>
 </div>
 
-<!-- ════════ SETTINGS ════════ -->
-<div id="panel-settings" class="panel">
-  <div class="settings-grid" id="settings-grid"></div>
-</div>
 
 </div><!-- content -->
 </div><!-- main -->
@@ -1814,7 +1798,6 @@ const PANEL_META = {
   mitre:     ['MITRE ATT&CK',     'groups, techniques, peekaboo library'],
   malpedia:  ['Malpedia',         'threat actors & malware families'],
   chat:      ['AI Assistant',     'local Ollama malware research chatbot (RAG)'],
-  settings:  ['Settings',         'configure API keys and tokens'],
 };
 
 // -----------------------------------------------------------------
@@ -1838,7 +1821,6 @@ function showPanel(id) {
   if (id === 'artifacts') loadArtifacts();
   if (id === 'malpedia')  { if (!malpReports.length) loadMalpReports(); }
   if (id === 'mitre')     initMitrePanel();
-  if (id === 'settings')  loadSettings();
   if (id === 'chat')      loadChatStatus();
 }
 
@@ -2841,13 +2823,14 @@ async function loadPipelineSessions() {
     const st  = s.status === 'success' ? 'badge-green' : (s.status === 'running' ? 'badge-yellow' : 'badge-red');
     const nR  = s.report_count ?? (s.ttps?.length >= 0 ? '?' : '?');
     const nT  = Array.isArray(s.ttps) ? s.ttps.length : (s.ttps || 0);
-    return `<tr style="cursor:pointer" onclick="openSessionDrawer('${s.session_id}')" title="click to inspect">
-      <td class="mono text-xs">${s.session_id}</td>
-      <td>${escHtml(s.actor_id||'-')}</td>
+    return `<tr>
+      <td class="mono text-xs" style="cursor:pointer" onclick="openSessionDrawer('${s.session_id}')">${s.session_id}</td>
+      <td style="cursor:pointer" onclick="openSessionDrawer('${s.session_id}')">${escHtml(s.actor_id||'-')}</td>
       <td class="text-dim text-xs" id="rcount-${s.session_id}">…</td>
-      <td>${nT}</td>
+      <td style="cursor:pointer" onclick="openSessionDrawer('${s.session_id}')">${nT}</td>
       <td><span class="badge ${st}">${s.status}</span></td>
       <td class="text-xs text-dim">${(s.started||'').slice(0,16)}</td>
+      <td><button class="btn-brief" onclick="showBrief('${escAttr(s.session_id)}','apt')" title="Campaign brief">brief</button></td>
     </tr>`;
   }).join('');
   // backfill report counts async
@@ -4070,25 +4053,42 @@ function closeBriefPanel() {
 }
 
 async function showBrief(id, type) {
-  // type: 'kb' = kb_summaries (slug), 'art' = artifact_summaries (TID)
+  // type: 'kb'='kb_summaries', 'art'='artifact_summaries',
+  //       'apt'='session_summaries', 'actor'='actor_summaries', 'family'='family_summaries'
   const panel  = document.getElementById('brief-panel');
   const label  = document.getElementById('bp-label');
   const slugEl = document.getElementById('bp-slug');
   const txtEl  = document.getElementById('bp-text');
   if (_briefIv) { clearInterval(_briefIv); _briefIv = null; }
-  label.textContent = type === 'art' ? 'DETECTION BRIEF' : 'BRIEF';
+
+  const labelMap = {
+    art:    'DETECTION BRIEF',
+    apt:    'CAMPAIGN BRIEF',
+    actor:  'ACTOR PROFILE',
+    family: 'MALWARE FAMILY',
+  };
+  label.textContent = labelMap[type] || 'BRIEF';
   slugEl.textContent = id;
   txtEl.textContent = '…';
   panel.classList.add('open');
 
-  const url = type === 'art'
-    ? `/api/artifacts/brief/${encodeURIComponent(id)}`
-    : `/api/kb/brief/${encodeURIComponent(id)}`;
+  const urlMap = {
+    art:    `/api/artifacts/brief/${encodeURIComponent(id)}`,
+    apt:    `/api/apt/brief/${encodeURIComponent(id)}`,
+    actor:  `/api/malpedia/actor/${encodeURIComponent(id)}/brief`,
+    family: `/api/malpedia/family/${encodeURIComponent(id)}/brief`,
+  };
+  const workerMap = {
+    art:    'python worker.py sigma',
+    apt:    'python worker.py apt',
+    actor:  'python worker.py actor',
+    family: 'python worker.py family',
+  };
+  const url = urlMap[type] || `/api/kb/brief/${encodeURIComponent(id)}`;
   const r = await fetch(url).then(x => x.json()).catch(() => null);
   if (!r || r.error) {
-    txtEl.textContent = type === 'art'
-      ? `No detection brief for ${id}. Run: python worker.py sigma`
-      : `No brief for "${id}". Run: python worker.py summarize`;
+    const cmd = workerMap[type] || 'python worker.py summarize';
+    txtEl.textContent = `No brief for "${id}". Run: ${cmd}`;
     return;
   }
   const text = r.summary || '';
@@ -4284,10 +4284,13 @@ async function loadMalpDetail(id, type) {
       <span class="malp-post-date">${p.date||''}</span>
       ${p.slug ? `<button class="btn-brief" style="margin-left:6px" onclick="showBrief('${escAttr(p.slug)}','kb')">brief</button>` : ''}
     </div>`).join('');
+  const briefBtn = type === 'actor'
+    ? `<button class="btn-brief" onclick="showBrief('${escAttr(id)}','actor')" title="Threat actor profile brief">brief</button>`
+    : `<button class="btn-brief" onclick="showBrief('${escAttr(id)}','family')" title="Malware family brief">brief</button>`;
   card.innerHTML = `
     <div class="card-header">
       <div>
-        <div class="card-title">${escHtml(data.name||id)}</div>
+        <div class="card-title">${escHtml(data.name||id)} ${briefBtn}</div>
         ${data.country ? `<div class="card-sub">${data.country}</div>` : ''}
       </div>
     </div>
@@ -4469,49 +4472,6 @@ async function scrapeKB() {
   await fetch('/api/chat/scrape', {method:'POST'});
 }
 
-// -----------------------------------------------------------------
-// Settings
-// -----------------------------------------------------------------
-const CONFIGS = [
-  {name:'telegram_config',   label:'Telegram C2',        fields:[{k:'bot_token',l:'Bot Token',secret:true},{k:'chat_id',l:'Chat ID'}]},
-  {name:'github_config',     label:'GitHub C2',          fields:[{k:'github_token',l:'Token',secret:true},{k:'repo_owner',l:'Owner'},{k:'repo_name',l:'Repo'},{k:'issue_number',l:'Issue #'}]},
-  {name:'virustotal_config', label:'VirusTotal',         fields:[{k:'vt_api_key',l:'API Key',secret:true}]},
-  {name:'bitbucket_config',  label:'Bitbucket C2',       fields:[{k:'bitbucket_token_base64',l:'Token (b64)',secret:true},{k:'bitbucket_workspace',l:'Workspace'},{k:'bitbucket_repo',l:'Repo'}]},
-  {name:'slack_config',      label:'Slack C2',           fields:[{k:'webhook_url',l:'Webhook URL',secret:true}]},
-  {name:'azure_config',      label:'Azure DevOps C2',    fields:[{k:'azure_org',l:'Org'},{k:'azure_project',l:'Project'},{k:'azure_pat',l:'PAT',secret:true}]},
-  {name:'malpedia_config',   label:'Malpedia',           fields:[{k:'api_token',l:'API Token',secret:true}]},
-  {name:'ollama_config',     label:'Ollama',             fields:[{k:'base_url',l:'Base URL'},{k:'model',l:'Model'}]},
-];
-
-async function loadSettings() {
-  const grid = document.getElementById('settings-grid');
-  grid.innerHTML = `
-    <div class="card" style="grid-column:1/-1">
-      <div class="card-title">Read-only - configs live in <code>.env</code></div>
-      <div class="text-dim text-sm" style="margin-top:6px;line-height:1.5">
-        Secret tokens migrated from <code>config/*.json</code> to the project-root <code>.env</code>.
-        Edit that file, then restart the dashboard. Values shown below are masked.
-      </div>
-    </div>`;
-  for (const cfg of CONFIGS) {
-    const data = await fetch(`/api/config/${cfg.name}`).then(r=>r.json()).catch(()=>({}));
-    const card = document.createElement('div');
-    card.className = 'card';
-    card.innerHTML = `
-      <div class="sett-card-head">
-        <div class="card-title">${cfg.label}</div>
-        <span class="badge badge-dim text-xs sett-name-badge">${cfg.name}</span>
-      </div>
-      <div class="sett-fields">
-        ${cfg.fields.map(f => `
-          <div class="cfg-field">
-            <label>${f.l}</label>
-            <input type="${f.secret?'password':'text'}" value="${escAttr(data[f.k]||'')}" readonly disabled>
-          </div>`).join('')}
-      </div>`;
-    grid.appendChild(card);
-  }
-}
 
 // -----------------------------------------------------------------
 // Utilities

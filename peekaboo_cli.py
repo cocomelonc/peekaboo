@@ -2415,6 +2415,81 @@ def _cli_show_art_brief(tid: str) -> None:
     console.print()
 
 
+def _cli_show_session_brief(session_id: str) -> None:
+    """Print the precomputed GPU campaign brief for an APT session ID."""
+    try:
+        import db as _db
+    except ImportError:
+        console.print("  [err][=^..^=] db not available[/err]\n")
+        return
+    summary = _db.get_session_summary(session_id)
+    if not summary:
+        console.print(
+            f"  [warn][=^..^=] no campaign brief for '{session_id}'  "
+            f"(run: python worker.py apt)[/warn]\n"
+        )
+        return
+    console.print()
+    console.print(Panel(
+        summary,
+        title=f"[heading] CAMPAIGN BRIEF — {session_id} [/heading]",
+        border_style="bright_magenta",
+        box=box.ROUNDED,
+        padding=(0, 2),
+    ))
+    console.print()
+
+
+def _cli_show_actor_brief(actor_id: str) -> None:
+    """Print the precomputed GPU threat profile brief for a Malpedia actor."""
+    try:
+        import db as _db
+    except ImportError:
+        console.print("  [err][=^..^=] db not available[/err]\n")
+        return
+    summary = _db.get_actor_summary(actor_id)
+    if not summary:
+        console.print(
+            f"  [warn][=^..^=] no actor brief for '{actor_id}'  "
+            f"(run: python worker.py actor)[/warn]\n"
+        )
+        return
+    console.print()
+    console.print(Panel(
+        summary,
+        title=f"[heading] ACTOR PROFILE — {actor_id} [/heading]",
+        border_style="bright_magenta",
+        box=box.ROUNDED,
+        padding=(0, 2),
+    ))
+    console.print()
+
+
+def _cli_show_family_brief(family_id: str) -> None:
+    """Print the precomputed GPU behavioral brief for a Malpedia malware family."""
+    try:
+        import db as _db
+    except ImportError:
+        console.print("  [err][=^..^=] db not available[/err]\n")
+        return
+    summary = _db.get_family_summary(family_id)
+    if not summary:
+        console.print(
+            f"  [warn][=^..^=] no family brief for '{family_id}'  "
+            f"(run: python worker.py family)[/warn]\n"
+        )
+        return
+    console.print()
+    console.print(Panel(
+        summary,
+        title=f"[heading] MALWARE FAMILY — {family_id} [/heading]",
+        border_style="bright_magenta",
+        box=box.ROUNDED,
+        padding=(0, 2),
+    ))
+    console.print()
+
+
 # -- module library ------------------------------------------------------------
 
 _EXT_LANG = {
@@ -2968,7 +3043,8 @@ def _render_actor_detail(a: dict) -> None:
         for p in posts[:6]:
             pt.add_row(p.get("slug", "-"), p.get("title", "")[:48], f"{p.get('score', 0):.2f}")
         console.print(pt)
-        console.print("  [dim]use  brief <slug>  to see GPU-precomputed summary[/dim]\n")
+        console.print("  [dim]use  brief <slug>  to see GPU-precomputed post summary[/dim]\n")
+    console.print("  [dim]use  brief " + a["id"] + "  to see GPU-precomputed actor threat profile[/dim]\n")
     console.print()
 
 
@@ -3024,7 +3100,8 @@ def _render_family_detail(f: dict) -> None:
         for p in posts[:6]:
             pt.add_row(p.get("slug", "-"), p.get("title", "")[:48], f"{p.get('score', 0):.2f}")
         console.print(pt)
-        console.print("  [dim]use  brief <slug>  to see GPU-precomputed summary[/dim]\n")
+        console.print("  [dim]use  brief <slug>  to see GPU-precomputed post summary[/dim]\n")
+    console.print("  [dim]use  brief " + f["id"] + "  to see GPU-precomputed family behavioral brief[/dim]\n")
     console.print()
 
 
@@ -3324,12 +3401,18 @@ def run_malpedia() -> None:
             if not actor_hits and not family_hits:
                 console.print(f"\n  [warn][=^..^=] no results for '{q}'[/warn]\n")
 
-        # -- brief <slug> ---------------------------------------------------------
+        # -- brief <id-or-slug> -----------------------------------------------
         elif cmd == "brief":
             if not args:
-                console.print("[warn][=^..^=] usage: brief <slug>[/warn]")
+                console.print("[warn][=^..^=] usage: brief <actor-id|family-id|kb-slug>[/warn]")
                 continue
-            _cli_show_kb_brief(args[0])
+            bid = args[0]
+            if bid in actor_list:
+                _cli_show_actor_brief(bid)
+            elif bid in family_list:
+                _cli_show_family_brief(bid)
+            else:
+                _cli_show_kb_brief(bid)
 
         # -- refresh ----------------------------------------------------------
         elif cmd == "refresh":

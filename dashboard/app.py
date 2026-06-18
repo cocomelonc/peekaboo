@@ -1484,5 +1484,34 @@ def api_artifacts_rebuild():
     )
 
 
+@app.route("/api/apt/brief/<session_id>")
+def api_apt_brief(session_id: str):
+    """Return precomputed GPU campaign brief for an APT pipeline session."""
+    if not re.match(r'^[a-f0-9]{8}$', session_id):
+        return jsonify({"error": "invalid session id"}), 400
+    summary = _db.get_session_summary(session_id)
+    if not summary:
+        return jsonify({"error": "no brief available", "session_id": session_id}), 404
+    return jsonify({"session_id": session_id, "summary": summary})
+
+
+@app.route("/api/malpedia/actor/<actor_id>/brief")
+def api_actor_brief(actor_id: str):
+    """Return precomputed GPU threat profile brief for a Malpedia actor."""
+    summary = _db.get_actor_summary(actor_id)
+    if not summary:
+        return jsonify({"error": "no brief available", "actor_id": actor_id}), 404
+    return jsonify({"actor_id": actor_id, "summary": summary})
+
+
+@app.route("/api/malpedia/family/<path:family_id>/brief")
+def api_family_brief(family_id: str):
+    """Return precomputed GPU behavioral brief for a Malpedia malware family."""
+    summary = _db.get_family_summary(family_id)
+    if not summary:
+        return jsonify({"error": "no brief available", "family_id": family_id}), 404
+    return jsonify({"family_id": family_id, "summary": summary})
+
+
 if __name__ == "__main__":
     app.run(debug=True, host="0.0.0.0", port=5000)

@@ -126,6 +126,39 @@ def init() -> None:
         """)
 
         db.execute("""
+            CREATE TABLE IF NOT EXISTS session_summaries (
+                session_id    TEXT NOT NULL,
+                model         TEXT NOT NULL DEFAULT '',
+                summary       TEXT NOT NULL DEFAULT '',
+                raw_output    TEXT NOT NULL DEFAULT '',
+                summarized_at TEXT NOT NULL DEFAULT (datetime('now')),
+                PRIMARY KEY (session_id, model)
+            )
+        """)
+
+        db.execute("""
+            CREATE TABLE IF NOT EXISTS actor_summaries (
+                actor_id      TEXT NOT NULL,
+                model         TEXT NOT NULL DEFAULT '',
+                summary       TEXT NOT NULL DEFAULT '',
+                raw_output    TEXT NOT NULL DEFAULT '',
+                summarized_at TEXT NOT NULL DEFAULT (datetime('now')),
+                PRIMARY KEY (actor_id, model)
+            )
+        """)
+
+        db.execute("""
+            CREATE TABLE IF NOT EXISTS family_summaries (
+                family_id     TEXT NOT NULL,
+                model         TEXT NOT NULL DEFAULT '',
+                summary       TEXT NOT NULL DEFAULT '',
+                raw_output    TEXT NOT NULL DEFAULT '',
+                summarized_at TEXT NOT NULL DEFAULT (datetime('now')),
+                PRIMARY KEY (family_id, model)
+            )
+        """)
+
+        db.execute("""
             CREATE TABLE IF NOT EXISTS ttp_implementations (
                 id          INTEGER PRIMARY KEY AUTOINCREMENT,
                 attack_id   TEXT NOT NULL,
@@ -1560,3 +1593,185 @@ def get_kb_embeddings_all(model: str = "nomic-embed-text") -> list[dict]:
             d["vector"] = []
         result.append(d)
     return result
+
+
+# --------------------------------------------------------------------------- #
+#  Session Summaries (written by worker.py apt, read by APT panel)             #
+# --------------------------------------------------------------------------- #
+
+def get_sessions_without_summary(model: str) -> list[dict]:
+    with _conn() as db:
+        rows = db.execute(
+            """
+            SELECT session_id, actor_id, ttps, params, started, finished, status
+            FROM pipeline_sessions
+            WHERE status = 'success'
+              AND session_id NOT IN (
+                  SELECT session_id FROM session_summaries WHERE model = ?
+              )
+            ORDER BY started DESC
+            """,
+            (model,),
+        ).fetchall()
+    result = []
+    for r in rows:
+        d = dict(r)
+        try:
+            d["ttps"] = json.loads(d["ttps"] or "[]")
+        except Exception:
+            d["ttps"] = []
+        try:
+            d["params"] = json.loads(d["params"] or "{}")
+        except Exception:
+            d["params"] = {}
+        result.append(d)
+    return result
+
+
+def upsert_session_summary(session_id: str, model: str, summary: str, raw_output: str = "") -> None:
+    with _conn() as db:
+        db.execute(
+            """
+            INSERT INTO session_summaries (session_id, model, summary, raw_output, summarized_at)
+            VALUES (?, ?, ?, ?, datetime('now'))
+            ON CONFLICT(session_id, model) DO UPDATE SET
+                summary=excluded.summary,
+                raw_output=excluded.raw_output,
+                summarized_at=excluded.summarized_at
+            """,
+            (session_id, model, summary, raw_output),
+        )
+
+
+def get_session_summary(session_id: str, model: str | None = None) -> str:
+    with _conn() as db:
+        if model:
+            row = db.execute(
+                "SELECT summary FROM session_summaries WHERE session_id=? AND model=? LIMIT 1",
+                (session_id, model),
+            ).fetchone()
+        else:
+            row = db.execute(
+                "SELECT summary FROM session_summaries WHERE session_id=? ORDER BY summarized_at DESC LIMIT 1",
+                (session_id,),
+            ).fetchone()
+    return (row["summary"] or "") if row else ""
+
+
+def count_session_summaries(model: str | None = None) -> int:
+    with _conn() as db:
+        if model:
+            return db.execute(
+                "SELECT COUNT(*) FROM session_summaries WHERE model=?", (model,)
+            ).fetchone()[0]
+        return db.execute("SELECT COUNT(*) FROM session_summaries").fetchone()[0]
+
+
+# --------------------------------------------------------------------------- #
+#  Actor Summaries (written by worker.py actor, read by Malpedia panel)        #
+# --------------------------------------------------------------------------- #
+
+def get_actor_ids_without_summary(actor_ids: list[str], model: str) -> list[str]:
+    if not actor_ids:
+        return []
+    with _conn() as db:
+        done = {
+            r[0] for r in db.execute(
+                "SELECT actor_id FROM actor_summaries WHERE model=?", (model,)
+            ).fetchall()
+        }
+    return [a for a in actor_ids if a not in done]
+
+
+def upsert_actor_summary(actor_id: str, model: str, summary: str, raw_output: str = "") -> None:
+    with _conn() as db:
+        db.execute(
+            """
+            INSERT INTO actor_summaries (actor_id, model, summary, raw_output, summarized_at)
+            VALUES (?, ?, ?, ?, datetime('now'))
+            ON CONFLICT(actor_id, model) DO UPDATE SET
+                summary=excluded.summary,
+                raw_output=excluded.raw_output,
+                summarized_at=excluded.summarized_at
+            """,
+            (actor_id, model, summary, raw_output),
+        )
+
+
+def get_actor_summary(actor_id: str, model: str | None = None) -> str:
+    with _conn() as db:
+        if model:
+            row = db.execute(
+                "SELECT summary FROM actor_summaries WHERE actor_id=? AND model=? LIMIT 1",
+                (actor_id, model),
+            ).fetchone()
+        else:
+            row = db.execute(
+                "SELECT summary FROM actor_summaries WHERE actor_id=? ORDER BY summarized_at DESC LIMIT 1",
+                (actor_id,),
+            ).fetchone()
+    return (row["summary"] or "") if row else ""
+
+
+def count_actor_summaries(model: str | None = None) -> int:
+    with _conn() as db:
+        if model:
+            return db.execute(
+                "SELECT COUNT(*) FROM actor_summaries WHERE model=?", (model,)
+            ).fetchone()[0]
+        return db.execute("SELECT COUNT(*) FROM actor_summaries").fetchone()[0]
+
+
+# --------------------------------------------------------------------------- #
+#  Family Summaries (written by worker.py family, read by Malpedia panel)      #
+# --------------------------------------------------------------------------- #
+
+def get_family_ids_without_summary(family_ids: list[str], model: str) -> list[str]:
+    if not family_ids:
+        return []
+    with _conn() as db:
+        done = {
+            r[0] for r in db.execute(
+                "SELECT family_id FROM family_summaries WHERE model=?", (model,)
+            ).fetchall()
+        }
+    return [f for f in family_ids if f not in done]
+
+
+def upsert_family_summary(family_id: str, model: str, summary: str, raw_output: str = "") -> None:
+    with _conn() as db:
+        db.execute(
+            """
+            INSERT INTO family_summaries (family_id, model, summary, raw_output, summarized_at)
+            VALUES (?, ?, ?, ?, datetime('now'))
+            ON CONFLICT(family_id, model) DO UPDATE SET
+                summary=excluded.summary,
+                raw_output=excluded.raw_output,
+                summarized_at=excluded.summarized_at
+            """,
+            (family_id, model, summary, raw_output),
+        )
+
+
+def get_family_summary(family_id: str, model: str | None = None) -> str:
+    with _conn() as db:
+        if model:
+            row = db.execute(
+                "SELECT summary FROM family_summaries WHERE family_id=? AND model=? LIMIT 1",
+                (family_id, model),
+            ).fetchone()
+        else:
+            row = db.execute(
+                "SELECT summary FROM family_summaries WHERE family_id=? ORDER BY summarized_at DESC LIMIT 1",
+                (family_id,),
+            ).fetchone()
+    return (row["summary"] or "") if row else ""
+
+
+def count_family_summaries(model: str | None = None) -> int:
+    with _conn() as db:
+        if model:
+            return db.execute(
+                "SELECT COUNT(*) FROM family_summaries WHERE model=?", (model,)
+            ).fetchone()[0]
+        return db.execute("SELECT COUNT(*) FROM family_summaries").fetchone()[0]
