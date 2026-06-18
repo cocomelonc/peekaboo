@@ -817,7 +817,7 @@ def _build_sigma_prompt(entry: dict) -> str:
     cmdlines  = entry.get("cmdlines",  [])[:4]
 
     parts = [
-        f"ATT&CK Technique: {tid} — {name}",
+        f"ATT&CK Technique: {tid} - {name}",
         f"Tactic: {tactic}",
         f"Covered by {rules} Sigma detection rules.",
     ]
@@ -867,7 +867,7 @@ def cmd_sigma(args: argparse.Namespace) -> None:
             print("[sigma] artifact_parser not available (pyyaml installed?)", flush=True)
             sys.exit(1)
         if not HAS_YAML:
-            print("[sigma] pyyaml not installed — run: pip install pyyaml", flush=True)
+            print("[sigma] pyyaml not installed - run: pip install pyyaml", flush=True)
             sys.exit(1)
 
         print(f"[sigma] parsing {sigma_dir} …", flush=True)
@@ -889,7 +889,7 @@ def cmd_sigma(args: argparse.Namespace) -> None:
     # -- Step 2: LLM summarization --------------------------------------------
     total = db.count_artifact_entries()
     if total == 0:
-        print("[sigma] artifact map is empty — add --sigma-path to parse rules first", flush=True)
+        print("[sigma] artifact map is empty - add --sigma-path to parse rules first", flush=True)
         print("[sigma]   example: python worker.py sigma --sigma-path ~/hacking/sigma", flush=True)
         return
 

@@ -1,6 +1,6 @@
 # Peekaboo
 
-![img](./screenshots/2026-04-28_23-40.png)
+![img](./screenshots/2026-06-18_15-16.png)    
 
 Peekaboo is a modular framework designed to safely emulate malware behavior. It allows security researchers, red teamers, and blue teamers to reproduce complex threat scenarios - including Command & Control (C2) communication, persistence mechanisms, and lateral movement - without using destructive payloads.
 
@@ -28,7 +28,7 @@ Peekaboo is a modular framework designed to safely emulate malware behavior. It 
 - **MITRE ATT&CK R&D** - browse 200+ blog post techniques mapped to ATT&CK IDs with inline source code, LLM-extracted TTPs, and per-post GPU-precomputed briefs.
 - **Malpedia integration** - threat actor and malware family lookup with semantic blog post matching via local LLM embeddings.
 - **AI assistant** - local RAG chatbot (Ollama/qwen3) trained on blog posts and codebase; GPU-precomputed summaries served instantly with typing animation; fully offline.
-- **Quick Brief** - type any technique name in the AI assistant panel and get a GPU-precomputed 3-sentence brief instantly — no LLM call at request time.
+- **Quick Brief** - type any technique name in the AI assistant panel and get a GPU-precomputed 3-sentence brief instantly - no LLM call at request time.
 - **APT campaign pipeline** - end-to-end automated pipeline: Malpedia actor -> threat reports -> TTP extraction -> module selection -> binary compile.
 - **YARA rule generator** - auto-generate YARA rules from compiled binaries or uploaded samples.
 - **VirusTotal scanner** - submit binaries for AV detection scoring; lookup by SHA256; poll analysis results.
@@ -72,7 +72,7 @@ The dashboard is a Flask-based web UI that combines C2 monitoring, malware build
 cd dashboard && python3 app.py
 ```
 
-![img](./screenshots/2026-06-11_09-51_1.png)
+![img](./screenshots/2026-06-18_15-16.png)    
 
 ![img](./screenshots/2026-06-11_09-49.png)
 
@@ -99,7 +99,7 @@ cd dashboard && python3 app.py
 
 ## GPU / CPU split
 
-Heavy LLM work runs once on a GPU machine via `worker.py`. Results are stored in `dashboard/peekaboo.db`. The CPU dashboard only does DB reads — zero LLM calls at request time.
+Heavy LLM work runs once on a GPU machine via `worker.py`. Results are stored in `dashboard/peekaboo.db`. The CPU dashboard only does DB reads - zero LLM calls at request time.
 
 ```
 GPU machine                         CPU machine (dashboard)
@@ -111,7 +111,7 @@ python worker.py summarize          AI assistant typing animation
 python worker.py sigma              artifact map detection briefs
 ```
 
-All `worker.py` subcommands are **resumable** — they use `NOT IN` SQL patterns to skip already-processed rows. Interrupt and re-run at any time.
+All `worker.py` subcommands are **resumable** - they use `NOT IN` SQL patterns to skip already-processed rows. Interrupt and re-run at any time.
 
 ---
 
@@ -203,7 +203,7 @@ python worker.py summarize --model qwen3:14b --posts ~/hacking/meow/_posts
 
 Reads both the blog post markdown and the associated source code for each doc, then asks the LLM to write a 3-sentence summary: what the technique does, how it works at the API/syscall level, and what defenders should look for. Summaries are stored in `kb_summaries` and served by:
 
-- The **AI assistant** template response path (no live LLM call — just DB read + typing animation)
+- The **AI assistant** template response path (no live LLM call - just DB read + typing animation)
 - The **BRIEF block** in the MITRE Library detail card
 - The **Quick Brief** lookup in the AI assistant panel
 
@@ -219,17 +219,17 @@ Reads both the blog post markdown and the associated source code for each doc, t
 ### sigma
 
 ```bash
-# Step 1 (CPU) — parse 4,000+ Sigma rules into artifact_map
+# Step 1 (CPU) - parse 4,000+ Sigma rules into artifact_map
 python worker.py sigma --sigma-path ~/hacking/sigma --parse-only
 
-# Step 2 (GPU) — precompute detection briefs per technique
+# Step 2 (GPU) - precompute detection briefs per technique
 python worker.py sigma --model qwen3:14b
 
 # Full rebuild (if GPU machine also has the sigma repo)
 python worker.py sigma --sigma-path ~/hacking/sigma --rebuild --model qwen3:14b
 ```
 
-**Step 1 (parse):** Walks all `.yml` Sigma rule files, extracts per-technique event IDs, registry keys, process images, and command-line patterns, and stores them in `artifact_map`. This is the same data the dashboard "Build from Sigma Rules" button produces — but now runnable from the CLI without a browser.
+**Step 1 (parse):** Walks all `.yml` Sigma rule files, extracts per-technique event IDs, registry keys, process images, and command-line patterns, and stores them in `artifact_map`. This is the same data the dashboard "Build from Sigma Rules" button produces - but now runnable from the CLI without a browser.
 
 **Step 2 (LLM):** For each technique in `artifact_map`, builds a detection-focused prompt (TID, name, tactic, event IDs, processes, registry keys, rule count) and asks the LLM to write a 3-sentence detection brief: what the adversary does, the most reliable telemetry to detect it, and one detection recommendation. Stored in `artifact_summaries`.
 
@@ -237,7 +237,7 @@ Briefs appear in the **Overview tab** of the Artifact Map technique modal with a
 
 | flag | default | description |
 |------|---------|-------------|
-| `--sigma-path PATH` | — | Parse Sigma rules from this directory first |
+| `--sigma-path PATH` | - | Parse Sigma rules from this directory first |
 | `--parse-only` | off | Only parse rules, skip LLM step |
 | `--model` | `qwen3:14b` | Ollama chat model |
 | `--rebuild` | off | Wipe existing LLM briefs and redo all |
@@ -245,11 +245,11 @@ Briefs appear in the **Overview tab** of the Artifact Map technique modal with a
 **Typical GPU/CPU workflow:**
 
 ```bash
-# On CPU machine — parse rules, then copy DB to GPU
+# On CPU machine - parse rules, then copy DB to GPU
 python worker.py sigma --sigma-path ~/hacking/sigma --parse-only
 rsync dashboard/peekaboo.db gpu-server:~/hacking/peekaboo/dashboard/
 
-# On GPU machine — compute briefs
+# On GPU machine - compute briefs
 python worker.py sigma --model qwen3:14b
 rsync gpu-server:~/hacking/peekaboo/dashboard/peekaboo.db dashboard/
 ```
@@ -344,23 +344,23 @@ Submit binaries directly to VirusTotal. Features: upload, From Build, From Sessi
 
 The MITRE ATT&CK tab has four sub-tabs:
 
-**Techniques** — ATT&CK technique browser grouped by tactic; click any technique to see matched blog posts.
+**Techniques** - ATT&CK technique browser grouped by tactic; click any technique to see matched blog posts.
 
-**Technique Library** — all 200+ blog posts indexed from the [meow](https://github.com/cocomelonc/meow) research repository, mapped to ATT&CK IDs.
+**Technique Library** - all 200+ blog posts indexed from the [meow](https://github.com/cocomelonc/meow) research repository, mapped to ATT&CK IDs.
 
 - Filter by category (injection, persistence, evasion, cryptography, linux, macos, etc.)
-- Each row has a `[brief]` button — click to show the GPU-precomputed 3-sentence summary inline, without opening the full detail card
+- Each row has a `[brief]` button - click to show the GPU-precomputed 3-sentence summary inline, without opening the full detail card
 - Click any row to expand the full detail card with inline source code (C, C++, Nim, assembly), blog post link, and **BRIEF** block (GPU summary with typing animation)
 
-**TTP Implementations** — blog posts indexed by extracted ATT&CK ID with tactic, platform, and blog link.
+**TTP Implementations** - blog posts indexed by extracted ATT&CK ID with tactic, platform, and blog link.
 
-**Extracted TTPs** — LLM-inferred ATT&CK mappings per blog post: technique ID, tactic, confidence level, and rationale. Populated by `worker.py ttp`.
+**Extracted TTPs** - LLM-inferred ATT&CK mappings per blog post: technique ID, tactic, confidence level, and rationale. Populated by `worker.py ttp`.
 
 ![img](./screenshots/2026-04-28_23-40.png)
 
 ### Malpedia integration
 
-The Malpedia tab connects to the [Malpedia REST API](https://malpedia.caad.fkie.fraunhofer.de/) to browse threat actors and malware families. For each actor or family, related blog posts are matched using **semantic similarity** — the actor/family description is embedded via `nomic-embed-text`, then cosine-ranked against all cached post embeddings.
+The Malpedia tab connects to the [Malpedia REST API](https://malpedia.caad.fkie.fraunhofer.de/) to browse threat actors and malware families. For each actor or family, related blog posts are matched using **semantic similarity** - the actor/family description is embedded via `nomic-embed-text`, then cosine-ranked against all cached post embeddings.
 
 ![img](./screenshots/2026-05-01_01-55_1.png)
 
@@ -398,14 +398,14 @@ Cross-references 400+ ATT&CK techniques with 4,000+ Sigma detection rules. For e
 
 **Building the map:**
 
-Option A — browser: open the Artifact Map panel → click **⚙ Build from Sigma Rules**. Progress streams live.
+Option A - browser: open the Artifact Map panel → click **⚙ Build from Sigma Rules**. Progress streams live.
 
-Option B — CLI (recommended for GPU workflows):
+Option B - CLI (recommended for GPU workflows):
 ```bash
 python worker.py sigma --sigma-path ~/hacking/sigma --parse-only
 ```
 
-**Detection briefs:** after building the map, run `worker.py sigma` on the GPU to precompute a detection-focused 3-sentence brief per technique. Briefs appear in the **Overview tab** of each technique's modal with a typing animation — no LLM call at render time.
+**Detection briefs:** after building the map, run `worker.py sigma` on the GPU to precompute a detection-focused 3-sentence brief per technique. Briefs appear in the **Overview tab** of each technique's modal with a typing animation - no LLM call at render time.
 
 ### AI assistant
 
@@ -415,11 +415,11 @@ Local RAG chatbot built on the GPU/CPU split architecture.
 
 **How responses work (fastest to slowest):**
 
-1. **Canned answers** — instant; covers "what is Peekaboo?", "how to set up Ollama?", etc.
-2. **KB template response** — DB read only; finds matching blog posts with precomputed GPU summaries, streams full source code + brief + ATT&CK links with typing animation. No live LLM call.
-3. **Live LLM** — fallback for questions with no precomputed coverage; streams from Ollama with RAG context injected.
+1. **Canned answers** - instant; covers "what is Peekaboo?", "how to set up Ollama?", etc.
+2. **KB template response** - DB read only; finds matching blog posts with precomputed GPU summaries, streams full source code + brief + ATT&CK links with typing animation. No live LLM call.
+3. **Live LLM** - fallback for questions with no precomputed coverage; streams from Ollama with RAG context injected.
 
-**Quick Brief** — a compact lookup card above the chat window. Type any technique slug (e.g. `malware-tricks-58`) or keyword (e.g. `persistence`) and press Enter. Fetches the GPU-precomputed brief from the DB and displays it with typing animation. Falls back to a keyword search across the library if the exact slug is not found.
+**Quick Brief** - a compact lookup card above the chat window. Type any technique slug (e.g. `malware-tricks-58`) or keyword (e.g. `persistence`) and press Enter. Fetches the GPU-precomputed brief from the DB and displays it with typing animation. Falls back to a keyword search across the library if the exact slug is not found.
 
 **Provider:** local Ollama (`qwen3:1.7b` default for chat, `qwen3:14b` for GPU enrichment). Configure via `OLLAMA_MODEL` in `.env`.
 
