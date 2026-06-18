@@ -916,20 +916,26 @@ def cmd_sigma(args: argparse.Namespace) -> None:
     print(f"[sigma] {len(pending_tids)}/{total} techniques to brief with {model} …", flush=True)
     done = failed = 0
 
-    for i, tid in enumerate(pending_tids, 1):
-        entry = db.get_artifact_entry(tid)
-        if not entry:
-            continue
-        prompt = _build_sigma_prompt(entry)
-        raw = _chat_text(prompt, model, base_url, timeout, label="sigma")
-        if raw is None:
-            failed += 1
-            print(f"[sigma] {i}/{len(pending_tids)} FAIL  {tid}", flush=True)
-            continue
-        summary = _normalize_summary(raw)
-        db.upsert_artifact_summary(tid, model, summary, raw)
-        done += 1
-        print(f"[sigma] {i}/{len(pending_tids)} ok    {tid}  ({entry.get('name','')})", flush=True)
+    try:
+        for i, tid in enumerate(pending_tids, 1):
+            entry = db.get_artifact_entry(tid)
+            if not entry:
+                continue
+            prompt = _build_sigma_prompt(entry)
+            raw = _chat_text(prompt, model, base_url, timeout, label="sigma")
+            if raw is None:
+                failed += 1
+                print(f"[sigma] {i}/{len(pending_tids)} FAIL  {tid}", flush=True)
+                continue
+            summary = _normalize_summary(raw)
+            db.upsert_artifact_summary(tid, model, summary, raw)
+            done += 1
+            print(f"[sigma] {i}/{len(pending_tids)} ok    {tid}  ({entry.get('name','')})", flush=True)
+    except KeyboardInterrupt:
+        remaining = len(pending_tids) - i
+        print(f"\n[sigma] interrupted at {i}/{len(pending_tids)}  ({done} saved, {remaining} remaining)", flush=True)
+        print(f"[sigma] resume: python3 worker.py sigma --model {model}", flush=True)
+        return
 
     print(f"[sigma] done: {done} ok, {failed} failed", flush=True)
 
