@@ -1022,7 +1022,7 @@ def upsert_kb_tag(doc_id: int, model: str, tags: list[str], raw_output: str = ""
 
 
 def get_kb_tags_all(model: str | None = None) -> dict[str, list[str]]:
-    """Return {slug: [tags]} for the given model — used by chatbot RAG.
+    """Return {slug: [tags]} for the given model - used by chatbot RAG.
     If model is None, returns tags from any model (union if multiple)."""
     with _conn() as db:
         if model:
@@ -1058,7 +1058,7 @@ def get_kb_tags_all(model: str | None = None) -> dict[str, list[str]]:
 
 
 def get_kb_embeddings_all(model: str = "nomic-embed-text") -> list[dict]:
-    """Return all (slug, vector) pairs for the given model — used by chatbot RAG."""
+    """Return all (slug, vector) pairs for the given model - used by chatbot RAG."""
     with _conn() as db:
         rows = db.execute(
             """

@@ -90,7 +90,7 @@ import cfg as _cfg
 
 
 def _load_cfg(name: str) -> dict:
-    """Back-compat shim — configs now live in .env via cfg.py."""
+    """Back-compat shim - configs now live in .env via cfg.py."""
     return _cfg.get(name) or {}
 
 

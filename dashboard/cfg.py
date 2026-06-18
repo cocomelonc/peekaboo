@@ -7,7 +7,7 @@ like the old config/*.json files, so callers that did
     cfg = _load_config("telegram_config")
     token = cfg["bot_token"]
 
-keep working without code changes — they just call `cfg.get("telegram_config")`.
+keep working without code changes - they just call `cfg.get("telegram_config")`.
 
 `.env` is the single source of truth. The Settings panel is read-only.
 """
@@ -94,12 +94,12 @@ def get(name: str) -> Optional[dict]:
 
 
 def names() -> list[str]:
-    """List of all known config names — drives the Settings panel."""
+    """List of all known config names - drives the Settings panel."""
     return sorted(_SCHEMA.keys())
 
 
 def masked(name: str) -> Optional[dict]:
-    """Like get(), but masks fields that look like secrets — for UI display."""
+    """Like get(), but masks fields that look like secrets - for UI display."""
     cfg = get(name)
     if cfg is None:
         return None

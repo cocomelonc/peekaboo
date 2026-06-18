@@ -93,7 +93,7 @@ cd dashboard && python3 app.py
 
 ### Configuration (`.env`)
 
-All API keys, credentials, and per-service knobs live in a single `.env` file at the project root. There are **no JSON config files** — the dashboard, CLI, builder, and APT pipeline all read from the same `.env` via `dashboard/cfg.py`.
+All API keys, credentials, and per-service knobs live in a single `.env` file at the project root. There are **no JSON config files** - the dashboard, CLI, builder, and APT pipeline all read from the same `.env` via `dashboard/cfg.py`.
 
 ```bash
 cp .env.example .env
@@ -111,9 +111,9 @@ The Settings panel in the UI is a **read-only viewer** of what's currently loade
 | Stealer / C2 (compile-time substitution) | `TELEGRAM_BOT_TOKEN`, `GITHUB_TOKEN`, `BITBUCKET_TOKEN_BASE64`, `SLACK_WEBHOOK_URL`, `AZURE_PAT`, `ANGELCAM_API_KEY` |
 | APT Pipeline | `APT_PIPELINE_COMPILE_EACH`, `APT_PIPELINE_OLLAMA_NARRATION`, `APT_PIPELINE_OLLAMA_MODEL` |
 
-The "Stealer / C2" group is only consumed by the **Builder** at compile time — the placeholders embedded in malware source templates (e.g. `TELEGRAM_BOT_TOKEN_PLACEHOLDER`) get substituted with real values before `gcc`/`mingw` runs. None of these tokens are stored in the compiled binary catalog.
+The "Stealer / C2" group is only consumed by the **Builder** at compile time - the placeholders embedded in malware source templates (e.g. `TELEGRAM_BOT_TOKEN_PLACEHOLDER`) get substituted with real values before `gcc`/`mingw` runs. None of these tokens are stored in the compiled binary catalog.
 
-`.env` is gitignored by default. `.env.example` is the redacted template — safe to commit.
+`.env` is gitignored by default. `.env.example` is the redacted template - safe to commit.
 
 ### Builder
 
@@ -199,7 +199,7 @@ All pipeline progress streams live to the right panel as it runs - reports appea
 
 ### AI assistant
 
-The AI assistant answers questions about malware techniques, the codebase, and blog posts using RAG (Retrieval-Augmented Generation). At query time the question is embedded and matched against all blog post embeddings; the top matching posts are injected as context into the LLM prompt. Runs fully offline — no cloud API keys required.
+The AI assistant answers questions about malware techniques, the codebase, and blog posts using RAG (Retrieval-Augmented Generation). At query time the question is embedded and matched against all blog post embeddings; the top matching posts are injected as context into the LLM prompt. Runs fully offline - no cloud API keys required.
 
 ![img](./screenshots/2026-05-01_01-55.png)
 

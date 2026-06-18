@@ -1,5 +1,5 @@
 """
-peekaboo AI chatbot — Ollama-only (local RAG)
+peekaboo AI chatbot - Ollama-only (local RAG)
 knowledge base: ~/hacking/meow local codebase + semantic post index
 focused on: C2 channels, binary delivery, malware dev, threat simulation
 """
@@ -666,7 +666,7 @@ Ask me any technical question - I'll pull context from the knowledge base and gi
     # 2. What model / provider? ----------------------------------------------------
     (
         r"what model|which (llm|model|ai|provider)|what provider|ollama model|qwen",
-        """## AI Assistant — Local Ollama
+        """## AI Assistant - Local Ollama
 
 The assistant runs entirely offline via **Ollama** (no API keys required).
 
@@ -865,7 +865,7 @@ def stream_chat(messages: list[dict], provider: str = "ollama") -> Generator[str
             yield from _stream_canned(canned)
             return
 
-    # Full-code requests bypass the LLM entirely — demo-fast, never truncated.
+    # Full-code requests bypass the LLM entirely - demo-fast, never truncated.
     if _is_full_code_request(last_user):
         yield {"status": "kb_direct", "msg": "loading code from KB…"}
         response = _direct_kb_response(last_user)

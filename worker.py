@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-peekaboo worker — GPU-side KB enrichment
+peekaboo worker - GPU-side KB enrichment
 standalone script; writes to dashboard/peekaboo.db
 
 commands:
@@ -109,7 +109,7 @@ def cmd_init(args: argparse.Namespace) -> None:
         inserted += 1
 
     stats = db.kb_stats()
-    print(f"[init] done — kb_docs: {stats['docs']} rows ({inserted} upserted)", flush=True)
+    print(f"[init] done - kb_docs: {stats['docs']} rows ({inserted} upserted)", flush=True)
 
 
 def cmd_embed(args: argparse.Namespace) -> None:
@@ -127,7 +127,7 @@ def cmd_embed(args: argparse.Namespace) -> None:
     def _run_once() -> int:
         pending = db.get_kb_docs_without_embedding(model)
         if not pending:
-            print(f"[embed] nothing to do — all docs already embedded with {model}", flush=True)
+            print(f"[embed] nothing to do - all docs already embedded with {model}", flush=True)
             return 0
 
         print(f"[embed] {len(pending)} docs to embed with {model} …", flush=True)
@@ -139,7 +139,7 @@ def cmd_embed(args: argparse.Namespace) -> None:
 
             vecs = _embed_batch(texts, model, base_url)
             if vecs is None:
-                print(f"[embed] batch {i//batch_sz + 1} failed — stopping", flush=True)
+                print(f"[embed] batch {i//batch_sz + 1} failed - stopping", flush=True)
                 break
 
             for doc, vec in zip(batch, vecs):
@@ -156,14 +156,14 @@ def cmd_embed(args: argparse.Namespace) -> None:
 
     if args.watch:
         interval = int(args.watch)
-        print(f"[embed] --watch {interval}s — polling for new docs …", flush=True)
+        print(f"[embed] --watch {interval}s - polling for new docs …", flush=True)
         while True:
             time.sleep(interval)
             _run_once()
 
 
 # --------------------------------------------------------------------------- #
-# Tag taxonomy (constrained — keeps LLM output deterministic and queryable)    #
+# Tag taxonomy (constrained - keeps LLM output deterministic and queryable)    #
 # --------------------------------------------------------------------------- #
 
 _TECHNIQUE_TAGS = [
@@ -286,7 +286,7 @@ def cmd_tag(args: argparse.Namespace) -> None:
     def _run_once() -> int:
         pending = db.get_kb_docs_without_tags(model)
         if not pending:
-            print(f"[tag] nothing to do — all docs already tagged with {model}", flush=True)
+            print(f"[tag] nothing to do - all docs already tagged with {model}", flush=True)
             return 0
 
         print(f"[tag] {len(pending)} docs to tag with {model} …", flush=True)
@@ -308,7 +308,7 @@ def cmd_tag(args: argparse.Namespace) -> None:
             done += 1
 
             pct = int(i / len(pending) * 100)
-            label = f"{i}/{len(pending)} — {doc['slug'][:30]:30s} -> {','.join(tags[:4]) or '(none)'}"
+            label = f"{i}/{len(pending)} - {doc['slug'][:30]:30s} -> {','.join(tags[:4]) or '(none)'}"
             _progress(pct, label)
 
         print(f"\n[tag] tagged {done} docs ({failed} failed)", flush=True)
@@ -318,7 +318,7 @@ def cmd_tag(args: argparse.Namespace) -> None:
 
     if args.watch:
         interval = int(args.watch)
-        print(f"[tag] --watch {interval}s — polling for new docs …", flush=True)
+        print(f"[tag] --watch {interval}s - polling for new docs …", flush=True)
         while True:
             time.sleep(interval)
             _run_once()

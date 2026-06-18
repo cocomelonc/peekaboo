@@ -1,10 +1,10 @@
 """
 peekaboo semantic matching via local Ollama embeddings.
-no hardcoded rules — pure cosine similarity on nomic-embed-text.
+no hardcoded rules - pure cosine similarity on nomic-embed-text.
 
 Data source priority:
-  1. SQLite tables (kb_docs + kb_embeddings) — populated by worker.py
-  2. Legacy JSON cache (data/post_embeddings.json) — fallback for old installs
+  1. SQLite tables (kb_docs + kb_embeddings) - populated by worker.py
+  2. Legacy JSON cache (data/post_embeddings.json) - fallback for old installs
 
 The in-memory index is invalidated when peekaboo.db's mtime changes,
 so `rsync peekaboo.db` from a GPU box picks up automatically.
@@ -64,7 +64,7 @@ def _post_text(post: dict) -> str:
 
 
 # --------------------------------------------------------------------------- #
-# Index loading — DB first, JSON fallback, mtime-invalidated cache             #
+# Index loading - DB first, JSON fallback, mtime-invalidated cache             #
 # --------------------------------------------------------------------------- #
 
 _cache: dict | None = None
