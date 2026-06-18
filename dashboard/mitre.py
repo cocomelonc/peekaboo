@@ -530,9 +530,26 @@ def _read_snippet(path: str | Path | None, max_lines: int = 40) -> str:
         return ""
 
 
+def _parse_fm_date(s: str) -> str:
+    """Parse Jekyll frontmatter 'date:' line, convert to UTC, return YYYY-MM-DD.
+    Returns '' if unparseable. Jekyll uses the UTC date for permalinks."""
+    from datetime import datetime, timezone
+    s = s.strip()
+    for fmt in ("%Y-%m-%d %H:%M:%S %z", "%Y-%m-%d %H:%M %z",
+                "%Y-%m-%d %H:%M:%S",    "%Y-%m-%d"):
+        try:
+            dt = datetime.strptime(s, fmt)
+            if dt.tzinfo:
+                dt = dt.astimezone(timezone.utc)
+            return dt.strftime("%Y-%m-%d")
+        except ValueError:
+            continue
+    return ""
+
+
 def _blog_url(date_str: str, slug: str, categories: list[str]) -> str:
     y, m, d = date_str.split("-")
-    cat = categories[0] if categories else "malware"
+    cat = (categories[0] if categories else "malware").lower()
     return f"https://cocomelonc.github.io/{cat}/{y}/{m}/{d}/{slug}.html"
 
 
@@ -593,13 +610,16 @@ def build_library_cache() -> list[dict]:
 
         # parse front matter
         fm_match = re.match(r'^---\s*\n(.*?)\n---', text, re.DOTALL)
-        title, fm_cats = slug.replace("-", " ").title(), []
+        title, fm_cats, fm_date = slug.replace("-", " ").title(), [], ""
         if fm_match:
             fm = fm_match.group(1)
             tm = re.search(r'^title:\s*["\']?(.+?)["\']?\s*$', fm, re.MULTILINE)
             if tm:
                 title = tm.group(1).strip('"\'')
             fm_cats = re.findall(r'^  - (\S+)', fm, re.MULTILINE)
+            dm = re.search(r'^date:\s*(.+?)\s*$', fm, re.MULTILINE)
+            if dm:
+                fm_date = _parse_fm_date(dm.group(1))
 
         body      = text[fm_match.end():] if fm_match else text
         body_aids = sorted(set(_ATTACK_RE.findall(body)))
@@ -614,7 +634,7 @@ def build_library_cache() -> list[dict]:
                        _AID_CATEGORY.get(base_id, category))
 
         src_path   = _find_meow_source(date_str)
-        blog_url   = _blog_url(date_str, slug, fm_cats)
+        blog_url   = _blog_url(fm_date or date_str, slug, fm_cats)
         peekaboo_m = next((m for aid in attack_ids for m in [PEEKABOO_MODULES.get(aid)] if m), None)
 
         entry: dict = {

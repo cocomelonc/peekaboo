@@ -503,7 +503,12 @@ def _stream_ollama(messages: list[dict]) -> Generator[str, None, None]:
 
 def _template_response(question: str, n: int = 3, max_lines: int = 18) -> str | None:
     """Render top-N retrieved posts as a markdown answer using precomputed summaries.
-    Returns None if no summaries are available (caller falls back to LLM)."""
+    Returns None if no summaries are available (caller falls back to LLM).
+
+    Code blocks are verbatim from src_path (no cropping); only the surrounding
+    summary text is bounded. Falls back to the library cache snippet when
+    src_path is unreadable.
+    """
     try:
         import sys as _sys, os as _os
         _sys.path.insert(0, _os.path.dirname(__file__))
@@ -516,21 +521,30 @@ def _template_response(question: str, n: int = 3, max_lines: int = 18) -> str | 
     if not posts:
         return None
 
+    library = _get_library()
+    lib_by_slug = {e.get("slug"): e for e in library if e.get("slug")}
+
     blocks: list[str] = []
     for p in posts:
         title   = p.get("title", "")
         slug    = p.get("slug", "")
         url     = p.get("blog_url", "")
         summary = p.get("summary", "").strip()
-        snippet, _, lang = _get_snippet_for_post(p, question=question, max_lines=max_lines)
+
+        # Code: full source from disk (uncropped). Fall back to snippet if missing.
+        entry = lib_by_slug.get(slug, {})
+        code  = _read_src_file(entry.get("src_path", ""), max_lines=5000)
+        lang  = _guess_lang(code) if code else "c"
+        if not code:
+            code, _, lang = _get_snippet_for_post(p, question=question, max_lines=max_lines)
 
         ttps = p.get("ttps") or {}
         aids = ttps.get("attack_ids") or p.get("attack_ids") or []
         aids_str = ", ".join(f"`{a}`" for a in aids) if aids else ""
 
         block  = f"### {title}\n\n{summary}\n"
-        if snippet:
-            block += f"\n```{lang}\n{snippet}\n```\n"
+        if code:
+            block += f"\n```{lang}\n{code}\n```\n"
         if aids_str:
             block += f"\n**ATT&CK:** {aids_str}  "
         if url:
