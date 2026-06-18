@@ -33,6 +33,7 @@ from __future__ import annotations
 
 import argparse
 import json
+import os
 import sys
 import time
 import urllib.request
@@ -40,6 +41,13 @@ from pathlib import Path
 
 # -- path setup so we can import dashboard/db.py without installing the app
 _ROOT = Path(__file__).parent
+
+# Load .env so MEOW_ROOT (and any other shared knobs) work without an export.
+try:
+    from dotenv import load_dotenv
+    load_dotenv(_ROOT / ".env")
+except Exception:
+    pass
 sys.path.insert(0, str(_ROOT / "dashboard"))
 import db  # noqa: E402  (dashboard/db.py)
 
@@ -255,15 +263,33 @@ def _normalize_tags(parsed: dict) -> list[str]:
     return out
 
 
-def _read_code(src_path: str, max_lines: int) -> str:
+def _resolve_src(src_path: str, meow_root: str | None) -> Path | None:
+    """Resolve src_path to a real file on this machine.
+
+    1. If the stored absolute path exists, use it.
+    2. Otherwise, if MEOW_ROOT is set and the stored path contains `/meow/`,
+       rewrite the prefix: <anything>/meow/<tail>  ->  <MEOW_ROOT>/<tail>
+    """
     if not src_path:
+        return None
+    p = Path(src_path)
+    if not p.is_absolute():
+        p = _ROOT / src_path
+    if p.is_file():
+        return p
+    if meow_root and "/meow/" in src_path:
+        tail = src_path.split("/meow/", 1)[1]
+        candidate = Path(meow_root).expanduser() / tail
+        if candidate.is_file():
+            return candidate
+    return None
+
+
+def _read_code(src_path: str, max_lines: int, meow_root: str | None = None) -> str:
+    p = _resolve_src(src_path, meow_root)
+    if p is None:
         return ""
     try:
-        p = Path(src_path)
-        if not p.is_absolute():
-            p = _ROOT / src_path
-        if not p.exists() or not p.is_file():
-            return ""
         lines = p.read_text(errors="replace").splitlines()
         return "\n".join(lines[:max_lines])
     except Exception:
@@ -276,6 +302,10 @@ def cmd_tag(args: argparse.Namespace) -> None:
     base_url  = args.url
     max_lines = args.code_lines
     timeout   = args.timeout
+    meow_root = args.meow_root or os.environ.get("MEOW_ROOT") or ""
+
+    if meow_root:
+        print(f"[tag] meow_root: {meow_root}", flush=True)
 
     db.init()
 
@@ -294,7 +324,7 @@ def cmd_tag(args: argparse.Namespace) -> None:
         failed = 0
 
         for i, doc in enumerate(pending, 1):
-            code   = _read_code(doc.get("src_path", ""), max_lines)
+            code   = _read_code(doc.get("src_path", ""), max_lines, meow_root)
             prompt = _build_tag_prompt(doc, code)
             parsed, raw = _chat_json(prompt, model, base_url, timeout=timeout)
 
@@ -389,6 +419,8 @@ def _build_parser() -> argparse.ArgumentParser:
     tp.add_argument("--code-lines", type=int, default=120, dest="code_lines",
                     help="max src lines fed to the LLM")
     tp.add_argument("--timeout",    type=int, default=300,             help="per-call timeout (s)")
+    tp.add_argument("--meow-root",  default=None, dest="meow_root",
+                    help="local meow repo path (default: $MEOW_ROOT, then stored absolute path)")
     tp.add_argument("--watch",      type=int, default=0, metavar="N",
                     help="loop every N seconds (0 = run once)")
 
