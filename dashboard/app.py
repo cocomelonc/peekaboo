@@ -1384,6 +1384,17 @@ def api_artifact_entry(tid: str):
     return jsonify(entry)
 
 
+@app.route("/api/artifacts/brief/<tid>")
+def api_artifact_brief(tid: str):
+    """Return precomputed GPU brief for an ATT&CK technique (written by worker.py sigma)."""
+    if not _TID_RE_API.match(tid.upper()):
+        return jsonify({"error": "invalid technique id"}), 400
+    summary = _db.get_artifact_summary(tid.upper())
+    if not summary:
+        return jsonify({"error": "no brief available", "tid": tid.upper()}), 404
+    return jsonify({"tid": tid.upper(), "summary": summary})
+
+
 @app.route("/api/artifacts/rebuild")
 def api_artifacts_rebuild():
     """

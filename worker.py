@@ -806,6 +806,99 @@ def cmd_tag(args: argparse.Namespace) -> None:
             _run_once()
 
 
+def _build_sigma_prompt(entry: dict) -> str:
+    tid       = entry.get("tid", "")
+    name      = entry.get("name", tid)
+    tactic    = entry.get("tactic", "")
+    rules     = entry.get("rule_count", 0)
+    event_ids = entry.get("event_ids", [])[:10]
+    reg_keys  = entry.get("reg_keys",  [])[:6]
+    processes = entry.get("processes", [])[:6]
+    cmdlines  = entry.get("cmdlines",  [])[:4]
+
+    parts = [
+        f"ATT&CK Technique: {tid} — {name}",
+        f"Tactic: {tactic}",
+        f"Covered by {rules} Sigma detection rules.",
+    ]
+    if event_ids:
+        parts.append("Key Windows event IDs: " + ", ".join(str(e) for e in event_ids))
+    if processes:
+        imgs = [p.split("\\")[-1] for p in processes]
+        parts.append("Suspicious processes: " + ", ".join(imgs))
+    if reg_keys:
+        parts.append("Registry keys: " + "; ".join(reg_keys[:3]))
+    if cmdlines:
+        parts.append("Command-line patterns: " + "; ".join(cmdlines[:2]))
+
+    context = "\n".join(parts)
+    return (
+        f"You are a threat detection expert.\n"
+        f"Write exactly 3 plain sentences about this ATT&CK technique from a Blue Team / detection perspective.\n"
+        f"Sentence 1: what the adversary does with this technique.\n"
+        f"Sentence 2: the most reliable telemetry artifacts to detect it (event IDs, registry keys, or process names).\n"
+        f"Sentence 3: one concise detection recommendation.\n"
+        f"No markdown, no lists, no headers. Hard limit: 420 characters total.\n\n"
+        f"{context}"
+    )
+
+
+def cmd_sigma(args: argparse.Namespace) -> None:
+    """Precompute detection briefs for each ATT&CK technique in the artifact map."""
+    model    = args.model
+    base_url = args.url
+    timeout  = args.timeout
+
+    db.init()
+
+    total = db.count_artifact_entries()
+    if total == 0:
+        print("[sigma] artifact map is empty — build it first:", flush=True)
+        print("[sigma]   open Artifact Map panel -> 'Build from Sigma Rules'", flush=True)
+        print("[sigma]   or: curl http://localhost:5000/api/artifacts/rebuild", flush=True)
+        return
+
+    ok, installed = _ollama_has_model(model, base_url)
+    if not ok:
+        print(f"[sigma] model not available: {model}", flush=True)
+        print(f"[sigma] installed: {', '.join(installed) or '(none)'}", flush=True)
+        print(f"[sigma] fix: ollama pull {model}", flush=True)
+        sys.exit(1)
+
+    if getattr(args, "rebuild", False):
+        import sqlite3
+        with sqlite3.connect(db.DB_PATH) as conn:
+            n = conn.execute(
+                "DELETE FROM artifact_summaries WHERE model=?", (model,)
+            ).rowcount
+        print(f"[sigma] --rebuild: wiped {n} rows for model={model}", flush=True)
+
+    pending_tids = db.get_artifact_tids_without_summary(model)
+    if not pending_tids:
+        print(f"[sigma] all {total} techniques already have briefs for {model}", flush=True)
+        return
+
+    print(f"[sigma] {len(pending_tids)}/{total} techniques pending with {model} …", flush=True)
+    done = failed = 0
+
+    for i, tid in enumerate(pending_tids, 1):
+        entry = db.get_artifact_entry(tid)
+        if not entry:
+            continue
+        prompt = _build_sigma_prompt(entry)
+        raw = _chat_text(prompt, model, base_url, timeout, label="sigma")
+        if raw is None:
+            failed += 1
+            print(f"[sigma] {i}/{len(pending_tids)} FAIL  {tid}", flush=True)
+            continue
+        summary = _normalize_summary(raw)
+        db.upsert_artifact_summary(tid, model, summary, raw)
+        done += 1
+        print(f"[sigma] {i}/{len(pending_tids)} ok    {tid}  ({entry.get('name','')})", flush=True)
+
+    print(f"[sigma] done: {done} ok, {failed} failed", flush=True)
+
+
 def cmd_status(args: argparse.Namespace) -> None:
     db.init()
     s = db.kb_stats()
@@ -872,6 +965,18 @@ def cmd_status(args: argparse.Namespace) -> None:
             except Exception:
                 pass
         print(f"kb_summaries   : {r['n']}  ({r['model']})  pending: {s['docs'] - r['n']}, stale: {stale}")
+
+    import sqlite3
+    with sqlite3.connect(db.DB_PATH) as conn:
+        conn.row_factory = sqlite3.Row
+        art_total = conn.execute("SELECT COUNT(*) FROM artifact_map").fetchone()[0]
+        art_sum_rows = conn.execute(
+            "SELECT model, COUNT(*) n FROM artifact_summaries GROUP BY model"
+        ).fetchall()
+    if not art_sum_rows:
+        print(f"artifact_summ  : 0  (techniques in map: {art_total})")
+    for r in art_sum_rows:
+        print(f"artifact_summ  : {r['n']}  ({r['model']})  pending: {art_total - r['n']}")
 
 
 def cmd_refresh(args: argparse.Namespace) -> None:
@@ -1037,6 +1142,12 @@ def _build_parser() -> argparse.ArgumentParser:
     sp.add_argument("--rebuild-changed", action="store_true", dest="rebuild_changed",
                     help="re-summarize docs whose meow source is newer than summarized_at")
 
+    sgp = sub.add_parser("sigma", help="precompute detection briefs for artifact map techniques (LLM, GPU step)")
+    sgp.add_argument("--model",   default="qwen3:14b")
+    sgp.add_argument("--url",     default="http://localhost:11434")
+    sgp.add_argument("--timeout", type=int, default=120)
+    sgp.add_argument("--rebuild", action="store_true", help="wipe existing briefs and redo all")
+
     rp = sub.add_parser("refresh", help="one-shot incremental update (scan? + init + embed + tag + ttp? + summarize?)")
     rp.add_argument("--embed-model", default="nomic-embed-text", dest="embed_model")
     rp.add_argument("--tag-model",   default="qwen3:1.7b",       dest="tag_model")
@@ -1073,6 +1184,8 @@ if __name__ == "__main__":
         cmd_ttp(args)
     elif args.cmd == "summarize":
         cmd_summarize(args)
+    elif args.cmd == "sigma":
+        cmd_sigma(args)
     elif args.cmd == "refresh":
         cmd_refresh(args)
     elif args.cmd == "status":

@@ -115,6 +115,17 @@ def init() -> None:
         db.execute("CREATE INDEX IF NOT EXISTS idx_artifact_tactic ON artifact_map(tactic)")
 
         db.execute("""
+            CREATE TABLE IF NOT EXISTS artifact_summaries (
+                tid           TEXT NOT NULL,
+                model         TEXT NOT NULL DEFAULT '',
+                summary       TEXT NOT NULL DEFAULT '',
+                raw_output    TEXT NOT NULL DEFAULT '',
+                summarized_at TEXT NOT NULL DEFAULT (datetime('now')),
+                PRIMARY KEY (tid, model)
+            )
+        """)
+
+        db.execute("""
             CREATE TABLE IF NOT EXISTS ttp_implementations (
                 id          INTEGER PRIMARY KEY AUTOINCREMENT,
                 attack_id   TEXT NOT NULL,
@@ -759,6 +770,72 @@ def get_artifact_stats() -> dict:
 def clear_artifact_entries() -> None:
     with _conn() as db:
         db.execute("DELETE FROM artifact_map")
+
+
+# --------------------------------------------------------------------------- #
+#  Artifact Summaries (LLM-precomputed, written by worker.py sigma)            #
+# --------------------------------------------------------------------------- #
+
+def get_artifact_tids_without_summary(model: str) -> list[str]:
+    with _conn() as db:
+        rows = db.execute(
+            """
+            SELECT tid FROM artifact_map
+            WHERE tid NOT IN (
+                SELECT tid FROM artifact_summaries WHERE model = ?
+            )
+            ORDER BY rule_count DESC
+            """,
+            (model,),
+        ).fetchall()
+    return [r["tid"] for r in rows]
+
+
+def upsert_artifact_summary(tid: str, model: str, summary: str, raw_output: str = "") -> None:
+    with _conn() as db:
+        db.execute(
+            """
+            INSERT INTO artifact_summaries (tid, model, summary, raw_output, summarized_at)
+            VALUES (?, ?, ?, ?, datetime('now'))
+            ON CONFLICT(tid, model) DO UPDATE SET
+                summary=excluded.summary,
+                raw_output=excluded.raw_output,
+                summarized_at=excluded.summarized_at
+            """,
+            (tid, model, summary, raw_output),
+        )
+
+
+def get_artifact_summary(tid: str, model: str | None = None) -> str:
+    with _conn() as db:
+        if model:
+            row = db.execute(
+                "SELECT summary FROM artifact_summaries WHERE tid=? AND model=? LIMIT 1",
+                (tid.upper(), model),
+            ).fetchone()
+        else:
+            row = db.execute(
+                "SELECT summary FROM artifact_summaries WHERE tid=? ORDER BY summarized_at DESC LIMIT 1",
+                (tid.upper(),),
+            ).fetchone()
+    return (row["summary"] or "") if row else ""
+
+
+def count_artifact_summaries(model: str | None = None) -> int:
+    with _conn() as db:
+        if model:
+            return db.execute(
+                "SELECT COUNT(*) FROM artifact_summaries WHERE model=?", (model,)
+            ).fetchone()[0]
+        return db.execute("SELECT COUNT(*) FROM artifact_summaries").fetchone()[0]
+
+
+def get_artifact_summarized_tids(model: str) -> list[str]:
+    with _conn() as db:
+        rows = db.execute(
+            "SELECT tid FROM artifact_summaries WHERE model=?", (model,)
+        ).fetchall()
+    return [r["tid"] for r in rows]
 
 
 # --------------------------------------------------------------------------- #

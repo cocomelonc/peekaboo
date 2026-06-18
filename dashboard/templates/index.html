@@ -4655,9 +4655,13 @@ async function artOpenModal(tid) {
   document.getElementById('art-modal').classList.add('open');
 
   try {
-    const e = await fetch(`/api/artifacts/${tid}`).then(r => r.json());
+    const [e, brief] = await Promise.all([
+      fetch(`/api/artifacts/${tid}`).then(r => r.json()),
+      fetch(`/api/artifacts/brief/${tid}`).then(r => r.json()).catch(() => null),
+    ]);
     if (e.error) { document.getElementById('art-modal-body').innerHTML = `<div style="color:var(--red);padding:20px">${e.error}</div>`; return; }
     _artDetail = e;
+    _artDetail._brief = (brief && !brief.error) ? brief.summary : null;
 
     document.getElementById('art-modal-name').textContent = e.name || 'Unknown Technique';
     const tactics = (e.tactic || '').split(',').filter(Boolean);
@@ -4692,7 +4696,11 @@ function artShowTab(tab) {
     const categories = (e.categories || []).map(c =>
       `<span style="font-size:11px;padding:2px 8px;border-radius:3px;background:var(--bg3);border:1px solid var(--sep);color:var(--dim)">${c}</span>`
     ).join(' ');
+    const briefHtml = e._brief
+      ? `<div class="ml-brief" style="margin:0 0 16px"><div class="ml-brief-label">DETECTION BRIEF</div><div class="ml-brief-text" id="art-brief-text"></div></div>`
+      : '';
     body.innerHTML = `
+      ${briefHtml}
       <div class="art-section">
         <div class="art-section-title">Statistics</div>
         <div style="display:flex;gap:12px;flex-wrap:wrap">
@@ -4714,6 +4722,13 @@ function artShowTab(tab) {
       ${categories ? `<div class="art-section"><div class="art-section-title">Logsource Categories</div><div style="display:flex;gap:6px;flex-wrap:wrap">${categories}</div></div>` : ''}
       ${(e.reg_keys||[]).length ? `<div class="art-section"><div class="art-section-title">Registry Keys (preview)</div>${(e.reg_keys||[]).slice(0,5).map(k => `<div class="art-code-item">${_esc(k)}</div>`).join('')}</div>` : ''}
       ${(e.processes||[]).length ? `<div class="art-section"><div class="art-section-title">Process Images (preview)</div><div style="display:flex;gap:6px;flex-wrap:wrap">${(e.processes||[]).slice(0,6).map(p => `<span class="art-code-item" style="display:inline-block">${_esc(p.split('\\').pop())}</span>`).join('')}</div></div>` : ''}`;
+    if (e._brief) {
+      const bt = document.getElementById('art-brief-text');
+      if (bt) {
+        let i = 0; const s = e._brief;
+        const iv = setInterval(() => { if (i >= s.length) { clearInterval(iv); return; } bt.textContent += s[i++]; }, 12);
+      }
+    }
     return;
   }
 
