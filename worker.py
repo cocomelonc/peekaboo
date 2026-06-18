@@ -489,8 +489,16 @@ def cmd_summarize(args: argparse.Namespace) -> None:
     timeout   = args.timeout
     meow_root = args.meow_root or os.environ.get("MEOW_ROOT") or ""
 
+    if getattr(args, "posts", None):
+        os.environ["BLOG_POSTS_ROOT"] = args.posts
+    posts_root = os.environ.get("BLOG_POSTS_ROOT") or ""
+
     if meow_root:
         print(f"[sum] meow_root: {meow_root}", flush=True)
+    if posts_root:
+        print(f"[sum] posts:     {posts_root}", flush=True)
+    else:
+        print("[sum] posts:     (none — summaries will fall back to code-only)", flush=True)
 
     db.init()
 
@@ -1020,6 +1028,8 @@ def _build_parser() -> argparse.ArgumentParser:
     sp.add_argument("--timeout",         type=int, default=120,            help="per-call timeout (s)")
     sp.add_argument("--meow-root",       default=None, dest="meow_root",
                     help="local meow repo path (default: $MEOW_ROOT)")
+    sp.add_argument("--posts",           default=None, dest="posts",
+                    help="path to _posts/ for blog body reads (default: $BLOG_POSTS_ROOT)")
     sp.add_argument("--watch",           type=int, default=0, metavar="N",
                     help="loop every N seconds (0 = run once)")
     sp.add_argument("--rebuild",         action="store_true",
