@@ -1001,7 +1001,7 @@ def delete_kb_tags(model: str, doc_ids: list[int] | None = None) -> int:
 
 def get_kb_tagged_docs(model: str) -> list[dict]:
     """Return (id, slug, src_path, tagged_at, title, category, attack_ids) for docs
-    that have a tag entry under this model — used to detect stale sources."""
+    that have a tag entry under this model - used to detect stale sources."""
     with _conn() as db:
         rows = db.execute(
             """
@@ -1191,7 +1191,7 @@ def delete_kb_summaries(model: str, doc_ids: list[int] | None = None) -> int:
 
 
 def get_kb_summarized_docs(model: str) -> list[dict]:
-    """Docs with summaries under this model — used to detect stale sources."""
+    """Docs with summaries under this model - used to detect stale sources."""
     with _conn() as db:
         rows = db.execute(
             """
@@ -1424,7 +1424,7 @@ def get_ttp_extracted_by_attack_id(attack_id: str, model: str | None = None) -> 
 
 def get_kb_ttp_extracted_docs(model: str) -> list[dict]:
     """Return (id, slug, src_path, extracted_at, title, category) for docs
-    that have a ttp_extracted row under this model — used to detect stale sources."""
+    that have a ttp_extracted row under this model - used to detect stale sources."""
     with _conn() as db:
         rows = db.execute(
             """

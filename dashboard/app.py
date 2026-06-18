@@ -570,6 +570,40 @@ def api_mitre_library_rebuild():
     return jsonify({"ok": True, "message": "rebuilding library cache in background"})
 
 
+@app.route("/api/kb/brief/<path:slug>")
+def api_kb_brief(slug: str):
+    """Return precomputed GPU summary for a KB slug (written by worker.py summarize)."""
+    summary = _db.get_kb_summary_for_slug(slug)
+    if not summary:
+        return jsonify({"error": "no brief available", "slug": slug}), 404
+    return jsonify({"slug": slug, "summary": summary})
+
+
+@app.route("/api/kb/insights")
+def api_kb_insights():
+    """Aggregated KB stats: top tags, tactics, ATT&CK IDs from precomputed tables."""
+    from collections import Counter
+    tags_by_slug = _db.get_kb_tags_all()
+    ttp_rows     = _db.get_ttp_extracted_all()
+
+    tag_ctr: Counter    = Counter()
+    tactic_ctr: Counter = Counter()
+    attack_ctr: Counter = Counter()
+
+    for tags in tags_by_slug.values():
+        tag_ctr.update(tags)
+    for row in ttp_rows:
+        tactic_ctr.update(row.get("tactics", []))
+        attack_ctr.update(row.get("attack_ids", []))
+
+    return jsonify({
+        "docs":           len(tags_by_slug),
+        "top_tags":       tag_ctr.most_common(12),
+        "top_tactics":    tactic_ctr.most_common(10),
+        "top_attack_ids": attack_ctr.most_common(10),
+    })
+
+
 @app.route("/api/reindex")
 def api_reindex():
     """SSE stream: full reindex - library cache -> embeddings -> KB scrape."""

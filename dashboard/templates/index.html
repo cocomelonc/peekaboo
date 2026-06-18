@@ -569,6 +569,12 @@ code{font-family:var(--mono);font-size:12px;background:var(--bg4);padding:1px 5p
 .ml-brief{margin:14px 0 12px;padding:12px 14px;border-left:2px solid var(--purple);background:var(--bg2);border-radius:0 6px 6px 0}
 .ml-brief-label{font-size:9px;font-weight:700;letter-spacing:1.2px;color:var(--purple);margin-bottom:5px}
 .ml-brief-text{font-size:13px;line-height:1.55;color:var(--text)}
+.btn-brief{padding:2px 8px;border-radius:4px;border:1px solid rgba(181,123,255,.4);background:rgba(181,123,255,.08);color:var(--purple);font-size:10px;cursor:pointer;white-space:nowrap;transition:all .12s}
+.btn-brief:hover{border-color:var(--purple);background:rgba(181,123,255,.18)}
+.quick-brief-card{padding:12px 16px;margin-bottom:12px}
+.quick-brief-label{font-size:9px;font-weight:700;letter-spacing:1.2px;color:var(--purple);margin-bottom:8px}
+.quick-brief-row{display:flex;gap:8px}
+.quick-brief-result{margin-top:10px}
 .mitre-code{font-size:11px;display:block;background:var(--bg3);padding:14px;border-radius:6px}
 .mitre-detail-meta{margin-top:6px;display:flex;gap:5px;flex-wrap:wrap}
 .mitre-detail-actions{margin-left:12px;display:flex;gap:8px;align-items:flex-start;flex-shrink:0}
@@ -1448,6 +1454,13 @@ code{font-family:var(--mono);font-size:12px;background:var(--bg4);padding:1px 5p
         <div class="empty"><div>Enter a search term or click Search to browse the library</div></div>
       </div>
       <div id="ml-pages" class="page-bar"></div>
+      <div id="ml-brief-inline" class="ml-brief" style="display:none;margin:10px 0 2px">
+        <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:5px">
+          <div class="ml-brief-label" id="ml-brief-inline-slug" style="margin-bottom:0"></div>
+          <button onclick="document.getElementById('ml-brief-inline').style.display='none'" style="background:none;border:none;color:var(--dim);cursor:pointer;font-size:12px;padding:0 2px">✕</button>
+        </div>
+        <div class="ml-brief-text" id="ml-brief-inline-text"></div>
+      </div>
     </div>
     <div id="ml-detail" class="card mitre-detail-card" style="display:none">
       <div class="card-header">
@@ -1597,6 +1610,20 @@ code{font-family:var(--mono);font-size:12px;background:var(--bg4);padding:1px 5p
     <div class="card card-sm">
       <div class="chat-info-label">Providers</div>
       <div id="providers-info"></div>
+    </div>
+  </div>
+  <div class="card quick-brief-card">
+    <div class="quick-brief-label">QUICK BRIEF</div>
+    <div class="quick-brief-row">
+      <input id="qb-input" class="chat-input" type="text" placeholder="technique slug or name…"
+        style="font-size:12px" onkeydown="if(event.key==='Enter')fetchQuickBrief()">
+      <button class="btn btn-ghost btn-sm" onclick="fetchQuickBrief()">Brief</button>
+    </div>
+    <div id="qb-result" class="quick-brief-result" style="display:none">
+      <div class="ml-brief" style="margin:0">
+        <div class="ml-brief-label" id="qb-slug"></div>
+        <div class="ml-brief-text" id="qb-text"></div>
+      </div>
     </div>
   </div>
   <div class="card chat-card">
@@ -3877,7 +3904,7 @@ function _renderLibRows(entries) {
   el.innerHTML = `
     <div class="tbl-wrap"><table class="data-table">
       <thead><tr>
-        <th>Title</th><th>ATT&amp;CK IDs</th><th>Category</th><th>Date</th><th>Source</th>
+        <th>Title</th><th>ATT&amp;CK IDs</th><th>Category</th><th>Date</th><th>Source</th><th></th>
       </tr></thead>
       <tbody>${entries.map(e => {
         const c   = MITRE_CAT_COLORS[e.category] || MITRE_CAT_COLORS.other;
@@ -3891,6 +3918,7 @@ function _renderLibRows(entries) {
           <td><span class="badge" style="background:${c}22;color:${c};font-size:9px">${escHtml(e.category)}</span></td>
           <td class="text-dim text-xs" style="white-space:nowrap">${escHtml(e.date||'')}</td>
           <td>${e.src_path ? '<span class="badge badge-dim" style="font-size:9px">src</span>' : '<span class="text-dim text-xs">-</span>'}</td>
+          <td><button class="btn-brief" onclick="event.stopPropagation();showLibBrief('${escAttr(e.slug)}')">brief</button></td>
         </tr>`;
       }).join('')}
       </tbody>
@@ -3949,6 +3977,66 @@ async function rebuildLibCache() {
   _mitreStatsLoaded = false;
   _initLibTab();
   _loadMitreStats();
+}
+
+async function showLibBrief(slug) {
+  const panel = document.getElementById('ml-brief-inline');
+  const slugEl = document.getElementById('ml-brief-inline-slug');
+  const txtEl  = document.getElementById('ml-brief-inline-text');
+  panel.style.display = '';
+  slugEl.textContent = 'BRIEF - ' + slug;
+  txtEl.textContent = '…';
+  panel.scrollIntoView({behavior:'smooth', block:'nearest'});
+
+  const r = await fetch(`/api/kb/brief/${encodeURIComponent(slug)}`).then(r=>r.json()).catch(()=>null);
+  if (!r || r.error) {
+    txtEl.textContent = 'No brief available. Run: python worker.py summarize';
+    return;
+  }
+  txtEl.textContent = '';
+  let i = 0;
+  const iv = setInterval(() => {
+    if (i >= r.summary.length) { clearInterval(iv); return; }
+    txtEl.textContent += r.summary[i++];
+  }, 14);
+}
+
+async function fetchQuickBrief() {
+  const q = document.getElementById('qb-input').value.trim();
+  if (!q) return;
+  const wrap   = document.getElementById('qb-result');
+  const slugEl = document.getElementById('qb-slug');
+  const txtEl  = document.getElementById('qb-text');
+  wrap.style.display = '';
+  slugEl.textContent = q;
+  txtEl.textContent = '…';
+
+  // 1. exact slug match
+  let r = await fetch(`/api/kb/brief/${encodeURIComponent(q)}`).then(x=>x.json()).catch(()=>null);
+
+  // 2. keyword fallback: search library, try each slug until one has a brief
+  if (!r || r.error) {
+    const lib = await fetch(`/api/mitre/library?q=${encodeURIComponent(q)}&limit=8`)
+      .then(x=>x.json()).catch(()=>null);
+    if (lib && lib.items) {
+      for (const entry of lib.items) {
+        const b = await fetch(`/api/kb/brief/${encodeURIComponent(entry.slug)}`).then(x=>x.json()).catch(()=>null);
+        if (b && !b.error) { r = b; break; }
+      }
+    }
+  }
+
+  if (!r || r.error) {
+    txtEl.textContent = 'No brief found for "' + q + '". Run: python worker.py summarize';
+    return;
+  }
+  slugEl.textContent = r.slug;
+  txtEl.textContent = '';
+  let i = 0;
+  const iv = setInterval(() => {
+    if (i >= r.summary.length) { clearInterval(iv); return; }
+    txtEl.textContent += r.summary[i++];
+  }, 14);
 }
 
 // ===== TTP IMPLEMENTATIONS TAB =====

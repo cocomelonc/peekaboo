@@ -498,7 +498,7 @@ def cmd_summarize(args: argparse.Namespace) -> None:
     if posts_root:
         print(f"[sum] posts:     {posts_root}", flush=True)
     else:
-        print("[sum] posts:     (none — summaries will fall back to code-only)", flush=True)
+        print("[sum] posts:     (none - summaries will fall back to code-only)", flush=True)
 
     db.init()
 
