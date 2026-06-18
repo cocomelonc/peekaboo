@@ -947,6 +947,57 @@ def get_kb_docs_without_embedding(model: str = "nomic-embed-text") -> list[dict]
     return result
 
 
+def delete_kb_embeddings(model: str, doc_ids: list[int] | None = None) -> int:
+    """Delete embedding rows. If doc_ids is None, deletes all for the model."""
+    with _conn() as db:
+        if doc_ids is None:
+            cur = db.execute("DELETE FROM kb_embeddings WHERE model = ?", (model,))
+        else:
+            cur = db.executemany(
+                "DELETE FROM kb_embeddings WHERE model = ? AND doc_id = ?",
+                [(model, i) for i in doc_ids],
+            )
+        return cur.rowcount or 0
+
+
+def delete_kb_tags(model: str, doc_ids: list[int] | None = None) -> int:
+    """Delete tag rows. If doc_ids is None, deletes all for the model."""
+    with _conn() as db:
+        if doc_ids is None:
+            cur = db.execute("DELETE FROM kb_tags WHERE model = ?", (model,))
+        else:
+            cur = db.executemany(
+                "DELETE FROM kb_tags WHERE model = ? AND doc_id = ?",
+                [(model, i) for i in doc_ids],
+            )
+        return cur.rowcount or 0
+
+
+def get_kb_tagged_docs(model: str) -> list[dict]:
+    """Return (id, slug, src_path, tagged_at, title, category, attack_ids) for docs
+    that have a tag entry under this model — used to detect stale sources."""
+    with _conn() as db:
+        rows = db.execute(
+            """
+            SELECT d.id, d.slug, d.src_path, d.title, d.category, d.attack_ids,
+                   t.tagged_at
+            FROM kb_docs d
+            JOIN kb_tags t ON t.doc_id = d.id
+            WHERE t.model = ?
+            """,
+            (model,),
+        ).fetchall()
+    result = []
+    for r in rows:
+        d = dict(r)
+        try:
+            d["attack_ids"] = json.loads(d["attack_ids"] or "[]")
+        except Exception:
+            d["attack_ids"] = []
+        result.append(d)
+    return result
+
+
 def upsert_kb_embedding(doc_id: int, model: str, vector: list[float]) -> None:
     with _conn() as db:
         db.execute(

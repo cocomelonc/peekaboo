@@ -4,30 +4,34 @@ peekaboo worker - GPU-side KB enrichment
 standalone script; writes to dashboard/peekaboo.db
 
 commands:
-  init    import library_cache.json -> kb_docs           (idempotent)
-  embed   compute embedding vectors for new docs         (resumable)
-  tag     classify each doc with a constrained tag set   (resumable, LLM)
-  status  show table row counts
+  scan     scan local _posts/*.markdown -> library_cache.json (no network)
+  init     import library_cache.json -> kb_docs           (idempotent)
+  embed    compute embedding vectors for new docs         (resumable)
+  tag      classify each doc with a constrained tag set   (resumable, LLM)
+  refresh  scan? + init + embed pending + tag pending + re-tag stale-source docs
+  status   show table row counts + stale count
 
-options (embed):
-  --watch N    loop every N seconds after first pass (default: off)
-  --model M    embedding model (default: nomic-embed-text)
-  --batch N    docs per Ollama call (default: 32)
-  --url URL    Ollama base URL (default: http://localhost:11434)
+rebuild knobs:
+  embed --rebuild               wipe embeddings for model, then embed all
+  tag   --rebuild               wipe tags for model, then tag all
+  tag   --rebuild-changed       re-tag docs whose meow source is newer than tagged_at
+  refresh --rebuild             wipe both, then init + embed + tag
 
-options (tag):
-  --watch N    loop every N seconds after first pass (default: off)
-  --model M    chat model (default: qwen3:4b; try qwen3:14b on a GPU box)
-  --url URL    Ollama base URL (default: http://localhost:11434)
-  --code-lines N   max lines of src code to feed the LLM (default: 200)
+other flags:
+  --watch N     loop every N seconds after first pass (default: off)
+  --model M     Ollama model (defaults differ per stage)
+  --url URL     Ollama base URL (default: http://localhost:11434)
+  --meow-root P local meow repo (default: $MEOW_ROOT, then stored absolute path)
 
-examples:
-  python3 worker.py init
-  python3 worker.py embed
-  python3 worker.py embed --watch 300
-  python3 worker.py tag
-  python3 worker.py tag --model qwen3:14b --watch 600
-  python3 worker.py status
+typical workflows:
+  # daily: pick up new blog posts / new meow code
+  python3 worker.py refresh
+
+  # after editing existing meow code, force re-tag
+  python3 worker.py tag --rebuild-changed
+
+  # nuclear: re-do everything from scratch
+  python3 worker.py refresh --rebuild
 """
 from __future__ import annotations
 
@@ -89,6 +93,34 @@ def _ollama_has_model(model: str, base_url: str) -> bool:
 # Commands                                                                     #
 # --------------------------------------------------------------------------- #
 
+def cmd_scan(args: argparse.Namespace) -> None:
+    """Re-scan local _posts/*.markdown -> data/library_cache.json (no network).
+
+    Honors $BLOG_POSTS_ROOT and $MEOW_ROOT. CLI flags override env if set.
+    """
+    if args.posts:
+        os.environ["BLOG_POSTS_ROOT"] = args.posts
+    if args.meow_root:
+        os.environ["MEOW_ROOT"] = args.meow_root
+
+    sys.path.insert(0, str(_ROOT / "dashboard"))
+    # Re-import to pick up env overrides (paths are bound at module import time).
+    import importlib
+    import mitre
+    importlib.reload(mitre)
+
+    posts_root = mitre._POSTS
+    meow_root  = mitre._MEOW
+    print(f"[scan] _posts:    {posts_root}", flush=True)
+    print(f"[scan] meow root: {meow_root}",  flush=True)
+    if not posts_root.exists():
+        print(f"[scan] posts dir not found: {posts_root}", flush=True)
+        sys.exit(1)
+
+    entries = mitre.build_library_cache()
+    print(f"[scan] wrote {len(entries)} entries to data/library_cache.json", flush=True)
+
+
 def cmd_init(args: argparse.Namespace) -> None:
     """Import library_cache.json into kb_docs (idempotent upsert)."""
     if not _LIB_CACHE.exists():
@@ -132,6 +164,10 @@ def cmd_embed(args: argparse.Namespace) -> None:
         print(f"[embed] model not available: {model}  (run: ollama pull {model})", flush=True)
         sys.exit(1)
 
+    if getattr(args, "rebuild", False):
+        n = db.delete_kb_embeddings(model)
+        print(f"[embed] --rebuild: wiped {n} embedding rows for model={model}", flush=True)
+
     def _run_once() -> int:
         pending = db.get_kb_docs_without_embedding(model)
         if not pending:
@@ -155,7 +191,7 @@ def cmd_embed(args: argparse.Namespace) -> None:
                 done += 1
 
             pct = min(100, int((i + len(batch)) / len(pending) * 100))
-            _progress(pct, f"{done}/{len(pending)}")
+            _progress(pct, f"{done}/{len(pending)}", tag="embed")
 
         print(f"\n[embed] embedded {done} docs", flush=True)
         return done
@@ -296,6 +332,24 @@ def _read_code(src_path: str, max_lines: int, meow_root: str | None = None) -> s
         return ""
 
 
+def _stale_doc_ids(model: str, meow_root: str) -> list[int]:
+    """Doc IDs whose meow source file mtime > tagged_at for this model."""
+    from datetime import datetime
+    stale: list[int] = []
+    for r in db.get_kb_tagged_docs(model):
+        resolved = _resolve_src(r.get("src_path", ""), meow_root)
+        if resolved is None:
+            continue
+        try:
+            src_mtime = datetime.fromtimestamp(resolved.stat().st_mtime)
+            tagged_at = datetime.fromisoformat(r["tagged_at"])
+        except Exception:
+            continue
+        if src_mtime > tagged_at:
+            stale.append(r["id"])
+    return stale
+
+
 def cmd_tag(args: argparse.Namespace) -> None:
     """Classify each doc with constrained-JSON tags via local Ollama. Resumable."""
     model     = args.model
@@ -312,6 +366,17 @@ def cmd_tag(args: argparse.Namespace) -> None:
     if not _ollama_has_model(model, base_url):
         print(f"[tag] model not available: {model}  (run: ollama pull {model})", flush=True)
         sys.exit(1)
+
+    if getattr(args, "rebuild", False):
+        n = db.delete_kb_tags(model)
+        print(f"[tag] --rebuild: wiped {n} tag rows for model={model}", flush=True)
+    elif getattr(args, "rebuild_changed", False):
+        stale = _stale_doc_ids(model, meow_root)
+        if stale:
+            n = db.delete_kb_tags(model, doc_ids=stale)
+            print(f"[tag] --rebuild-changed: wiped {n} stale tag rows", flush=True)
+        else:
+            print(f"[tag] --rebuild-changed: nothing stale", flush=True)
 
     def _run_once() -> int:
         pending = db.get_kb_docs_without_tags(model)
@@ -339,7 +404,7 @@ def cmd_tag(args: argparse.Namespace) -> None:
 
             pct = int(i / len(pending) * 100)
             label = f"{i}/{len(pending)} - {doc['slug'][:30]:30s} -> {','.join(tags[:4]) or '(none)'}"
-            _progress(pct, label)
+            _progress(pct, label, tag="tag")
 
         print(f"\n[tag] tagged {done} docs ({failed} failed)", flush=True)
         return done
@@ -357,13 +422,67 @@ def cmd_tag(args: argparse.Namespace) -> None:
 def cmd_status(args: argparse.Namespace) -> None:
     db.init()
     s = db.kb_stats()
-    total = s["docs"]
-    embedded = s["embeddings"]
-    tagged   = s["tags"]
-    missing  = total - embedded
-    print(f"kb_docs        : {total}")
-    print(f"kb_embeddings  : {embedded}  (missing: {missing})")
-    print(f"kb_tags        : {tagged}")
+    meow_root = os.environ.get("MEOW_ROOT") or ""
+
+    print(f"kb_docs        : {s['docs']}")
+
+    # per-model breakdown via raw SQL (small enough that we don't need new helpers)
+    import sqlite3
+    with sqlite3.connect(db.DB_PATH) as conn:
+        conn.row_factory = sqlite3.Row
+        emb_rows = conn.execute(
+            "SELECT model, COUNT(*) n FROM kb_embeddings GROUP BY model"
+        ).fetchall()
+        tag_rows = conn.execute(
+            "SELECT model, COUNT(*) n FROM kb_tags GROUP BY model"
+        ).fetchall()
+
+    if not emb_rows:
+        print(f"kb_embeddings  : 0  (pending: {s['docs']})")
+    for r in emb_rows:
+        print(f"kb_embeddings  : {r['n']}  ({r['model']})  pending: {s['docs'] - r['n']}")
+
+    if not tag_rows:
+        print(f"kb_tags        : 0  (pending: {s['docs']})")
+    for r in tag_rows:
+        stale = 0
+        if meow_root:
+            try:
+                stale = len(_stale_doc_ids(r["model"], meow_root))
+            except Exception:
+                pass
+        print(f"kb_tags        : {r['n']}  ({r['model']})  pending: {s['docs'] - r['n']}, stale: {stale}")
+
+
+def cmd_refresh(args: argparse.Namespace) -> None:
+    """One-shot incremental update: [scan?] + init + embed pending + tag pending + re-tag stale."""
+    if getattr(args, "scan", False):
+        print("[refresh] ----- scan -----", flush=True)
+        scan_args = argparse.Namespace(posts=None, meow_root=args.meow_root)
+        cmd_scan(scan_args)
+
+    print("\n[refresh] ----- init -----", flush=True)
+    cmd_init(args)
+
+    print("\n[refresh] ----- embed -----", flush=True)
+    embed_args = argparse.Namespace(
+        model=args.embed_model, url=args.url, batch=32,
+        watch=0, rebuild=args.rebuild,
+    )
+    cmd_embed(embed_args)
+
+    print("\n[refresh] ----- tag -----", flush=True)
+    tag_args = argparse.Namespace(
+        model=args.tag_model, url=args.url, code_lines=120,
+        timeout=args.timeout, meow_root=args.meow_root,
+        watch=0,
+        rebuild=args.rebuild,
+        rebuild_changed=(not args.rebuild),  # default: catch stale-source docs
+    )
+    cmd_tag(tag_args)
+
+    print("\n[refresh] ----- done -----", flush=True)
+    cmd_status(args)
 
 
 # --------------------------------------------------------------------------- #
@@ -384,12 +503,12 @@ def _post_text(doc: dict) -> str:
     return " | ".join(p for p in parts if p)
 
 
-def _progress(pct: int, label: str = "") -> None:
+def _progress(pct: int, label: str = "", tag: str = "worker") -> None:
     if sys.stdout.isatty():
         bar = "#" * (pct // 5) + "-" * (20 - pct // 5)
         print(f"\r[{bar}] {pct:3d}%  {label}  ", end="", flush=True)
     else:
-        print(f"[embed] {pct}% {label}", flush=True)
+        print(f"[{tag}] {pct}% {label}", flush=True)
 
 
 # --------------------------------------------------------------------------- #
@@ -403,15 +522,23 @@ def _build_parser() -> argparse.ArgumentParser:
     )
     sub = p.add_subparsers(dest="cmd", required=True)
 
+    sc = sub.add_parser("scan", help="scan local _posts/*.markdown -> library_cache.json")
+    sc.add_argument("--posts",     default=None,
+                    help="path to _posts/ (default: $BLOG_POSTS_ROOT)")
+    sc.add_argument("--meow-root", default=None, dest="meow_root",
+                    help="local meow repo path (default: $MEOW_ROOT)")
+
     sub.add_parser("init",   help="import library_cache.json -> kb_docs")
     sub.add_parser("status", help="show row counts")
 
     ep = sub.add_parser("embed", help="compute embedding vectors for new docs")
-    ep.add_argument("--model",  default="nomic-embed-text",   help="Ollama model")
-    ep.add_argument("--url",    default="http://localhost:11434", help="Ollama base URL")
-    ep.add_argument("--batch",  type=int, default=32,          help="docs per call")
-    ep.add_argument("--watch",  type=int, default=0, metavar="N",
+    ep.add_argument("--model",   default="nomic-embed-text",       help="Ollama model")
+    ep.add_argument("--url",     default="http://localhost:11434", help="Ollama base URL")
+    ep.add_argument("--batch",   type=int, default=32,             help="docs per call")
+    ep.add_argument("--watch",   type=int, default=0, metavar="N",
                     help="loop every N seconds (0 = run once)")
+    ep.add_argument("--rebuild", action="store_true",
+                    help="wipe all embeddings for this model first, then embed all")
 
     tp = sub.add_parser("tag", help="classify docs with constrained-JSON tags (LLM)")
     tp.add_argument("--model",      default="qwen3:1.7b",              help="Ollama chat model")
@@ -423,6 +550,21 @@ def _build_parser() -> argparse.ArgumentParser:
                     help="local meow repo path (default: $MEOW_ROOT, then stored absolute path)")
     tp.add_argument("--watch",      type=int, default=0, metavar="N",
                     help="loop every N seconds (0 = run once)")
+    tp.add_argument("--rebuild",    action="store_true",
+                    help="wipe all tags for this model first, then tag all")
+    tp.add_argument("--rebuild-changed", action="store_true", dest="rebuild_changed",
+                    help="re-tag docs whose meow source is newer than tagged_at")
+
+    rp = sub.add_parser("refresh", help="one-shot incremental update (scan? + init + embed + tag)")
+    rp.add_argument("--embed-model", default="nomic-embed-text", dest="embed_model")
+    rp.add_argument("--tag-model",   default="qwen3:1.7b",       dest="tag_model")
+    rp.add_argument("--url",         default="http://localhost:11434")
+    rp.add_argument("--timeout",     type=int, default=300)
+    rp.add_argument("--meow-root",   default=None, dest="meow_root")
+    rp.add_argument("--scan",        action="store_true",
+                    help="re-scan local _posts before init (catches new/edited blog files)")
+    rp.add_argument("--rebuild",     action="store_true",
+                    help="wipe embeddings + tags first, then full re-do")
 
     return p
 
@@ -431,11 +573,15 @@ if __name__ == "__main__":
     parser = _build_parser()
     args   = parser.parse_args()
 
-    if args.cmd == "init":
+    if args.cmd == "scan":
+        cmd_scan(args)
+    elif args.cmd == "init":
         cmd_init(args)
     elif args.cmd == "embed":
         cmd_embed(args)
     elif args.cmd == "tag":
         cmd_tag(args)
+    elif args.cmd == "refresh":
+        cmd_refresh(args)
     elif args.cmd == "status":
         cmd_status(args)

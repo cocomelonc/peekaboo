@@ -5,12 +5,15 @@ mitreattack-python 5.x + local STIX bundle
 """
 from __future__ import annotations
 import json
+import os
 import re
 from pathlib import Path
 
 _BASE          = Path(__file__).parent.parent
-_MEOW          = Path("/home/cocomelonc/hacking/meow")
-_POSTS         = Path("/home/cocomelonc/hacking/cocomelonc.github.io/_posts")
+# Both paths are env-overridable so the indexer runs anywhere (GPU server, CI, etc).
+_MEOW          = Path(os.environ.get("MEOW_ROOT") or "/home/cocomelonc/hacking/meow").expanduser()
+_POSTS         = Path(os.environ.get("BLOG_POSTS_ROOT") or
+                      "/home/cocomelonc/hacking/cocomelonc.github.io/_posts").expanduser()
 STIX_PATH      = str(_BASE / "data" / "enterprise-attack.json")
 _GROUPS_CACHE  = _BASE / "data" / "mitre_groups_cache.json"
 _LIBRARY_CACHE = _BASE / "data" / "library_cache.json"
