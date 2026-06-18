@@ -2363,6 +2363,58 @@ def run_artifacts() -> None:
             )
 
 
+# -- shared brief helpers -------------------------------------------------------
+
+def _cli_show_kb_brief(slug: str) -> None:
+    """Print the precomputed GPU summary for a KB slug."""
+    try:
+        import db as _db
+    except ImportError:
+        console.print("  [err][=^..^=] db not available[/err]\n")
+        return
+    summary = _db.get_kb_summary_for_slug(slug)
+    if not summary:
+        console.print(
+            f"  [warn][=^..^=] no brief for '{slug}'  "
+            f"(run: python worker.py summarize)[/warn]\n"
+        )
+        return
+    console.print()
+    console.print(Panel(
+        summary,
+        title=f"[heading] BRIEF — {slug} [/heading]",
+        border_style="bright_magenta",
+        box=box.ROUNDED,
+        padding=(0, 2),
+    ))
+    console.print()
+
+
+def _cli_show_art_brief(tid: str) -> None:
+    """Print the precomputed GPU detection brief for an ATT&CK technique ID."""
+    try:
+        import db as _db
+    except ImportError:
+        console.print("  [err][=^..^=] db not available[/err]\n")
+        return
+    summary = _db.get_artifact_summary(tid.upper())
+    if not summary:
+        console.print(
+            f"  [warn][=^..^=] no detection brief for '{tid.upper()}'  "
+            f"(run: python worker.py sigma)[/warn]\n"
+        )
+        return
+    console.print()
+    console.print(Panel(
+        summary,
+        title=f"[heading] DETECTION BRIEF — {tid.upper()} [/heading]",
+        border_style="bright_magenta",
+        box=box.ROUNDED,
+        padding=(0, 2),
+    ))
+    console.print()
+
+
 # -- module library ------------------------------------------------------------
 
 _EXT_LANG = {
@@ -2380,13 +2432,14 @@ _EXT_LANG = {
 LIB_PAGE_SIZE = PAGE_SIZE
 
 LIBRARY_COMMANDS = [
-    "list", "search", "show", "cats", "help", "back",
+    "list", "search", "show", "brief", "cats", "help", "back",
 ]
 
 LIBRARY_HELP = [
     ("list [category]",   "list modules, optionally filtered by category"),
     ("search <query>",    "search by title, T-ID or slug (case-insensitive)"),
     ("show <slug>",       "show details + source code for a module"),
+    ("brief <slug>",      "show GPU-precomputed 3-sentence brief for a module"),
     ("cats",              "list all categories with entry counts"),
     ("help",              "show this help"),
     ("back",              "return to main menu"),
@@ -2681,6 +2734,24 @@ def run_library() -> None:
                     continue
             _render_module_detail(entry)
 
+        # -- brief -------------------------------------------------------------
+        elif cmd == "brief":
+            if not args:
+                console.print("[warn][=^..^=] usage: brief <slug>[/warn]")
+                continue
+            slug = args[0]
+            if slug not in slug_map:
+                matches = [s for s in slug_map if slug in s]
+                if len(matches) == 1:
+                    slug = matches[0]
+                elif len(matches) > 1:
+                    console.print(f"  [warn][=^..^=] ambiguous: {', '.join(matches[:5])}[/warn]\n")
+                    continue
+                else:
+                    console.print(f"  [err][=^..^=] slug not found: '{slug}'[/err]\n")
+                    continue
+            _cli_show_kb_brief(slug)
+
         else:
             console.print(
                 f"[warn][=^..^=] unknown command: {cmd}  "
@@ -2694,7 +2765,7 @@ MALPEDIA_PAGE_SIZE = PAGE_SIZE
 
 MALPEDIA_COMMANDS = [
     "status", "reports", "actors", "families", "actor", "family",
-    "yara", "search", "refresh", "help", "back",
+    "yara", "search", "brief", "refresh", "help", "back",
 ]
 
 _MALPEDIA_BASE = "https://malpedia.caad.fkie.fraunhofer.de"
@@ -2884,6 +2955,20 @@ def _render_actor_detail(a: dict) -> None:
         for i, ref in enumerate(refs[:10], 1):
             url = _mp_abs_url(ref) if ref else ""
             console.print(f"  [dim]{i:>2}.[/dim] [link={url}][cyan]{url[:80]}[/cyan][/link]")
+
+    posts = a.get("related_posts", [])
+    if posts:
+        console.print()
+        pt = Table(box=box.ROUNDED, show_header=True, header_style="bold bright_white on bright_black",
+                   border_style="bright_black", padding=(0, 1),
+                   title=f"Related Blog Posts ({len(posts)})")
+        pt.add_column("slug",  style="cyan", min_width=28, no_wrap=True)
+        pt.add_column("title", style="cmd",  min_width=40)
+        pt.add_column("score", style="dim",  min_width=6, justify="right")
+        for p in posts[:6]:
+            pt.add_row(p.get("slug", "-"), p.get("title", "")[:48], f"{p.get('score', 0):.2f}")
+        console.print(pt)
+        console.print("  [dim]use  brief <slug>  to see GPU-precomputed summary[/dim]\n")
     console.print()
 
 
@@ -2926,6 +3011,20 @@ def _render_family_detail(f: dict) -> None:
             console.print(f"  [dim]{i:>2}.[/dim] [link={abs_url}][cyan]{abs_url[:80]}[/cyan][/link]")
         if len(urls) > 10:
             console.print(f"  [dim]  ... +{len(urls)-10} more[/dim]")
+
+    posts = f.get("related_posts", [])
+    if posts:
+        console.print()
+        pt = Table(box=box.ROUNDED, show_header=True, header_style="bold bright_white on bright_black",
+                   border_style="bright_black", padding=(0, 1),
+                   title=f"Related Blog Posts ({len(posts)})")
+        pt.add_column("slug",  style="cyan", min_width=28, no_wrap=True)
+        pt.add_column("title", style="cmd",  min_width=40)
+        pt.add_column("score", style="dim",  min_width=6, justify="right")
+        for p in posts[:6]:
+            pt.add_row(p.get("slug", "-"), p.get("title", "")[:48], f"{p.get('score', 0):.2f}")
+        console.print(pt)
+        console.print("  [dim]use  brief <slug>  to see GPU-precomputed summary[/dim]\n")
     console.print()
 
 
@@ -3224,6 +3323,13 @@ def run_malpedia() -> None:
 
             if not actor_hits and not family_hits:
                 console.print(f"\n  [warn][=^..^=] no results for '{q}'[/warn]\n")
+
+        # -- brief <slug> ---------------------------------------------------------
+        elif cmd == "brief":
+            if not args:
+                console.print("[warn][=^..^=] usage: brief <slug>[/warn]")
+                continue
+            _cli_show_kb_brief(args[0])
 
         # -- refresh ----------------------------------------------------------
         elif cmd == "refresh":
@@ -4227,7 +4333,7 @@ def _render_build_detail(b: dict) -> None:
 # -- ttp module ----------------------------------------------------------------
 
 TTP_COMMANDS = [
-    "list", "show", "search", "build", "refresh", "help", "back", "exit",
+    "list", "show", "search", "build", "brief", "refresh", "help", "back", "exit",
 ]
 
 _TTP_TACTICS_ORDER = [
@@ -4637,6 +4743,13 @@ def run_ttp() -> None:
                 "end_time":   datetime.now().isoformat(),
             })
             console.print()
+
+        # -- brief <T-ID> --------------------------------------------------------
+        elif cmd == "brief":
+            if not args:
+                console.print("[warn][=^..^=] usage: brief <attack_id>[/warn]")
+                continue
+            _cli_show_art_brief(args[0])
 
         # -- refresh -------------------------------------------------------------
         elif cmd == "refresh":

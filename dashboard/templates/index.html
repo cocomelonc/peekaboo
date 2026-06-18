@@ -524,6 +524,16 @@ code{font-family:var(--mono);font-size:12px;background:var(--bg4);padding:1px 5p
 .modal-body::-webkit-scrollbar-thumb{background:var(--sep)}
 .modal-foot{padding:14px 20px;border-top:1px solid var(--sep);display:flex;gap:8px;justify-content:flex-end}
 
+/* -- shared brief slide panel -- */
+.brief-panel{position:fixed;bottom:0;left:var(--sidebar);right:0;z-index:160;background:var(--bg2);border-top:2px solid var(--purple);padding:12px 20px 14px;transform:translateY(100%);transition:transform .2s ease;box-shadow:0 -4px 24px rgba(0,0,0,.4)}
+.brief-panel.open{transform:translateY(0)}
+.brief-panel-head{display:flex;align-items:center;gap:10px;margin-bottom:6px}
+.brief-panel-label{font-size:9px;font-weight:700;letter-spacing:1.2px;color:var(--purple)}
+.brief-panel-slug{font-size:11px;font-family:var(--mono);color:var(--cyan)}
+.brief-panel-close{margin-left:auto;background:none;border:none;color:var(--dim);cursor:pointer;font-size:15px;line-height:1;padding:0 2px}
+.brief-panel-close:hover{color:var(--text)}
+.brief-panel-text{font-size:13px;line-height:1.55;color:var(--text);max-width:900px}
+
 /* -- toast -- */
 .toasts{position:fixed;bottom:20px;right:20px;z-index:300;display:flex;flex-direction:column;gap:8px;pointer-events:none}
 .toast{background:var(--bg3);border:1px solid var(--sep);border-radius:var(--rs);padding:10px 14px;font-size:13px;min-width:220px;animation:fadeIn .2s ease;pointer-events:none}
@@ -1663,6 +1673,16 @@ code{font-family:var(--mono);font-size:12px;background:var(--bg4);padding:1px 5p
 </div><!-- content -->
 </div><!-- main -->
 </div><!-- layout -->
+
+<!-- shared brief slide panel (used by all brief buttons across all panels) -->
+<div id="brief-panel" class="brief-panel">
+  <div class="brief-panel-head">
+    <span class="brief-panel-label" id="bp-label">BRIEF</span>
+    <span class="brief-panel-slug" id="bp-slug"></span>
+    <button class="brief-panel-close" onclick="closeBriefPanel()">✕</button>
+  </div>
+  <div class="brief-panel-text" id="bp-text"></div>
+</div>
 
 <!-- ═══════ MODULE DETAIL MODAL ═══════ -->
 <div class="modal-bg" id="mod-modal">
@@ -2946,7 +2966,8 @@ async function openSessionDrawer(sessionId) {
       <div class="ttp-grid">${ttps.map(t => {
         const col = TACTIC_COLORS[t.tactic] || TACTIC_COLORS.unknown;
         return `<div class="ttp-item">
-          <span class="badge badge-red" style="font-family:var(--mono);min-width:72px;text-align:center">${escHtml(t.id)}</span>
+          <span class="badge badge-red" style="font-family:var(--mono);min-width:72px;text-align:center;cursor:pointer"
+                onclick="showBrief('${escAttr(t.id)}','art')" title="Detection brief">${escHtml(t.id)}</span>
           <span style="flex:1">${escHtml(t.name||t.id)}</span>
           <span class="badge" style="background:${col}22;color:${col};font-size:10px;white-space:nowrap">${escHtml(t.tactic)}</span>
           ${t.source ? `<span class="text-xs text-dim">${escHtml(t.source)}</span>` : ''}
@@ -4039,6 +4060,46 @@ async function fetchQuickBrief() {
   }, 14);
 }
 
+// ===== SHARED BRIEF PANEL =====
+
+let _briefIv = null;
+
+function closeBriefPanel() {
+  document.getElementById('brief-panel').classList.remove('open');
+  if (_briefIv) { clearInterval(_briefIv); _briefIv = null; }
+}
+
+async function showBrief(id, type) {
+  // type: 'kb' = kb_summaries (slug), 'art' = artifact_summaries (TID)
+  const panel  = document.getElementById('brief-panel');
+  const label  = document.getElementById('bp-label');
+  const slugEl = document.getElementById('bp-slug');
+  const txtEl  = document.getElementById('bp-text');
+  if (_briefIv) { clearInterval(_briefIv); _briefIv = null; }
+  label.textContent = type === 'art' ? 'DETECTION BRIEF' : 'BRIEF';
+  slugEl.textContent = id;
+  txtEl.textContent = '…';
+  panel.classList.add('open');
+
+  const url = type === 'art'
+    ? `/api/artifacts/brief/${encodeURIComponent(id)}`
+    : `/api/kb/brief/${encodeURIComponent(id)}`;
+  const r = await fetch(url).then(x => x.json()).catch(() => null);
+  if (!r || r.error) {
+    txtEl.textContent = type === 'art'
+      ? `No detection brief for ${id}. Run: python worker.py sigma`
+      : `No brief for "${id}". Run: python worker.py summarize`;
+    return;
+  }
+  const text = r.summary || '';
+  txtEl.textContent = '';
+  let i = 0;
+  _briefIv = setInterval(() => {
+    if (i >= text.length) { clearInterval(_briefIv); _briefIv = null; return; }
+    txtEl.textContent += text[i++];
+  }, 13);
+}
+
 // ===== TTP IMPLEMENTATIONS TAB =====
 
 let _implTabReady = false;
@@ -4085,7 +4146,7 @@ function _renderImplRows(rows) {
   el.innerHTML = `
     <div class="tbl-wrap"><table class="data-table">
       <thead><tr>
-        <th>ATT&amp;CK ID</th><th>Technique</th><th>Tactic</th><th>Platform</th><th>Blog slug</th><th>Notes</th><th>Blog</th>
+        <th>ATT&amp;CK ID</th><th>Technique</th><th>Tactic</th><th>Platform</th><th>Blog slug</th><th>Notes</th><th>Blog</th><th></th>
       </tr></thead>
       <tbody>${rows.map(r => {
         const tc = TACTIC_COLORS[r.tactic] || '#636366';
@@ -4095,13 +4156,15 @@ function _renderImplRows(rows) {
           ? '<span class="badge badge-cyan" style="font-size:9px">linux</span>'
           : '<span class="badge badge-dim" style="font-size:9px">mac</span>';
         return `<tr>
-          <td><span class="badge badge-red" style="font-family:var(--mono);font-size:10px">${escHtml(r.attack_id)}</span></td>
+          <td><span class="badge badge-red" style="font-family:var(--mono);font-size:10px;cursor:pointer"
+                onclick="showBrief('${escAttr(r.attack_id)}','art')">${escHtml(r.attack_id)}</span></td>
           <td style="font-weight:500;max-width:200px">${escHtml(r.tech_name||r.attack_id)}</td>
           <td><span class="badge" style="background:${tc}22;color:${tc};font-size:9px">${escHtml(r.tactic||'-')}</span></td>
           <td>${platBadge}</td>
           <td><code style="font-size:11px;color:var(--cyan)">${escHtml(r.blog_slug||'-')}</code></td>
           <td class="text-dim text-xs" style="max-width:220px;line-height:1.4">${escHtml((r.notes||'').slice(0,80))}${(r.notes||'').length>80?'...':''}</td>
           <td>${r.blog_url ? `<a href="${escAttr(r.blog_url)}" target="_blank" class="btn btn-ghost btn-xs">Blog</a>` : '<span class="text-dim text-xs">-</span>'}</td>
+          <td>${r.blog_slug ? `<button class="btn-brief" onclick="showBrief('${escAttr(r.blog_slug)}','kb')">brief</button>` : ''}</td>
         </tr>`;
       }).join('')}
       </tbody>
@@ -4145,13 +4208,14 @@ function _renderExtractRows(rows) {
     <div class="tbl-wrap"><table class="data-table">
       <thead><tr>
         <th>Blog slug</th><th>ATT&amp;CK IDs</th><th>Tactics</th><th>Conf.</th>
-        <th>Rationale</th><th>Model</th><th>Blog</th>
+        <th>Rationale</th><th>Model</th><th>Blog</th><th></th>
       </tr></thead>
       <tbody>${rows.map(r => {
         const cc  = CONF_COLORS[r.confidence] || '#636366';
         const ids = (r.attack_ids || []).map(a =>
           `<span class="badge badge-red" style="font-family:var(--mono);font-size:10px;margin-right:3px;cursor:pointer"
-                 onclick="_filterExtractByAttackId('${escAttr(a)}')">${escHtml(a)}</span>`
+                 title="Click: detection brief  |  Shift+click: filter by ID"
+                 onclick="event.shiftKey?_filterExtractByAttackId('${escAttr(a)}'):showBrief('${escAttr(a)}','art')">${escHtml(a)}</span>`
         ).join('') || '<span class="text-dim text-xs">-</span>';
         const tacs = (r.tactics || []).map(t => {
           const tc = TACTIC_COLORS[t] || TACTIC_COLORS.unknown;
@@ -4166,6 +4230,7 @@ function _renderExtractRows(rows) {
           <td class="text-dim text-xs" style="max-width:260px;line-height:1.4">${escHtml((r.rationale||'').slice(0,120))}${(r.rationale||'').length>120?'...':''}</td>
           <td><span class="text-dim text-xs" style="font-family:var(--mono)">${escHtml(r.model||'-')}</span></td>
           <td>${r.blog_url ? `<a href="${escAttr(r.blog_url)}" target="_blank" class="btn btn-ghost btn-xs">Blog</a>` : '<span class="text-dim text-xs">-</span>'}</td>
+          <td><button class="btn-brief" onclick="showBrief('${escAttr(r.slug)}','kb')">brief</button></td>
         </tr>`;
       }).join('')}
       </tbody>
@@ -4217,6 +4282,7 @@ async function loadMalpDetail(id, type) {
     <div class="malp-post-row">
       <a href="${p.url||'#'}" target="_blank" class="malp-post-link">${escHtml(p.title||p.url||'')}</a>
       <span class="malp-post-date">${p.date||''}</span>
+      ${p.slug ? `<button class="btn-brief" style="margin-left:6px" onclick="showBrief('${escAttr(p.slug)}','kb')">brief</button>` : ''}
     </div>`).join('');
   card.innerHTML = `
     <div class="card-header">
