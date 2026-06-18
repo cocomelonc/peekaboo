@@ -853,7 +853,7 @@ def cmd_sigma(args: argparse.Namespace) -> None:
 
     db.init()
 
-    # ── Step 1: parse sigma rules if --sigma-path given ─────────────────────
+    # -- Step 1: parse sigma rules if --sigma-path given ---------------------
     if sigma_path:
         sigma_dir = Path(sigma_path).expanduser()
         if not sigma_dir.exists():
@@ -886,7 +886,7 @@ def cmd_sigma(args: argparse.Namespace) -> None:
         if parse_only:
             return
 
-    # ── Step 2: LLM summarization ────────────────────────────────────────────
+    # -- Step 2: LLM summarization --------------------------------------------
     total = db.count_artifact_entries()
     if total == 0:
         print("[sigma] artifact map is empty — add --sigma-path to parse rules first", flush=True)
