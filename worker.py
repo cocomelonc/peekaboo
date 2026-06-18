@@ -844,18 +844,53 @@ def _build_sigma_prompt(entry: dict) -> str:
 
 
 def cmd_sigma(args: argparse.Namespace) -> None:
-    """Precompute detection briefs for each ATT&CK technique in the artifact map."""
-    model    = args.model
-    base_url = args.url
-    timeout  = args.timeout
+    """Parse Sigma rules and/or precompute detection briefs per ATT&CK technique."""
+    model      = args.model
+    base_url   = args.url
+    timeout    = args.timeout
+    sigma_path = getattr(args, "sigma_path", None)
+    parse_only = getattr(args, "parse_only", False)
 
     db.init()
 
+    # ── Step 1: parse sigma rules if --sigma-path given ─────────────────────
+    if sigma_path:
+        sigma_dir = Path(sigma_path).expanduser()
+        if not sigma_dir.exists():
+            print(f"[sigma] path not found: {sigma_dir}", flush=True)
+            sys.exit(1)
+        try:
+            import sys as _sys
+            _sys.path.insert(0, str(Path(__file__).parent / "dashboard"))
+            from artifact_parser import build_artifact_map, HAS_YAML
+        except ImportError:
+            print("[sigma] artifact_parser not available (pyyaml installed?)", flush=True)
+            sys.exit(1)
+        if not HAS_YAML:
+            print("[sigma] pyyaml not installed — run: pip install pyyaml", flush=True)
+            sys.exit(1)
+
+        print(f"[sigma] parsing {sigma_dir} …", flush=True)
+        parsed = 0
+
+        def _prog(current: int, total: int, filename: str) -> None:
+            nonlocal parsed
+            parsed = current
+            if current % 500 == 0 and current:
+                print(f"[sigma]   {current}/{total} rules parsed", flush=True)
+
+        entries = build_artifact_map(sigma_dir, _prog)
+        db.save_artifact_entries(entries)
+        print(f"[sigma] stored {len(entries)} techniques from {parsed} rules", flush=True)
+
+        if parse_only:
+            return
+
+    # ── Step 2: LLM summarization ────────────────────────────────────────────
     total = db.count_artifact_entries()
     if total == 0:
-        print("[sigma] artifact map is empty — build it first:", flush=True)
-        print("[sigma]   open Artifact Map panel -> 'Build from Sigma Rules'", flush=True)
-        print("[sigma]   or: curl http://localhost:5000/api/artifacts/rebuild", flush=True)
+        print("[sigma] artifact map is empty — add --sigma-path to parse rules first", flush=True)
+        print("[sigma]   example: python worker.py sigma --sigma-path ~/hacking/sigma", flush=True)
         return
 
     ok, installed = _ollama_has_model(model, base_url)
@@ -871,14 +906,14 @@ def cmd_sigma(args: argparse.Namespace) -> None:
             n = conn.execute(
                 "DELETE FROM artifact_summaries WHERE model=?", (model,)
             ).rowcount
-        print(f"[sigma] --rebuild: wiped {n} rows for model={model}", flush=True)
+        print(f"[sigma] --rebuild: wiped {n} summary rows for model={model}", flush=True)
 
     pending_tids = db.get_artifact_tids_without_summary(model)
     if not pending_tids:
         print(f"[sigma] all {total} techniques already have briefs for {model}", flush=True)
         return
 
-    print(f"[sigma] {len(pending_tids)}/{total} techniques pending with {model} …", flush=True)
+    print(f"[sigma] {len(pending_tids)}/{total} techniques to brief with {model} …", flush=True)
     done = failed = 0
 
     for i, tid in enumerate(pending_tids, 1):
@@ -1142,11 +1177,17 @@ def _build_parser() -> argparse.ArgumentParser:
     sp.add_argument("--rebuild-changed", action="store_true", dest="rebuild_changed",
                     help="re-summarize docs whose meow source is newer than summarized_at")
 
-    sgp = sub.add_parser("sigma", help="precompute detection briefs for artifact map techniques (LLM, GPU step)")
-    sgp.add_argument("--model",   default="qwen3:14b")
-    sgp.add_argument("--url",     default="http://localhost:11434")
-    sgp.add_argument("--timeout", type=int, default=120)
-    sgp.add_argument("--rebuild", action="store_true", help="wipe existing briefs and redo all")
+    sgp = sub.add_parser("sigma", help="parse Sigma rules + precompute detection briefs (LLM)")
+    sgp.add_argument("--sigma-path", default=None, dest="sigma_path",
+                     metavar="PATH",
+                     help="parse Sigma rules from PATH into artifact_map before briefing")
+    sgp.add_argument("--parse-only", action="store_true", dest="parse_only",
+                     help="only parse Sigma rules, skip LLM briefing")
+    sgp.add_argument("--model",      default="qwen3:14b")
+    sgp.add_argument("--url",        default="http://localhost:11434")
+    sgp.add_argument("--timeout",    type=int, default=120)
+    sgp.add_argument("--rebuild",    action="store_true",
+                     help="wipe existing LLM briefs and redo all")
 
     rp = sub.add_parser("refresh", help="one-shot incremental update (scan? + init + embed + tag + ttp? + summarize?)")
     rp.add_argument("--embed-model", default="nomic-embed-text", dest="embed_model")
