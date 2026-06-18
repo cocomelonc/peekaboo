@@ -4516,6 +4516,45 @@ async function loadArtifacts() {
   }
 }
 
+function artRebuild() {
+  const rebuildRow = document.getElementById('art-rebuild-row');
+  const fill       = document.getElementById('art-prog-fill');
+  const msg        = document.getElementById('art-prog-msg');
+  const btn        = document.getElementById('art-rebuild-btn');
+  document.getElementById('art-empty-build').style.display = 'none';
+  rebuildRow.style.display = '';
+  if (btn) btn.disabled = true;
+  fill.style.width = '0%';
+  msg.textContent = 'Connecting…';
+
+  const es = new EventSource('/api/artifacts/rebuild');
+  es.onmessage = ev => {
+    if (ev.data === '[DONE]') { es.close(); return; }
+    let d;
+    try { d = JSON.parse(ev.data); } catch { return; }
+    if (d.status === 'running') {
+      msg.textContent = d.msg || 'Parsing…';
+      if (d.total > 0) fill.style.width = Math.round(d.current / d.total * 100) + '%';
+    } else if (d.status === 'done') {
+      fill.style.width = '100%';
+      msg.textContent = d.msg || 'Done';
+      es.close();
+      if (btn) btn.disabled = false;
+      setTimeout(() => { rebuildRow.style.display = 'none'; loadArtifacts(); }, 800);
+    } else if (d.status === 'error') {
+      msg.textContent = 'Error: ' + d.msg;
+      fill.style.background = 'var(--red)';
+      es.close();
+      if (btn) btn.disabled = false;
+    }
+  };
+  es.onerror = () => {
+    msg.textContent = 'Connection error — check console';
+    es.close();
+    if (btn) btn.disabled = false;
+  };
+}
+
 function _artRenderStats(s) {
   const row = document.getElementById('art-stats-row');
   if (!s.built) {
