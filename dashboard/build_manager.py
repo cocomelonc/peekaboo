@@ -149,7 +149,7 @@ class BuildManager:
                 try:
                     ev = q.get(timeout=30)
                 except queue.Empty:
-                    # 30s of silence — peekaboo.py is doing heavy work.
+                    # 30s of silence - peekaboo.py is doing heavy work.
                     # Send a heartbeat to keep the SSE connection alive and loop.
                     yield {"type": EV_STATE, "status": "running", "heartbeat": True}
                     continue

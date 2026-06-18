@@ -116,6 +116,13 @@ python worker.py family             malware family behavioral briefs
 
 All `worker.py` subcommands are **resumable** - they use `NOT IN` SQL patterns to skip already-processed rows. Interrupt and re-run at any time.
 
+`sigma`, `apt`, `actor`, and `family` catch `KeyboardInterrupt` and print a clean resume hint instead of a traceback:
+
+```
+[actor] interrupted at 47/312  (46 saved, 265 remaining)
+[actor] resume: python3 worker.py actor --model qwen3:14b
+```
+
 ---
 
 ## worker.py
@@ -248,6 +255,8 @@ Briefs appear in the **Overview tab** of the Artifact Map technique modal with a
 | `--model` | `qwen3:14b` | Ollama chat model |
 | `--rebuild` | off | Wipe existing LLM briefs and redo all |
 
+> **Ctrl+C safe** - each brief is written to DB immediately. Press Ctrl+C at any time; re-run the same command to resume from where it stopped.
+
 **Typical GPU/CPU workflow:**
 
 ```bash
@@ -282,6 +291,8 @@ Briefs are stored in `session_summaries` and served by `/api/apt/brief/<session_
 | `--timeout` | `120` | Per-call timeout (s) |
 | `--rebuild` | off | Wipe existing session briefs and redo all |
 
+> **Ctrl+C safe** - each brief is written to DB immediately. Press Ctrl+C at any time; re-run the same command to resume from where it stopped.
+
 ### actor
 
 ```bash
@@ -306,6 +317,8 @@ In the CLI `malpedia` sub-REPL, `brief <actor-id>` now auto-routes to the actor 
 | `--timeout` | `120` | Per-call timeout (s) |
 | `--rebuild` | off | Wipe existing actor briefs and redo all |
 
+> **Ctrl+C safe** - each brief is written to DB immediately. Press Ctrl+C at any time; re-run the same command to resume from where it stopped.
+
 > **Prerequisite:** Malpedia actor list must be cached first. Run the **Malpedia** panel in the dashboard (actors tab) or call `list_actors()` from the `malpedia` module once.
 
 ### family
@@ -329,6 +342,8 @@ Briefs are stored in `family_summaries` and served by `/api/malpedia/family/<id>
 | `--url` | `http://localhost:11434` | Ollama base URL |
 | `--timeout` | `120` | Per-call timeout (s) |
 | `--rebuild` | off | Wipe existing family briefs and redo all |
+
+> **Ctrl+C safe** - each brief is written to DB immediately. Press Ctrl+C at any time; re-run the same command to resume from where it stopped.
 
 > **Prerequisite:** Malpedia family list must be cached first. Same as `actor`.
 
@@ -432,7 +447,7 @@ The MITRE ATT&CK tab has four sub-tabs:
 - Each row has a `[brief]` button - click to show the GPU-precomputed 3-sentence summary inline, without opening the full detail card
 - Click any row to expand the full detail card with inline source code (C, C++, Nim, assembly), blog post link, and **BRIEF** block (GPU summary with typing animation)
 
-**TTP Implementations** - blog posts indexed by extracted ATT&CK ID with tactic, platform, and blog link.
+**TTP Implementations** - blog posts indexed by extracted ATT&CK ID with tactic, platform, and blog link. The `ttp_implementations` table is seeded automatically at dashboard startup from the static implementation list in `mitre.py` (no manual step required). Filter by tactic, platform, or keyword; click any ATT&CK ID badge to open a detection brief.
 
 **Extracted TTPs** - LLM-inferred ATT&CK mappings per blog post: technique ID, tactic, confidence level, and rationale. Populated by `worker.py ttp`.
 

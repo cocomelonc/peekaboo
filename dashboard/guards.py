@@ -1,5 +1,5 @@
 """
-peekaboo security primitives — import from app.py and other modules.
+peekaboo security primitives - import from app.py and other modules.
 
 Three tiny helpers, zero dependencies beyond stdlib + flask:
 
