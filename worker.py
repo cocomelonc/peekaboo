@@ -79,14 +79,20 @@ def _embed_batch(texts: list[str], model: str, base_url: str) -> list[list[float
         return None
 
 
-def _ollama_has_model(model: str, base_url: str) -> bool:
+def _ollama_has_model(model: str, base_url: str) -> tuple[bool, list[str]]:
+    """Return (ok, names). Match is exact on the user-supplied model:tag.
+    A bare 'name' (no :tag) is accepted iff 'name:latest' is present."""
     try:
         req = urllib.request.Request(base_url.rstrip("/") + "/api/tags", method="GET")
         with urllib.request.urlopen(req, timeout=5) as resp:
             names = [m["name"] for m in json.loads(resp.read()).get("models", [])]
-            return any(model.split(":")[0] in n for n in names)
     except Exception:
-        return False
+        return False, []
+    if model in names:
+        return True, names
+    if ":" not in model and f"{model}:latest" in names:
+        return True, names
+    return False, names
 
 
 # --------------------------------------------------------------------------- #
@@ -160,8 +166,11 @@ def cmd_embed(args: argparse.Namespace) -> None:
 
     db.init()
 
-    if not _ollama_has_model(model, base_url):
-        print(f"[embed] model not available: {model}  (run: ollama pull {model})", flush=True)
+    ok, installed = _ollama_has_model(model, base_url)
+    if not ok:
+        print(f"[embed] model not available: {model}", flush=True)
+        print(f"[embed] installed: {', '.join(installed) or '(none)'}", flush=True)
+        print(f"[embed] fix: ollama pull {model}", flush=True)
         sys.exit(1)
 
     if getattr(args, "rebuild", False):
@@ -363,8 +372,11 @@ def cmd_tag(args: argparse.Namespace) -> None:
 
     db.init()
 
-    if not _ollama_has_model(model, base_url):
-        print(f"[tag] model not available: {model}  (run: ollama pull {model})", flush=True)
+    ok, installed = _ollama_has_model(model, base_url)
+    if not ok:
+        print(f"[tag] model not available: {model}", flush=True)
+        print(f"[tag] installed: {', '.join(installed) or '(none)'}", flush=True)
+        print(f"[tag] fix: ollama pull {model}", flush=True)
         sys.exit(1)
 
     if getattr(args, "rebuild", False):
@@ -515,12 +527,20 @@ def _progress(pct: int, label: str = "", tag: str = "worker") -> None:
 # Entry point                                                                  #
 # --------------------------------------------------------------------------- #
 
+class _StrictParser(argparse.ArgumentParser):
+    """ArgumentParser with allow_abbrev=False forced on. Used for subparsers
+    so e.g. `--mode` doesn't silently become `--model`."""
+    def __init__(self, *args, **kwargs):
+        kwargs.setdefault("allow_abbrev", False)
+        super().__init__(*args, **kwargs)
+
+
 def _build_parser() -> argparse.ArgumentParser:
-    p = argparse.ArgumentParser(
+    p = _StrictParser(
         prog="worker.py",
         description="peekaboo KB enrichment worker",
     )
-    sub = p.add_subparsers(dest="cmd", required=True)
+    sub = p.add_subparsers(dest="cmd", required=True, parser_class=_StrictParser)
 
     sc = sub.add_parser("scan", help="scan local _posts/*.markdown -> library_cache.json")
     sc.add_argument("--posts",     default=None,
