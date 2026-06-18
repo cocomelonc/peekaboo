@@ -1018,19 +1018,25 @@ def cmd_apt(args: argparse.Namespace) -> None:
     print(f"[apt] {len(pending)} session(s) to brief with {model} …", flush=True)
     done = failed = 0
 
-    for i, sess in enumerate(pending, 1):
-        sid    = sess["session_id"]
-        actor  = sess.get("actor_id", "?")
-        prompt = _build_apt_prompt(sess)
-        raw    = _chat_text(prompt, model, base_url, timeout, label="apt")
-        if raw is None:
-            failed += 1
-            print(f"[apt] {i}/{len(pending)} FAIL  {sid} ({actor})", flush=True)
-            continue
-        summary = _normalize_summary(raw)
-        db.upsert_session_summary(sid, model, summary, raw)
-        done += 1
-        print(f"[apt] {i}/{len(pending)} ok    {sid}  ({actor})", flush=True)
+    try:
+        for i, sess in enumerate(pending, 1):
+            sid    = sess["session_id"]
+            actor  = sess.get("actor_id", "?")
+            prompt = _build_apt_prompt(sess)
+            raw    = _chat_text(prompt, model, base_url, timeout, label="apt")
+            if raw is None:
+                failed += 1
+                print(f"[apt] {i}/{len(pending)} FAIL  {sid} ({actor})", flush=True)
+                continue
+            summary = _normalize_summary(raw)
+            db.upsert_session_summary(sid, model, summary, raw)
+            done += 1
+            print(f"[apt] {i}/{len(pending)} ok    {sid}  ({actor})", flush=True)
+    except KeyboardInterrupt:
+        remaining = len(pending) - i
+        print(f"\n[apt] interrupted at {i}/{len(pending)}  ({done} saved, {remaining} remaining)", flush=True)
+        print(f"[apt] resume: python3 worker.py apt --model {model}", flush=True)
+        return
 
     print(f"[apt] done: {done} ok, {failed} failed", flush=True)
 
@@ -1122,22 +1128,28 @@ def cmd_actor(args: argparse.Namespace) -> None:
     print(f"[actor] {len(pending)}/{len(actor_ids)} actors to brief with {model} …", flush=True)
     done = failed = 0
 
-    for i, actor_id in enumerate(pending, 1):
-        actor = _malp.get_actor(actor_id)
-        if actor.get("error"):
-            failed += 1
-            print(f"[actor] {i}/{len(pending)} SKIP  {actor_id}  ({actor['error']})", flush=True)
-            continue
-        prompt = _build_actor_prompt(actor)
-        raw    = _chat_text(prompt, model, base_url, timeout, label="actor")
-        if raw is None:
-            failed += 1
-            print(f"[actor] {i}/{len(pending)} FAIL  {actor_id}", flush=True)
-            continue
-        summary = _normalize_summary(raw)
-        db.upsert_actor_summary(actor_id, model, summary, raw)
-        done += 1
-        print(f"[actor] {i}/{len(pending)} ok    {actor_id}  ({actor.get('name','')})", flush=True)
+    try:
+        for i, actor_id in enumerate(pending, 1):
+            actor = _malp.get_actor(actor_id)
+            if actor.get("error"):
+                failed += 1
+                print(f"[actor] {i}/{len(pending)} SKIP  {actor_id}  ({actor['error']})", flush=True)
+                continue
+            prompt = _build_actor_prompt(actor)
+            raw    = _chat_text(prompt, model, base_url, timeout, label="actor")
+            if raw is None:
+                failed += 1
+                print(f"[actor] {i}/{len(pending)} FAIL  {actor_id}", flush=True)
+                continue
+            summary = _normalize_summary(raw)
+            db.upsert_actor_summary(actor_id, model, summary, raw)
+            done += 1
+            print(f"[actor] {i}/{len(pending)} ok    {actor_id}  ({actor.get('name','')})", flush=True)
+    except KeyboardInterrupt:
+        remaining = len(pending) - i
+        print(f"\n[actor] interrupted at {i}/{len(pending)}  ({done} saved, {remaining} remaining)", flush=True)
+        print(f"[actor] resume: python3 worker.py actor --model {model}", flush=True)
+        return
 
     print(f"[actor] done: {done} ok, {failed} failed", flush=True)
 
@@ -1217,22 +1229,28 @@ def cmd_family(args: argparse.Namespace) -> None:
     print(f"[family] {len(pending)}/{len(family_ids)} families to brief with {model} …", flush=True)
     done = failed = 0
 
-    for i, family_id in enumerate(pending, 1):
-        family = _malp.get_family(family_id)
-        if family.get("error"):
-            failed += 1
-            print(f"[family] {i}/{len(pending)} SKIP  {family_id}  ({family['error']})", flush=True)
-            continue
-        prompt = _build_family_prompt(family)
-        raw    = _chat_text(prompt, model, base_url, timeout, label="family")
-        if raw is None:
-            failed += 1
-            print(f"[family] {i}/{len(pending)} FAIL  {family_id}", flush=True)
-            continue
-        summary = _normalize_summary(raw)
-        db.upsert_family_summary(family_id, model, summary, raw)
-        done += 1
-        print(f"[family] {i}/{len(pending)} ok    {family_id}  ({family.get('name','')})", flush=True)
+    try:
+        for i, family_id in enumerate(pending, 1):
+            family = _malp.get_family(family_id)
+            if family.get("error"):
+                failed += 1
+                print(f"[family] {i}/{len(pending)} SKIP  {family_id}  ({family['error']})", flush=True)
+                continue
+            prompt = _build_family_prompt(family)
+            raw    = _chat_text(prompt, model, base_url, timeout, label="family")
+            if raw is None:
+                failed += 1
+                print(f"[family] {i}/{len(pending)} FAIL  {family_id}", flush=True)
+                continue
+            summary = _normalize_summary(raw)
+            db.upsert_family_summary(family_id, model, summary, raw)
+            done += 1
+            print(f"[family] {i}/{len(pending)} ok    {family_id}  ({family.get('name','')})", flush=True)
+    except KeyboardInterrupt:
+        remaining = len(pending) - i
+        print(f"\n[family] interrupted at {i}/{len(pending)}  ({done} saved, {remaining} remaining)", flush=True)
+        print(f"[family] resume: python3 worker.py family --model {model}", flush=True)
+        return
 
     print(f"[family] done: {done} ok, {failed} failed", flush=True)
 
