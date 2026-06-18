@@ -176,6 +176,21 @@ def init() -> None:
         """)
 
         db.execute("""
+            CREATE TABLE IF NOT EXISTS ttp_extracted (
+                doc_id       INTEGER NOT NULL REFERENCES kb_docs(id) ON DELETE CASCADE,
+                model        TEXT    NOT NULL DEFAULT '',
+                attack_ids   TEXT    NOT NULL DEFAULT '[]',
+                tactics      TEXT    NOT NULL DEFAULT '[]',
+                confidence   TEXT    NOT NULL DEFAULT 'low',
+                rationale    TEXT    NOT NULL DEFAULT '',
+                raw_output   TEXT    NOT NULL DEFAULT '',
+                extracted_at TEXT    NOT NULL DEFAULT (datetime('now')),
+                PRIMARY KEY (doc_id, model)
+            )
+        """)
+        db.execute("CREATE INDEX IF NOT EXISTS idx_ttp_extracted_model ON ttp_extracted(model)")
+
+        db.execute("""
             CREATE TABLE IF NOT EXISTS patch_history (
                 id          INTEGER PRIMARY KEY AUTOINCREMENT,
                 filename    TEXT NOT NULL DEFAULT '',
@@ -1015,10 +1030,11 @@ def upsert_kb_embedding(doc_id: int, model: str, vector: list[float]) -> None:
 
 def kb_stats() -> dict:
     with _conn() as db:
-        docs       = db.execute("SELECT COUNT(*) FROM kb_docs").fetchone()[0]
-        embeddings = db.execute("SELECT COUNT(*) FROM kb_embeddings").fetchone()[0]
-        tags       = db.execute("SELECT COUNT(*) FROM kb_tags").fetchone()[0]
-    return {"docs": docs, "embeddings": embeddings, "tags": tags}
+        docs         = db.execute("SELECT COUNT(*) FROM kb_docs").fetchone()[0]
+        embeddings   = db.execute("SELECT COUNT(*) FROM kb_embeddings").fetchone()[0]
+        tags         = db.execute("SELECT COUNT(*) FROM kb_tags").fetchone()[0]
+        ttp_extracted = db.execute("SELECT COUNT(*) FROM ttp_extracted").fetchone()[0]
+    return {"docs": docs, "embeddings": embeddings, "tags": tags, "ttp_extracted": ttp_extracted}
 
 
 def get_kb_doc_by_id(doc_id: int) -> dict | None:
@@ -1106,6 +1122,202 @@ def get_kb_tags_all(model: str | None = None) -> dict[str, list[str]]:
         else:
             out[r["slug"]] = tags
     return out
+
+
+# --------------------------------------------------------------------------- #
+#  TTP Extracted (LLM-inferred, written by worker.py ttp, read by chatbot)    #
+# --------------------------------------------------------------------------- #
+
+def _ttp_extracted_row(row: sqlite3.Row) -> dict:
+    d = dict(row)
+    for k in ("attack_ids", "tactics"):
+        try:
+            d[k] = json.loads(d[k] or "[]")
+        except Exception:
+            d[k] = []
+    return d
+
+
+def get_kb_docs_without_ttps(model: str) -> list[dict]:
+    """Return kb_docs with src_path that have no ttp_extracted row for this model."""
+    with _conn() as db:
+        rows = db.execute(
+            """
+            SELECT id, slug, title, date, category, attack_ids, src_path
+            FROM kb_docs
+            WHERE src_path != ''
+              AND id NOT IN (SELECT doc_id FROM ttp_extracted WHERE model = ?)
+            ORDER BY id
+            """,
+            (model,),
+        ).fetchall()
+    result = []
+    for r in rows:
+        d = dict(r)
+        try:
+            d["attack_ids"] = json.loads(d["attack_ids"] or "[]")
+        except Exception:
+            d["attack_ids"] = []
+        result.append(d)
+    return result
+
+
+def upsert_ttp_extracted(doc_id: int, model: str, attack_ids: list[str],
+                          tactics: list[str], confidence: str,
+                          rationale: str, raw_output: str = "") -> None:
+    with _conn() as db:
+        db.execute(
+            """
+            INSERT INTO ttp_extracted
+              (doc_id, model, attack_ids, tactics, confidence, rationale, raw_output)
+            VALUES (?, ?, ?, ?, ?, ?, ?)
+            ON CONFLICT(doc_id, model) DO UPDATE SET
+              attack_ids   = excluded.attack_ids,
+              tactics      = excluded.tactics,
+              confidence   = excluded.confidence,
+              rationale    = excluded.rationale,
+              raw_output   = excluded.raw_output,
+              extracted_at = datetime('now')
+            """,
+            (doc_id, model, json.dumps(attack_ids), json.dumps(tactics),
+             confidence, rationale, raw_output),
+        )
+
+
+def delete_ttp_extracted(model: str, doc_ids: list[int] | None = None) -> int:
+    with _conn() as db:
+        if doc_ids is None:
+            cur = db.execute("DELETE FROM ttp_extracted WHERE model = ?", (model,))
+        else:
+            cur = db.executemany(
+                "DELETE FROM ttp_extracted WHERE model = ? AND doc_id = ?",
+                [(model, i) for i in doc_ids],
+            )
+        return cur.rowcount or 0
+
+
+def get_ttp_extracted_all(model: str | None = None) -> list[dict]:
+    """Return all rows joined with kb_docs metadata. If model is None, returns all models."""
+    with _conn() as db:
+        if model:
+            rows = db.execute(
+                """
+                SELECT d.slug, d.title, d.blog_url, d.category,
+                       d.attack_ids AS doc_attack_ids,
+                       t.model, t.attack_ids, t.tactics, t.confidence,
+                       t.rationale, t.extracted_at
+                FROM ttp_extracted t
+                JOIN kb_docs d ON d.id = t.doc_id
+                WHERE t.model = ?
+                ORDER BY d.id
+                """,
+                (model,),
+            ).fetchall()
+        else:
+            rows = db.execute(
+                """
+                SELECT d.slug, d.title, d.blog_url, d.category,
+                       d.attack_ids AS doc_attack_ids,
+                       t.model, t.attack_ids, t.tactics, t.confidence,
+                       t.rationale, t.extracted_at
+                FROM ttp_extracted t
+                JOIN kb_docs d ON d.id = t.doc_id
+                ORDER BY d.id
+                """,
+            ).fetchall()
+    result = []
+    for r in rows:
+        d = dict(r)
+        for k in ("attack_ids", "tactics", "doc_attack_ids"):
+            try:
+                d[k] = json.loads(d[k] or "[]")
+            except Exception:
+                d[k] = []
+        result.append(d)
+    return result
+
+
+def get_ttp_extracted_by_doc(doc_id: int, model: str) -> dict | None:
+    with _conn() as db:
+        row = db.execute(
+            "SELECT * FROM ttp_extracted WHERE doc_id = ? AND model = ?",
+            (doc_id, model),
+        ).fetchone()
+    return _ttp_extracted_row(row) if row else None
+
+
+def get_ttp_extracted_by_attack_id(attack_id: str, model: str | None = None) -> list[dict]:
+    """Return docs whose extracted attack_ids contain attack_id (exact match after JSON parse)."""
+    with _conn() as db:
+        if model:
+            rows = db.execute(
+                """
+                SELECT d.slug, d.title, d.blog_url, d.category,
+                       t.attack_ids, t.tactics, t.confidence, t.rationale, t.model
+                FROM ttp_extracted t
+                JOIN kb_docs d ON d.id = t.doc_id
+                WHERE t.model = ? AND t.attack_ids LIKE ?
+                ORDER BY t.confidence DESC, d.id
+                """,
+                (model, f"%{attack_id}%"),
+            ).fetchall()
+        else:
+            rows = db.execute(
+                """
+                SELECT d.slug, d.title, d.blog_url, d.category,
+                       t.attack_ids, t.tactics, t.confidence, t.rationale, t.model
+                FROM ttp_extracted t
+                JOIN kb_docs d ON d.id = t.doc_id
+                WHERE t.attack_ids LIKE ?
+                ORDER BY t.confidence DESC, d.id
+                """,
+                (f"%{attack_id}%",),
+            ).fetchall()
+    result = []
+    for r in rows:
+        d = dict(r)
+        for k in ("attack_ids", "tactics"):
+            try:
+                d[k] = json.loads(d[k] or "[]")
+            except Exception:
+                d[k] = []
+        if attack_id in d["attack_ids"]:  # exact membership check after JSON parse
+            result.append(d)
+    return result
+
+
+def get_kb_ttp_extracted_docs(model: str) -> list[dict]:
+    """Return (id, slug, src_path, extracted_at, title, category) for docs
+    that have a ttp_extracted row under this model — used to detect stale sources."""
+    with _conn() as db:
+        rows = db.execute(
+            """
+            SELECT d.id, d.slug, d.src_path, d.title, d.category, d.attack_ids,
+                   t.extracted_at
+            FROM kb_docs d
+            JOIN ttp_extracted t ON t.doc_id = d.id
+            WHERE t.model = ?
+            """,
+            (model,),
+        ).fetchall()
+    result = []
+    for r in rows:
+        d = dict(r)
+        try:
+            d["attack_ids"] = json.loads(d["attack_ids"] or "[]")
+        except Exception:
+            d["attack_ids"] = []
+        result.append(d)
+    return result
+
+
+def count_ttp_extracted(model: str | None = None) -> int:
+    with _conn() as db:
+        if model:
+            return db.execute(
+                "SELECT COUNT(*) FROM ttp_extracted WHERE model = ?", (model,)
+            ).fetchone()[0]
+        return db.execute("SELECT COUNT(*) FROM ttp_extracted").fetchone()[0]
 
 
 def get_kb_embeddings_all(model: str = "nomic-embed-text") -> list[dict]:

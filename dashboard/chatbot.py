@@ -100,6 +100,7 @@ _TECHNICAL_MARKERS = [
     "feal", "treyfer", "lucifer", "camellia",
     "yara", "sigma", "sysmon", "telemetry", "detection",
     "mitre", "att&ck", "t1055", "t1106", "t1027", "t1547", "t1102",
+    "ttp", "ttps", "technique", "tactic",
 ]
 
 
@@ -321,6 +322,14 @@ def _rag_context(question: str, n: int = 6, max_lines: int = 18) -> str:
         tlist = p.get("tags") or []
         if tlist:
             block += f"\n- Tags: {', '.join(tlist)}"
+        ttp_entry = p.get("ttps") or {}
+        if ttp_entry and ttp_entry.get("attack_ids"):
+            ids_str = ", ".join(ttp_entry["attack_ids"])
+            conf    = ttp_entry.get("confidence", "")
+            block  += f"\n- Extracted TTPs: {ids_str}" + (f" ({conf})" if conf else "")
+            note = ttp_entry.get("rationale", "")
+            if note:
+                block += f"\n- TTP note: {note}"
         try:
             block += f"\n- Relevance: {score:.0%}"
         except Exception:

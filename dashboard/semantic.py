@@ -70,12 +70,13 @@ def _post_text(post: dict) -> str:
 _cache: dict | None = None
 
 
-def _load_from_db() -> tuple[list[dict], dict[str, list[float]], dict[str, list[str]]] | None:
+def _load_from_db() -> tuple[list[dict], dict[str, list[float]], dict[str, list[str]], dict[str, dict]] | None:
     try:
         sys.path.insert(0, str(Path(__file__).parent))
         import db
-        rows = db.get_kb_embeddings_all(EMBED_MODEL)
-        tags = db.get_kb_tags_all(None)  # union of all tagging models
+        rows     = db.get_kb_embeddings_all(EMBED_MODEL)
+        tags     = db.get_kb_tags_all(None)       # union of all tagging models
+        ttp_rows = db.get_ttp_extracted_all(None) # all models; latest confidence wins per slug
     except Exception as e:
         print(f"[semantic] db load error: {e}")
         return None
@@ -96,17 +97,36 @@ def _load_from_db() -> tuple[list[dict], dict[str, list[float]], dict[str, list[
             "category":   r.get("category", ""),
             "attack_ids": r.get("attack_ids", []),
         })
-    return posts, embs, tags
+    # build ttps index: slug -> {attack_ids, tactics, confidence, rationale}
+    # for multi-model rows, high-confidence entry wins over low
+    _conf_rank = {"high": 0, "medium": 1, "low": 2}
+    ttps: dict[str, dict] = {}
+    for r in ttp_rows:
+        slug = r.get("slug") or ""
+        if not slug or not r.get("attack_ids"):
+            continue
+        entry = {
+            "attack_ids": r["attack_ids"],
+            "tactics":    r.get("tactics", []),
+            "confidence": r.get("confidence", "low"),
+            "rationale":  r.get("rationale", ""),
+        }
+        if slug not in ttps or (
+            _conf_rank.get(entry["confidence"], 2) <
+            _conf_rank.get(ttps[slug]["confidence"], 2)
+        ):
+            ttps[slug] = entry
+    return posts, embs, tags, ttps
 
 
-def _load_from_json() -> tuple[list[dict], dict[str, list[float]], dict[str, list[str]]] | None:
+def _load_from_json() -> tuple[list[dict], dict[str, list[float]], dict[str, list[str]], dict[str, dict]] | None:
     try:
         if not _LIBRARY_CACHE.exists() or not _EMB_CACHE.exists():
             return None
         posts = json.loads(_LIBRARY_CACHE.read_text())
         raw   = json.loads(_EMB_CACHE.read_text())
         embs  = {item["slug"]: item["embedding"] for item in raw}
-        return posts, embs, {}  # no tags in legacy json
+        return posts, embs, {}, {}  # no tags/ttps in legacy json
     except Exception:
         return None
 
@@ -124,13 +144,20 @@ def _load_index() -> tuple[list[dict], dict[str, list[float]], dict[str, list[st
         data   = _load_from_json()
         source = "json"
     if data is None:
-        _cache = {"posts": [], "embs": {}, "tags": {}, "db_mtime": db_mtime, "source": "none"}
+        _cache = {"posts": [], "embs": {}, "tags": {}, "ttps": {},
+                  "db_mtime": db_mtime, "source": "none"}
         return [], {}, {}
 
-    posts, embs, tags = data
-    _cache = {"posts": posts, "embs": embs, "tags": tags,
+    posts, embs, tags, ttps = data
+    _cache = {"posts": posts, "embs": embs, "tags": tags, "ttps": ttps,
               "db_mtime": db_mtime, "source": source}
     return posts, embs, tags
+
+
+def _load_ttps() -> dict[str, dict]:
+    """Return {slug: {attack_ids, tactics, confidence, rationale}} from cache."""
+    _load_index()
+    return _cache.get("ttps", {}) if _cache else {}
 
 
 def data_source() -> str:
@@ -151,6 +178,11 @@ def tagged_count() -> int:
     return len(tags)
 
 
+def ttp_count() -> int:
+    """Number of posts with extracted TTPs (0 if worker ttp has not been run)."""
+    return len(_load_ttps())
+
+
 def invalidate_cache() -> None:
     global _cache
     _cache = None
@@ -160,12 +192,16 @@ def invalidate_cache() -> None:
 # Public retrieval API                                                         #
 # --------------------------------------------------------------------------- #
 
-def find_related_posts(query: str, max_results: int = 8) -> list[dict]:
+def find_related_posts(query: str, max_results: int = 8,
+                       filter_ttp: str | None = None) -> list[dict]:
     """Embed query, cosine-rank all posts, return top matches.
 
-    If kb_tags has entries, results carry a `tags` field for downstream callers
-    (e.g. the chatbot prompt builder)."""
+    filter_ttp: if set (e.g. "T1055"), only return posts whose extracted ttps
+    include that ATT&CK ID. Useful for TTP-scoped semantic search.
+
+    Results carry `tags` and `ttps` fields for downstream callers (chatbot RAG)."""
     posts, embs, tags = _load_index()
+    ttps = _load_ttps()
     if not posts or not embs:
         return []
 
@@ -179,6 +215,8 @@ def find_related_posts(query: str, max_results: int = 8) -> list[dict]:
         slug = post.get("slug", "")
         pvec = embs.get(slug)
         if pvec is None:
+            continue
+        if filter_ttp and filter_ttp not in (ttps.get(slug) or {}).get("attack_ids", []):
             continue
         sim = _cosine(q_vec, pvec)
         scored.append((sim, post))
@@ -198,8 +236,37 @@ def find_related_posts(query: str, max_results: int = 8) -> list[dict]:
             "category":   post.get("category", ""),
             "attack_ids": post.get("attack_ids", []),
             "tags":       tags.get(slug, []),
+            "ttps":       ttps.get(slug),
             "score":      round(sim, 3),
         })
+    return results
+
+
+def find_posts_by_ttp(attack_id: str) -> list[dict]:
+    """Return all posts whose extracted TTPs contain attack_id, sorted by confidence.
+
+    Useful for the frontend: 'show me all posts implementing T1055'."""
+    posts_idx, _, tags = _load_index()
+    ttps = _load_ttps()
+    posts_by_slug = {p["slug"]: p for p in posts_idx}
+
+    _conf_rank = {"high": 0, "medium": 1, "low": 2}
+    results = []
+    for slug, t in ttps.items():
+        if attack_id not in t.get("attack_ids", []):
+            continue
+        p = posts_by_slug.get(slug, {})
+        results.append({
+            "slug":       slug,
+            "title":      p.get("title", ""),
+            "date":       p.get("date", ""),
+            "blog_url":   p.get("blog_url", ""),
+            "category":   p.get("category", ""),
+            "attack_ids": p.get("attack_ids", []),
+            "tags":       tags.get(slug, []),
+            "ttps":       t,
+        })
+    results.sort(key=lambda x: _conf_rank.get(x["ttps"]["confidence"], 2))
     return results
 
 

@@ -38,6 +38,7 @@ from __future__ import annotations
 import argparse
 import json
 import os
+import re as _re
 import sys
 import time
 import urllib.request
@@ -260,7 +261,8 @@ Source snippet:
 Output the JSON object only. No prose, no markdown fences."""
 
 
-def _chat_json(prompt: str, model: str, base_url: str, timeout: int = 300) -> tuple[dict | None, str]:
+def _chat_json(prompt: str, model: str, base_url: str,
+               timeout: int = 300, label: str = "worker") -> tuple[dict | None, str]:
     """Single-turn Ollama chat in JSON mode. Returns (parsed_json, raw_text)."""
     payload = json.dumps({
         "model":      model,
@@ -282,7 +284,7 @@ def _chat_json(prompt: str, model: str, base_url: str, timeout: int = 300) -> tu
             data = json.loads(resp.read())
         raw  = data.get("message", {}).get("content", "")
     except Exception as e:
-        print(f"\n[tag] chat error: {e}", flush=True)
+        print(f"\n[{label}] chat error: {e}", flush=True)
         return None, ""
     try:
         return json.loads(raw), raw
@@ -359,6 +361,182 @@ def _stale_doc_ids(model: str, meow_root: str) -> list[int]:
     return stale
 
 
+# --------------------------------------------------------------------------- #
+# TTP extraction (ATT&CK ID mapping via LLM)                                  #
+# --------------------------------------------------------------------------- #
+
+_ATTACK_TACTICS = [
+    "reconnaissance", "resource-development", "initial-access",
+    "execution", "persistence", "privilege-escalation",
+    "defense-evasion", "credential-access", "discovery",
+    "lateral-movement", "collection", "command-and-control",
+    "exfiltration", "impact",
+]
+
+_ATTACK_ID_RE = _re.compile(r'^T\d{4}(\.\d{3})?$')
+
+
+def _normalize_ttps(parsed: dict) -> tuple[list[str], list[str], str, str]:
+    """Validate and sanitize LLM JSON output.
+    Returns (attack_ids, tactics, confidence, rationale)."""
+    raw_ids = parsed.get("attack_ids", [])
+    if isinstance(raw_ids, str):
+        raw_ids = [raw_ids]
+    attack_ids: list[str] = []
+    for t in raw_ids[:5]:
+        if isinstance(t, str):
+            t = t.strip().upper()
+            if _ATTACK_ID_RE.match(t) and t not in attack_ids:
+                attack_ids.append(t)
+
+    raw_tactics = parsed.get("tactics", [])
+    if isinstance(raw_tactics, str):
+        raw_tactics = [raw_tactics]
+    allow = set(_ATTACK_TACTICS)
+    tactics: list[str] = []
+    for t in raw_tactics:
+        if isinstance(t, str):
+            t = t.strip().lower()
+            if t in allow and t not in tactics:
+                tactics.append(t)
+
+    confidence = (parsed.get("confidence") or "low").strip().lower()
+    if confidence not in ("high", "medium", "low"):
+        confidence = "low"
+
+    rationale = (parsed.get("rationale") or "").strip()[:200]
+    return attack_ids, tactics, confidence, rationale
+
+
+def _build_ttp_prompt(doc: dict, code: str) -> str:
+    aids = doc.get("attack_ids") or []
+    if isinstance(aids, str):
+        try:
+            aids = json.loads(aids)
+        except Exception:
+            aids = []
+    aids_s = ", ".join(aids) if aids else "(none in metadata)"
+    code_block = code.strip()[:8000] if code else "(no source code available)"
+
+    return f"""You are a MITRE ATT&CK analyst. Analyze this offensive-security source code and identify the ATT&CK techniques it implements.
+
+Source: {doc.get('slug', '')} ({doc.get('category', '')})
+Title: {doc.get('title', '')}
+Known ATT&CK from metadata: {aids_s}
+
+--- CODE ---
+{code_block}
+--- END ---
+
+Return ONLY valid JSON (no markdown fences, no commentary):
+{{
+  "attack_ids": [...],
+  "tactics":    [...],
+  "confidence": "...",
+  "rationale":  "..."
+}}
+
+Rules:
+- attack_ids: up to 5 IDs in format "T1234" or "T1234.567"; only IDs you are confident about
+- tactics: ATT&CK tactic slugs from this list only: {", ".join(_ATTACK_TACTICS)}
+- confidence: exactly one of "high", "medium", or "low"
+- rationale: one sentence (≤120 chars) naming the dominant API calls or code patterns
+- If the file is a utility/helper with no clear ATT&CK mapping, return empty arrays and "low"
+- Do not invent IDs. Prefer fewer high-confidence IDs over many guesses."""
+
+
+def _stale_ttp_doc_ids(model: str, meow_root: str) -> list[int]:
+    """Doc IDs whose meow source file mtime > extracted_at for this model."""
+    from datetime import datetime
+    stale: list[int] = []
+    for r in db.get_kb_ttp_extracted_docs(model):
+        resolved = _resolve_src(r.get("src_path", ""), meow_root)
+        if resolved is None:
+            continue
+        try:
+            src_mtime    = datetime.fromtimestamp(resolved.stat().st_mtime)
+            extracted_at = datetime.fromisoformat(r["extracted_at"])
+        except Exception:
+            continue
+        if src_mtime > extracted_at:
+            stale.append(r["id"])
+    return stale
+
+
+def cmd_ttp(args: argparse.Namespace) -> None:
+    """Extract MITRE ATT&CK TTPs from source code via LLM. Resumable."""
+    model     = args.model
+    base_url  = args.url
+    max_lines = args.code_lines
+    timeout   = args.timeout
+    meow_root = args.meow_root or os.environ.get("MEOW_ROOT") or ""
+
+    if meow_root:
+        print(f"[ttp] meow_root: {meow_root}", flush=True)
+
+    db.init()
+
+    ok, installed = _ollama_has_model(model, base_url)
+    if not ok:
+        print(f"[ttp] model not available: {model}", flush=True)
+        print(f"[ttp] installed: {', '.join(installed) or '(none)'}", flush=True)
+        print(f"[ttp] fix: ollama pull {model}", flush=True)
+        sys.exit(1)
+
+    if getattr(args, "rebuild", False):
+        n = db.delete_ttp_extracted(model)
+        print(f"[ttp] --rebuild: wiped {n} ttp rows for model={model}", flush=True)
+    elif getattr(args, "rebuild_changed", False):
+        stale = _stale_ttp_doc_ids(model, meow_root)
+        if stale:
+            n = db.delete_ttp_extracted(model, doc_ids=stale)
+            print(f"[ttp] --rebuild-changed: wiped {n} stale ttp rows", flush=True)
+        else:
+            print("[ttp] --rebuild-changed: nothing stale", flush=True)
+
+    def _run_once() -> int:
+        pending = db.get_kb_docs_without_ttps(model)
+        if not pending:
+            print(f"[ttp] nothing to do - all docs already processed with {model}", flush=True)
+            return 0
+
+        print(f"[ttp] {len(pending)} docs to extract TTPs from with {model} …", flush=True)
+        done   = 0
+        failed = 0
+
+        for i, doc in enumerate(pending, 1):
+            code   = _read_code(doc.get("src_path", ""), max_lines, meow_root)
+            prompt = _build_ttp_prompt(doc, code)
+            parsed, raw = _chat_json(prompt, model, base_url, timeout=timeout, label="ttp")
+
+            if parsed is None:
+                failed += 1
+                attack_ids, tactics, confidence, rationale = [], [], "low", ""
+            else:
+                attack_ids, tactics, confidence, rationale = _normalize_ttps(parsed)
+
+            db.upsert_ttp_extracted(doc["id"], model, attack_ids, tactics,
+                                     confidence, rationale, raw)
+            done += 1
+
+            pct     = int(i / len(pending) * 100)
+            ids_str = ",".join(attack_ids[:3]) or "(none)"
+            label   = f"{i}/{len(pending)} - {doc['slug'][:28]:28s} -> {ids_str} [{confidence}]"
+            _progress(pct, label, tag="ttp")
+
+        print(f"\n[ttp] processed {done} docs ({failed} LLM failures)", flush=True)
+        return done
+
+    _run_once()
+
+    if args.watch:
+        interval = int(args.watch)
+        print(f"[ttp] --watch {interval}s - polling for new docs …", flush=True)
+        while True:
+            time.sleep(interval)
+            _run_once()
+
+
 def cmd_tag(args: argparse.Namespace) -> None:
     """Classify each doc with constrained-JSON tags via local Ollama. Resumable."""
     model     = args.model
@@ -403,7 +581,7 @@ def cmd_tag(args: argparse.Namespace) -> None:
         for i, doc in enumerate(pending, 1):
             code   = _read_code(doc.get("src_path", ""), max_lines, meow_root)
             prompt = _build_tag_prompt(doc, code)
-            parsed, raw = _chat_json(prompt, model, base_url, timeout=timeout)
+            parsed, raw = _chat_json(prompt, model, base_url, timeout=timeout, label="tag")
 
             if parsed is None:
                 failed += 1
@@ -438,7 +616,6 @@ def cmd_status(args: argparse.Namespace) -> None:
 
     print(f"kb_docs        : {s['docs']}")
 
-    # per-model breakdown via raw SQL (small enough that we don't need new helpers)
     import sqlite3
     with sqlite3.connect(db.DB_PATH) as conn:
         conn.row_factory = sqlite3.Row
@@ -448,6 +625,15 @@ def cmd_status(args: argparse.Namespace) -> None:
         tag_rows = conn.execute(
             "SELECT model, COUNT(*) n FROM kb_tags GROUP BY model"
         ).fetchall()
+        ttp_rows = conn.execute(
+            "SELECT model, COUNT(*) n FROM ttp_extracted GROUP BY model"
+        ).fetchall()
+
+    # docs with src_path (eligible for ttp extraction)
+    with sqlite3.connect(db.DB_PATH) as conn:
+        src_docs = conn.execute(
+            "SELECT COUNT(*) FROM kb_docs WHERE src_path != ''"
+        ).fetchone()[0]
 
     if not emb_rows:
         print(f"kb_embeddings  : 0  (pending: {s['docs']})")
@@ -465,9 +651,20 @@ def cmd_status(args: argparse.Namespace) -> None:
                 pass
         print(f"kb_tags        : {r['n']}  ({r['model']})  pending: {s['docs'] - r['n']}, stale: {stale}")
 
+    if not ttp_rows:
+        print(f"ttp_extracted  : 0  (eligible: {src_docs} docs with src_path)")
+    for r in ttp_rows:
+        stale = 0
+        if meow_root:
+            try:
+                stale = len(_stale_ttp_doc_ids(r["model"], meow_root))
+            except Exception:
+                pass
+        print(f"ttp_extracted  : {r['n']}  ({r['model']})  pending: {src_docs - r['n']}, stale: {stale}")
+
 
 def cmd_refresh(args: argparse.Namespace) -> None:
-    """One-shot incremental update: [scan?] + init + embed pending + tag pending + re-tag stale."""
+    """One-shot incremental update: [scan?] + init + embed pending + tag pending + [ttp?]."""
     if getattr(args, "scan", False):
         print("[refresh] ----- scan -----", flush=True)
         scan_args = argparse.Namespace(posts=None, meow_root=args.meow_root)
@@ -489,9 +686,20 @@ def cmd_refresh(args: argparse.Namespace) -> None:
         timeout=args.timeout, meow_root=args.meow_root,
         watch=0,
         rebuild=args.rebuild,
-        rebuild_changed=(not args.rebuild),  # default: catch stale-source docs
+        rebuild_changed=(not args.rebuild),
     )
     cmd_tag(tag_args)
+
+    if getattr(args, "ttp", False):
+        print("\n[refresh] ----- ttp -----", flush=True)
+        ttp_args = argparse.Namespace(
+            model=args.ttp_model, url=args.url, code_lines=200,
+            timeout=args.timeout, meow_root=args.meow_root,
+            watch=0,
+            rebuild=args.rebuild,
+            rebuild_changed=(not args.rebuild),
+        )
+        cmd_ttp(ttp_args)
 
     print("\n[refresh] ----- done -----", flush=True)
     cmd_status(args)
@@ -575,9 +783,25 @@ def _build_parser() -> argparse.ArgumentParser:
     tp.add_argument("--rebuild-changed", action="store_true", dest="rebuild_changed",
                     help="re-tag docs whose meow source is newer than tagged_at")
 
-    rp = sub.add_parser("refresh", help="one-shot incremental update (scan? + init + embed + tag)")
+    xp = sub.add_parser("ttp", help="extract MITRE ATT&CK TTPs from source code (LLM)")
+    xp.add_argument("--model",           default="qwen3:14b",              help="Ollama chat model")
+    xp.add_argument("--url",             default="http://localhost:11434", help="Ollama base URL")
+    xp.add_argument("--code-lines",      type=int, default=200, dest="code_lines",
+                    help="max src lines fed to the LLM")
+    xp.add_argument("--timeout",         type=int, default=120,            help="per-call timeout (s)")
+    xp.add_argument("--meow-root",       default=None, dest="meow_root",
+                    help="local meow repo path (default: $MEOW_ROOT)")
+    xp.add_argument("--watch",           type=int, default=0, metavar="N",
+                    help="loop every N seconds (0 = run once)")
+    xp.add_argument("--rebuild",         action="store_true",
+                    help="wipe all ttp_extracted for this model first, then process all")
+    xp.add_argument("--rebuild-changed", action="store_true", dest="rebuild_changed",
+                    help="re-extract docs whose meow source is newer than extracted_at")
+
+    rp = sub.add_parser("refresh", help="one-shot incremental update (scan? + init + embed + tag + ttp?)")
     rp.add_argument("--embed-model", default="nomic-embed-text", dest="embed_model")
     rp.add_argument("--tag-model",   default="qwen3:1.7b",       dest="tag_model")
+    rp.add_argument("--ttp-model",   default="qwen3:14b",        dest="ttp_model")
     rp.add_argument("--url",         default="http://localhost:11434")
     rp.add_argument("--timeout",     type=int, default=300)
     rp.add_argument("--meow-root",   default=None, dest="meow_root")
@@ -585,6 +809,8 @@ def _build_parser() -> argparse.ArgumentParser:
                     help="re-scan local _posts before init (catches new/edited blog files)")
     rp.add_argument("--rebuild",     action="store_true",
                     help="wipe embeddings + tags first, then full re-do")
+    rp.add_argument("--ttp",         action="store_true",
+                    help="also run TTP extraction after tagging (uses --ttp-model)")
 
     return p
 
@@ -601,6 +827,8 @@ if __name__ == "__main__":
         cmd_embed(args)
     elif args.cmd == "tag":
         cmd_tag(args)
+    elif args.cmd == "ttp":
+        cmd_ttp(args)
     elif args.cmd == "refresh":
         cmd_refresh(args)
     elif args.cmd == "status":
