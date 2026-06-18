@@ -2382,7 +2382,7 @@ def _cli_show_kb_brief(slug: str) -> None:
     console.print()
     console.print(Panel(
         summary,
-        title=f"[heading] BRIEF — {slug} [/heading]",
+        title=f"[heading] BRIEF - {slug} [/heading]",
         border_style="bright_magenta",
         box=box.ROUNDED,
         padding=(0, 2),
@@ -2407,7 +2407,7 @@ def _cli_show_art_brief(tid: str) -> None:
     console.print()
     console.print(Panel(
         summary,
-        title=f"[heading] DETECTION BRIEF — {tid.upper()} [/heading]",
+        title=f"[heading] DETECTION BRIEF - {tid.upper()} [/heading]",
         border_style="bright_magenta",
         box=box.ROUNDED,
         padding=(0, 2),
@@ -2432,7 +2432,7 @@ def _cli_show_session_brief(session_id: str) -> None:
     console.print()
     console.print(Panel(
         summary,
-        title=f"[heading] CAMPAIGN BRIEF — {session_id} [/heading]",
+        title=f"[heading] CAMPAIGN BRIEF - {session_id} [/heading]",
         border_style="bright_magenta",
         box=box.ROUNDED,
         padding=(0, 2),
@@ -2457,7 +2457,7 @@ def _cli_show_actor_brief(actor_id: str) -> None:
     console.print()
     console.print(Panel(
         summary,
-        title=f"[heading] ACTOR PROFILE — {actor_id} [/heading]",
+        title=f"[heading] ACTOR PROFILE - {actor_id} [/heading]",
         border_style="bright_magenta",
         box=box.ROUNDED,
         padding=(0, 2),
@@ -2482,7 +2482,7 @@ def _cli_show_family_brief(family_id: str) -> None:
     console.print()
     console.print(Panel(
         summary,
-        title=f"[heading] MALWARE FAMILY — {family_id} [/heading]",
+        title=f"[heading] MALWARE FAMILY - {family_id} [/heading]",
         border_style="bright_magenta",
         box=box.ROUNDED,
         padding=(0, 2),

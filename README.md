@@ -109,6 +109,9 @@ python worker.py tag         ---->  badge rendering
 python worker.py ttp         rsync  extracted TTP table
 python worker.py summarize          AI assistant typing animation
 python worker.py sigma              artifact map detection briefs
+python worker.py apt                campaign brief per session
+python worker.py actor              actor threat profile briefs
+python worker.py family             malware family behavioral briefs
 ```
 
 All `worker.py` subcommands are **resumable** - they use `NOT IN` SQL patterns to skip already-processed rows. Interrupt and re-run at any time.
@@ -134,6 +137,9 @@ python worker.py <subcommand> [options]
 | `ttp` | GPU/LLM | Extract MITRE ATT&CK IDs, tactics, confidence, and rationale from source code |
 | `summarize` | GPU/LLM | Precompute one 3-sentence summary per blog post (what/how/detection) |
 | `sigma` | CPU+GPU | Parse Sigma rules into artifact map, then precompute detection briefs per technique |
+| `apt` | GPU/LLM | Precompute 3-sentence campaign brief per finished pipeline session |
+| `actor` | GPU/LLM | Precompute threat profile brief per Malpedia actor |
+| `family` | GPU/LLM | Precompute behavioral brief per Malpedia malware family |
 | `refresh` | all | One-shot incremental update: scan → init → embed → tag → (ttp?) → (summarize?) |
 | `status` | CPU | Show row counts, pending counts, and stale counts for all tables |
 
@@ -254,6 +260,78 @@ python worker.py sigma --model qwen3:14b
 rsync gpu-server:~/hacking/peekaboo/dashboard/peekaboo.db dashboard/
 ```
 
+### apt
+
+```bash
+python worker.py apt
+python worker.py apt --model qwen3:14b --rebuild
+```
+
+Reads every finished (`status='success'`) pipeline session from `pipeline_sessions`, builds a prompt from the session's actor ID, ATT&CK technique list, tactics, and implant modules, then asks the LLM to write a 3-sentence campaign brief:
+
+- **Sentence 1** - who the actor is and what they targeted
+- **Sentence 2** - key ATT&CK techniques and tactics used
+- **Sentence 3** - highest-priority detection recommendation
+
+Briefs are stored in `session_summaries` and served by `/api/apt/brief/<session_id>`. In the **APT Campaign** panel, every row in the sessions table has a `[brief]` button - clicking it opens the slide panel with the precomputed text and a typing animation. No LLM at render time.
+
+| flag | default | description |
+|------|---------|-------------|
+| `--model` | `qwen3:14b` | Ollama chat model |
+| `--url` | `http://localhost:11434` | Ollama base URL |
+| `--timeout` | `120` | Per-call timeout (s) |
+| `--rebuild` | off | Wipe existing session briefs and redo all |
+
+### actor
+
+```bash
+python worker.py actor
+python worker.py actor --model qwen3:14b --rebuild
+```
+
+Loads the local Malpedia actor cache (`data/malpedia_actors_cache.json`), fetches each actor's full profile from the API (name, country, suspected targets, victim sectors, incident type, malware families), and asks the LLM to write a 3-sentence threat actor profile:
+
+- **Sentence 1** - who the actor is, suspected origin, and motivation
+- **Sentence 2** - typical targets and known malware families
+- **Sentence 3** - a behavioral signature defenders should hunt for
+
+Briefs are stored in `actor_summaries` and served by `/api/malpedia/actor/<id>/brief`. In the **Malpedia** panel, the actor/family detail card shows a `[brief]` button inline in the title - clicking it opens the slide panel.
+
+In the CLI `malpedia` sub-REPL, `brief <actor-id>` now auto-routes to the actor profile (or `brief <slug>` for KB posts, or `brief <family-id>` for malware families).
+
+| flag | default | description |
+|------|---------|-------------|
+| `--model` | `qwen3:14b` | Ollama chat model |
+| `--url` | `http://localhost:11434` | Ollama base URL |
+| `--timeout` | `120` | Per-call timeout (s) |
+| `--rebuild` | off | Wipe existing actor briefs and redo all |
+
+> **Prerequisite:** Malpedia actor list must be cached first. Run the **Malpedia** panel in the dashboard (actors tab) or call `list_actors()` from the `malpedia` module once.
+
+### family
+
+```bash
+python worker.py family
+python worker.py family --model qwen3:14b --rebuild
+```
+
+Same flow as `actor` but for malware families. Fetches each family's description, alt-names, and attribution from the Malpedia API, then generates a 3-sentence behavioral brief:
+
+- **Sentence 1** - what the malware does and its primary capabilities
+- **Sentence 2** - how it persists, evades, or moves laterally
+- **Sentence 3** - most actionable detection or hunting recommendation
+
+Briefs are stored in `family_summaries` and served by `/api/malpedia/family/<id>/brief`.
+
+| flag | default | description |
+|------|---------|-------------|
+| `--model` | `qwen3:14b` | Ollama chat model |
+| `--url` | `http://localhost:11434` | Ollama base URL |
+| `--timeout` | `120` | Per-call timeout (s) |
+| `--rebuild` | off | Wipe existing family briefs and redo all |
+
+> **Prerequisite:** Malpedia family list must be cached first. Same as `actor`.
+
 ### refresh
 
 ```bash
@@ -287,6 +365,9 @@ kb_tags        : 205  (qwen3:1.7b)        pending: 1, stale: 0
 ttp_extracted  : 197  (qwen3:14b)         pending: 9, stale: 0
 kb_summaries   : 205  (qwen3:14b)         pending: 1, stale: 0
 artifact_summ  : 412  (qwen3:14b)         pending: 0
+session_summ   : 8    (qwen3:14b)         pending: 0
+actor_summ     : 1420 (qwen3:14b)
+family_summ    : 2300 (qwen3:14b)
 ```
 
 ---
@@ -300,7 +381,6 @@ cp .env.example .env
 $EDITOR .env   # fill in real tokens
 ```
 
-The Settings panel in the UI is a **read-only viewer** of what's currently loaded (secrets masked).
 
 | group | example variables |
 |-------|------|
@@ -366,6 +446,8 @@ The Malpedia tab connects to the [Malpedia REST API](https://malpedia.caad.fkie.
 
 - Search actors by name, country, or malware family
 - Expand any actor/family to see techniques, aliases, and semantically matched blog posts with similarity score
+- Each actor/family detail card has a `[brief]` button in the title - shows the GPU-precomputed threat profile or behavioral brief in the slide panel (no LLM at render time; requires `worker.py actor` / `worker.py family`)
+- Each related blog post row has a `[brief]` button → KB summary from `worker.py summarize`
 - Requires a Malpedia API key in `.env` (`MALPEDIA_API_TOKEN`)
 
 ### APT campaign pipeline
@@ -385,6 +467,8 @@ Fully automated five-stage pipeline: Malpedia actor → threat reports → TTP e
 ![img](./screenshots/2026-06-08_00-01.png)
 
 All progress streams live to the UI. Every session is persisted to SQLite with Reports, TTPs, and Binary tabs.
+
+Each session row in the history table has a `[brief]` button - shows a GPU-precomputed 3-sentence campaign brief (actor, techniques used, detection priority) in the slide panel. No LLM at render time; requires `worker.py apt`.
 
 ### Artifact Map
 
@@ -454,6 +538,7 @@ python3 peekaboo_cli.py
 | `list [category]` | List all techniques, optionally filtered by category |
 | `search <query>` | Full-text search across technique titles |
 | `show <slug>` | Display metadata panel + syntax-highlighted source code |
+| `brief <slug>` | Print GPU-precomputed 3-sentence summary (from `worker.py summarize`) |
 | `categories` | List all available categories |
 
 ### `builder` sub-REPL
@@ -490,6 +575,9 @@ python3 peekaboo_cli.py
 | `search <query>` | Search by name, country, or alias |
 | `actor <id>` | Show actor detail + matched blog posts |
 | `family <id>` | Show family detail + matched blog posts |
+| `brief <id>` | GPU-precomputed brief - auto-routes to actor profile, family behavioral brief, or KB post summary depending on what `<id>` matches |
+| `yara <family-id>` | Fetch Malpedia YARA rules for a malware family |
+| `reports [N]` | Show N most recent Malpedia threat reports |
 
 ### `ttp` sub-REPL
 
@@ -498,6 +586,7 @@ python3 peekaboo_cli.py
 | `list [tactic]` | List all techniques, optionally filtered by tactic |
 | `search <query>` | Search by technique name |
 | `show <T-ID>` | Show full technique detail with mapped blog posts |
+| `brief <T-ID>` | Print GPU-precomputed detection brief (from `worker.py sigma`) |
 | `tactics` | List all ATT&CK tactics |
 
 ### `vtscan` sub-REPL
