@@ -554,7 +554,8 @@ def api_mitre_library_entry(slug: str):
                 full_source = p.read_text(encoding="utf-8", errors="replace")
             except Exception:
                 pass
-    return jsonify({**entry, "full_source": full_source})
+    summary = _db.get_kb_summary_for_slug(slug)
+    return jsonify({**entry, "full_source": full_source, "summary": summary})
 
 
 @app.route("/api/mitre/library/rebuild", methods=["POST"])

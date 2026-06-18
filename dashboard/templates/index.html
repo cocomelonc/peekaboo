@@ -566,6 +566,9 @@ code{font-family:var(--mono);font-size:12px;background:var(--bg4);padding:1px 5p
 .mitre-section{animation:fadeIn .15s ease}
 .mitre-detail-card{margin-top:12px}
 .mitre-code-wrap{margin:0;overflow:auto;max-height:420px;border-radius:6px}
+.ml-brief{margin:14px 0 12px;padding:12px 14px;border-left:2px solid var(--purple);background:var(--bg2);border-radius:0 6px 6px 0}
+.ml-brief-label{font-size:9px;font-weight:700;letter-spacing:1.2px;color:var(--purple);margin-bottom:5px}
+.ml-brief-text{font-size:13px;line-height:1.55;color:var(--text)}
 .mitre-code{font-size:11px;display:block;background:var(--bg3);padding:14px;border-radius:6px}
 .mitre-detail-meta{margin-top:6px;display:flex;gap:5px;flex-wrap:wrap}
 .mitre-detail-actions{margin-left:12px;display:flex;gap:8px;align-items:flex-start;flex-shrink:0}
@@ -1459,6 +1462,7 @@ code{font-family:var(--mono);font-size:12px;background:var(--bg4);padding:1px 5p
                   onclick="document.getElementById('ml-detail').style.display='none'">Close</button>
         </div>
       </div>
+      <div id="ml-detail-brief" class="ml-brief" style="display:none"></div>
       <pre class="mitre-code-wrap"><code id="ml-detail-code" class="language-c mitre-code"></code></pre>
     </div>
   </div>
@@ -3918,6 +3922,15 @@ async function openLibDetail(slug) {
 
   const blogLink = document.getElementById('ml-detail-blog');
   if (d.blog_url) { blogLink.href = d.blog_url; blogLink.style.display = ''; }
+
+  const brief = document.getElementById('ml-detail-brief');
+  if (d.summary) {
+    brief.innerHTML = `<div class="ml-brief-label">BRIEF</div><div class="ml-brief-text">${escHtml(d.summary)}</div>`;
+    brief.style.display = '';
+  } else {
+    brief.style.display = 'none';
+    brief.innerHTML = '';
+  }
 
   const src = d.full_source || d.snippet || '(no source available)';
   const ext = (d.src_path||'').split('.').pop().toLowerCase();

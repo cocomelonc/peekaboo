@@ -365,27 +365,53 @@ def _stale_doc_ids(model: str, meow_root: str) -> list[int]:
 # KB summaries (precomputed chatbot answers, baked once on GPU)               #
 # --------------------------------------------------------------------------- #
 
-def _build_summary_prompt(doc: dict, code: str) -> str:
+def _read_blog_markdown(slug: str, date: str) -> str:
+    """Return the blog post body (frontmatter stripped). Located via $BLOG_POSTS_ROOT."""
+    root = os.environ.get("BLOG_POSTS_ROOT") or ""
+    if not root or not slug:
+        return ""
+    base = Path(root).expanduser()
+    candidates = []
+    if date:
+        candidates.append(base / f"{date}-{slug}.markdown")
+    candidates.extend(base.glob(f"*-{slug}.markdown"))
+    p = next((c for c in candidates if c.is_file()), None)
+    if not p:
+        return ""
+    try:
+        text = p.read_text(errors="replace")
+    except Exception:
+        return ""
+    m = _re.match(r'^---\s*\n.*?\n---\s*\n', text, _re.S)
+    body = text[m.end():] if m else text
+    return body.strip()
+
+
+def _build_summary_prompt(doc: dict, post_body: str, code: str) -> str:
     aids = doc.get("attack_ids") or []
     if isinstance(aids, str):
         try: aids = json.loads(aids)
         except Exception: aids = []
     aids_s = ", ".join(aids) if aids else "(none)"
-    code_block = code.strip()[:6000] if code else "(no source code available)"
+    post_block = (post_body or "").strip()[:5000] or "(no blog body)"
+    code_block = (code or "").strip()[:3000] or "(no source code)"
 
-    return f"""You are writing one short reference card for a malware research blog post. Output PLAIN TEXT only. No markdown headings, no code fences, no lists, no bullets.
+    return f"""You are writing one short reference card for a malware research blog post. Read BOTH the blog body and the source snippet, then summarize the technique. Output PLAIN TEXT only - no markdown headings, no code fences, no lists, no bullets.
 
 Write exactly 3 sentences, separated by single spaces:
-1. What the technique does (offensive mechanism).
-2. The key API calls or syscalls or primitives the code uses.
+1. What the technique does and why an attacker uses it (offensive mechanism + intent).
+2. The key API calls, syscalls, or primitives implementing it (cite real names from the code or post).
 3. One detection / telemetry signal (Sysmon event ID, ETW provider, registry key, or process artifact).
 
-Hard limit: 380 characters total. No preamble. No 'In this post' or 'This post explains'. Start with the verb or noun directly.
+Hard limit: 420 characters total. No preamble. No 'In this post' or 'This post explains'. Start with the verb or noun directly. Ground every claim in the post or code below; do not invent facts.
 
 Post:
 - Title: {doc.get("title", "")}
 - Category: {doc.get("category", "")}
 - ATT&CK: {aids_s}
+
+Blog body:
+{post_block}
 
 Source snippet:
 {code_block}"""
@@ -496,17 +522,19 @@ def cmd_summarize(args: argparse.Namespace) -> None:
         done = failed = 0
 
         for i, doc in enumerate(pending, 1):
-            code    = _read_code(doc.get("src_path", ""), max_lines, meow_root)
-            prompt  = _build_summary_prompt(doc, code)
-            raw     = _chat_text(prompt, model, base_url, timeout=timeout, label="sum")
-            summary = _normalize_summary(raw)
+            code      = _read_code(doc.get("src_path", ""), max_lines, meow_root)
+            post_body = _read_blog_markdown(doc.get("slug", ""), doc.get("date", ""))
+            prompt    = _build_summary_prompt(doc, post_body, code)
+            raw       = _chat_text(prompt, model, base_url, timeout=timeout, label="sum")
+            summary   = _normalize_summary(raw)
             if not summary:
                 failed += 1
             db.upsert_kb_summary(doc["id"], model, summary, raw)
             done += 1
 
-            pct   = int(i / len(pending) * 100)
-            label = f"{i}/{len(pending)} - {doc['slug'][:30]:30s} -> {len(summary)}ch"
+            pct    = int(i / len(pending) * 100)
+            srcs   = "+".join(s for s in (["blog"] if post_body else []) + (["code"] if code else []))
+            label  = f"{i}/{len(pending)} - {doc['slug'][:28]:28s} [{srcs or '-'}] -> {len(summary)}ch"
             _progress(pct, label, tag="sum")
 
         print(f"\n[sum] summarized {done} docs ({failed} empty)", flush=True)

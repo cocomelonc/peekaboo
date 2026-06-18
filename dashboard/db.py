@@ -1205,6 +1205,31 @@ def get_kb_summarized_docs(model: str) -> list[dict]:
     return [dict(r) for r in rows]
 
 
+def get_kb_summary_for_slug(slug: str, model: str | None = None) -> str:
+    """Return one summary string for a slug. Latest model wins if model is None."""
+    with _conn() as db:
+        if model:
+            row = db.execute(
+                """
+                SELECT s.summary FROM kb_summaries s
+                JOIN kb_docs d ON d.id = s.doc_id
+                WHERE d.slug = ? AND s.model = ? AND s.summary != ''
+                """,
+                (slug, model),
+            ).fetchone()
+        else:
+            row = db.execute(
+                """
+                SELECT s.summary FROM kb_summaries s
+                JOIN kb_docs d ON d.id = s.doc_id
+                WHERE d.slug = ? AND s.summary != ''
+                ORDER BY s.summarized_at DESC LIMIT 1
+                """,
+                (slug,),
+            ).fetchone()
+    return row["summary"] if row else ""
+
+
 def get_kb_summaries_all(model: str | None = None) -> dict[str, str]:
     """Return {slug: summary} for chatbot template rendering. Latest model wins per slug."""
     with _conn() as db:
