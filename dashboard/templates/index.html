@@ -1396,9 +1396,10 @@ code{font-family:var(--mono);font-size:12px;background:var(--bg4);padding:1px 5p
 
   <!-- tab bar -->
   <div class="mitre-tabs">
-    <div class="mitre-tab active" id="mtab-groups"  onclick="switchMitreTab('groups')">APT Groups</div>
-    <div class="mitre-tab"        id="mtab-library" onclick="switchMitreTab('library')">Technique Library</div>
-    <div class="mitre-tab"        id="mtab-impl"    onclick="switchMitreTab('impl')">TTP Implementations</div>
+    <div class="mitre-tab active" id="mtab-groups"   onclick="switchMitreTab('groups')">APT Groups</div>
+    <div class="mitre-tab"        id="mtab-library"  onclick="switchMitreTab('library')">Technique Library</div>
+    <div class="mitre-tab"        id="mtab-impl"     onclick="switchMitreTab('impl')">TTP Implementations</div>
+    <div class="mitre-tab"        id="mtab-extract"  onclick="switchMitreTab('extract')">Extracted TTPs</div>
   </div>
 
   <!-- ===== GROUPS ===== -->
@@ -1493,6 +1494,51 @@ code{font-family:var(--mono);font-size:12px;background:var(--bg4);padding:1px 5p
         <div class="empty"><div>Select a tactic or click Search to browse implementations</div></div>
       </div>
       <div id="mi-pages" class="page-bar"></div>
+    </div>
+  </div>
+
+  <!-- ===== EXTRACTED TTPs (LLM-inferred) ===== -->
+  <div id="mitre-section-extract" class="mitre-section" style="display:none">
+    <div class="card">
+      <div class="filter-bar">
+        <input type="text" id="mx-q" placeholder="Search slug, title, ATT&amp;CK ID, rationale..."
+          style="flex:1" onkeydown="if(event.key==='Enter')searchMitreExtract(0)">
+        <input type="text" id="mx-attack" placeholder="T1055" style="width:90px;flex-shrink:0"
+          onkeydown="if(event.key==='Enter')searchMitreExtract(0)">
+        <select id="mx-tactic" style="width:auto;flex-shrink:0" onchange="searchMitreExtract(0)">
+          <option value="">All tactics</option>
+          <option value="reconnaissance">reconnaissance</option>
+          <option value="resource-development">resource-development</option>
+          <option value="initial-access">initial-access</option>
+          <option value="execution">execution</option>
+          <option value="persistence">persistence</option>
+          <option value="privilege-escalation">privilege-escalation</option>
+          <option value="defense-evasion">defense-evasion</option>
+          <option value="credential-access">credential-access</option>
+          <option value="discovery">discovery</option>
+          <option value="lateral-movement">lateral-movement</option>
+          <option value="collection">collection</option>
+          <option value="command-and-control">command-and-control</option>
+          <option value="exfiltration">exfiltration</option>
+          <option value="impact">impact</option>
+        </select>
+        <select id="mx-conf" style="width:auto;flex-shrink:0" onchange="searchMitreExtract(0)">
+          <option value="">All confidence</option>
+          <option value="high">high</option>
+          <option value="medium">medium</option>
+          <option value="low">low</option>
+        </select>
+        <button class="btn btn-primary btn-sm" onclick="searchMitreExtract(0)">Search</button>
+        <span id="mx-count" class="text-dim" style="font-size:12px;white-space:nowrap"></span>
+      </div>
+      <div class="text-xs text-dim" style="margin-bottom:10px;line-height:1.5">
+        LLM-inferred ATT&amp;CK technique IDs extracted from meow source code by <code>worker.py ttp</code>.
+        Distinct from <em>TTP Implementations</em> (curated). Each row = (doc, model) pair.
+      </div>
+      <div id="mx-rows">
+        <div class="empty"><div>Click Search to browse extracted TTPs</div></div>
+      </div>
+      <div id="mx-pages" class="page-bar"></div>
     </div>
   </div>
 </div>
@@ -2482,7 +2528,7 @@ function setPipeStep(step, status, msg) {
   if (status === 'error') icon.innerHTML = '✗';
 }
 
-const TACTIC_COLORS = {'execution':'#30D158','defense-evasion':'#FFD60A','persistence':'#0A84FF','command-and-control':'#FF453A','privilege-escalation':'#FF9F0A','credential-access':'#BF5AF2','discovery':'#64D2FF','unknown':'#636366'};
+const TACTIC_COLORS = {'reconnaissance':'#9CA3AF','resource-development':'#A78BFA','initial-access':'#F97316','execution':'#30D158','defense-evasion':'#FFD60A','persistence':'#0A84FF','command-and-control':'#FF453A','privilege-escalation':'#FF9F0A','credential-access':'#BF5AF2','discovery':'#64D2FF','lateral-movement':'#FF8FAD','collection':'#FFD60A','exfiltration':'#0A84FF','impact':'#FF375F','unknown':'#636366'};
 
 async function runPipeline() {
   const actorId = document.getElementById('apt-actor').value.trim();
@@ -3647,15 +3693,18 @@ function initMitrePanel() {
 
 async function _loadMitreStats() {
   _mitreStatsLoaded = true;
-  const [libData, implData] = await Promise.all([
+  const [libData, implData, extractData] = await Promise.all([
     fetch('/api/mitre/library?limit=1').then(r=>r.json()).catch(()=>({total:0})),
     fetch('/api/mitre/ttp_implementations?limit=1').then(r=>r.json()).catch(()=>({total:0})),
+    fetch('/api/mitre/ttp_extracted?limit=1').then(r=>r.json()).catch(()=>({total:0})),
   ]);
-  const total = libData.total || 0;
-  const impl  = implData.total || 0;
+  const total   = libData.total     || 0;
+  const impl    = implData.total    || 0;
+  const extract = extractData.total || 0;
   document.getElementById('mitre-stats-row').innerHTML = `
     <div class="stat"><div class="stat-val text-purple">${total}</div><div class="stat-label">Blog posts</div></div>
     <div class="stat"><div class="stat-val text-green">${impl}</div><div class="stat-label">TTP implementations</div></div>
+    <div class="stat"><div class="stat-val text-cyan">${extract}</div><div class="stat-label">Extracted TTPs (LLM)</div></div>
     <div class="stat"><div class="stat-val text-blue" id="mitre-stat-groups">...</div><div class="stat-label">APT groups</div></div>
   `;
   fetch('/api/mitre/groups?limit=1').then(r=>r.json()).then(d=>{
@@ -3667,7 +3716,7 @@ async function _loadMitreStats() {
 function switchMitreTab(tab, force) {
   if (tab === _mitreActiveTab && !force) return;
   _mitreActiveTab = tab;
-  ['groups','library','impl'].forEach(t => {
+  ['groups','library','impl','extract'].forEach(t => {
     document.getElementById('mtab-' + t)?.classList.toggle('active', t === tab);
     const sec = document.getElementById('mitre-section-' + t);
     if (sec) sec.style.display = t === tab ? '' : 'none';
@@ -3675,6 +3724,7 @@ function switchMitreTab(tab, force) {
   if (tab === 'groups')  _initGroupsTab();
   if (tab === 'library') _initLibTab();
   if (tab === 'impl')    _initImplTab();
+  if (tab === 'extract') _initExtractTab();
 }
 
 // ===== HELPERS =====
@@ -3955,6 +4005,76 @@ function _renderImplRows(rows) {
       }).join('')}
       </tbody>
     </table></div>`;
+}
+
+// ===== EXTRACTED TTPs TAB (LLM-inferred per kb_doc) =====
+
+let _extractTabReady = false;
+
+function _initExtractTab() {
+  if (_extractTabReady) return;
+  _extractTabReady = true;
+  searchMitreExtract(0);
+}
+
+async function searchMitreExtract(page) {
+  const q          = document.getElementById('mx-q')?.value.trim()      || '';
+  const attack_id  = document.getElementById('mx-attack')?.value.trim() || '';
+  const tactic     = document.getElementById('mx-tactic')?.value        || '';
+  const confidence = document.getElementById('mx-conf')?.value          || '';
+  _spinner('mx-rows');
+  document.getElementById('mx-pages').innerHTML = '';
+  const params = new URLSearchParams({q, attack_id, tactic, confidence, page, limit:10});
+  const d = await fetch(`/api/mitre/ttp_extracted?${params}`)
+    .then(r=>r.json()).catch(()=>({items:[],total:0,page:0,pages:1}));
+  document.getElementById('mx-count').textContent = d.total ? `${d.total} row${d.total!==1?'s':''}` : '';
+  _renderExtractRows(d.items);
+  _pgBar('mx-pages', d.page, d.pages, d.total, 'searchMitreExtract');
+}
+
+function _renderExtractRows(rows) {
+  const el = document.getElementById('mx-rows');
+  if (!rows.length) {
+    el.innerHTML = '<div class="empty"><div>No extracted TTPs. Run <code>worker.py ttp</code> on the GPU.</div></div>';
+    return;
+  }
+  const CONF_COLORS = {high:'#30D158', medium:'#FF9F0A', low:'#8E8E93'};
+
+  el.innerHTML = `
+    <div class="tbl-wrap"><table class="data-table">
+      <thead><tr>
+        <th>Blog slug</th><th>ATT&amp;CK IDs</th><th>Tactics</th><th>Conf.</th>
+        <th>Rationale</th><th>Model</th><th>Blog</th>
+      </tr></thead>
+      <tbody>${rows.map(r => {
+        const cc  = CONF_COLORS[r.confidence] || '#636366';
+        const ids = (r.attack_ids || []).map(a =>
+          `<span class="badge badge-red" style="font-family:var(--mono);font-size:10px;margin-right:3px;cursor:pointer"
+                 onclick="_filterExtractByAttackId('${escAttr(a)}')">${escHtml(a)}</span>`
+        ).join('') || '<span class="text-dim text-xs">-</span>';
+        const tacs = (r.tactics || []).map(t => {
+          const tc = TACTIC_COLORS[t] || TACTIC_COLORS.unknown;
+          return `<span class="badge" style="background:${tc}22;color:${tc};font-size:9px;margin-right:3px">${escHtml(t)}</span>`;
+        }).join('') || '<span class="text-dim text-xs">-</span>';
+        return `<tr>
+          <td><code style="font-size:11px;color:var(--cyan)">${escHtml(r.slug||'-')}</code>
+              <div class="text-dim text-xs" style="max-width:240px;line-height:1.3;margin-top:2px">${escHtml((r.title||'').slice(0,70))}${(r.title||'').length>70?'...':''}</div></td>
+          <td style="max-width:140px">${ids}</td>
+          <td style="max-width:170px">${tacs}</td>
+          <td><span class="badge" style="background:${cc}22;color:${cc};font-size:9px">${escHtml(r.confidence||'-')}</span></td>
+          <td class="text-dim text-xs" style="max-width:260px;line-height:1.4">${escHtml((r.rationale||'').slice(0,120))}${(r.rationale||'').length>120?'...':''}</td>
+          <td><span class="text-dim text-xs" style="font-family:var(--mono)">${escHtml(r.model||'-')}</span></td>
+          <td>${r.blog_url ? `<a href="${escAttr(r.blog_url)}" target="_blank" class="btn btn-ghost btn-xs">Blog</a>` : '<span class="text-dim text-xs">-</span>'}</td>
+        </tr>`;
+      }).join('')}
+      </tbody>
+    </table></div>`;
+}
+
+function _filterExtractByAttackId(aid) {
+  const f = document.getElementById('mx-attack');
+  if (f) { f.value = aid; }
+  searchMitreExtract(0);
 }
 
 // -----------------------------------------------------------------

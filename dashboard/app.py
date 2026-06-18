@@ -494,6 +494,52 @@ def api_mitre_ttp_implementations():
     })
 
 
+@app.route("/api/mitre/ttp_extracted")
+def api_mitre_ttp_extracted():
+    """LLM-extracted ATT&CK TTPs per kb_doc (written by worker.py ttp)."""
+    q          = request.args.get("q",          "").strip().lower()
+    attack_id  = request.args.get("attack_id",  "").strip().upper()
+    tactic     = request.args.get("tactic",     "").strip().lower()
+    confidence = request.args.get("confidence", "").strip().lower()
+    model      = request.args.get("model",      "").strip()
+    page       = max(0, int(request.args.get("page",  0)))
+    limit      = max(1, int(request.args.get("limit", 10)))
+
+    rows = _db.get_ttp_extracted_all(model or None)
+
+    if attack_id:
+        rows = [r for r in rows if attack_id in r.get("attack_ids", [])]
+    if tactic:
+        rows = [r for r in rows if tactic in r.get("tactics", [])]
+    if confidence:
+        rows = [r for r in rows if r.get("confidence", "") == confidence]
+    if q:
+        rows = [r for r in rows if
+                q in (r.get("slug",      "") or "").lower() or
+                q in (r.get("title",     "") or "").lower() or
+                q in (r.get("rationale", "") or "").lower() or
+                q in (r.get("category",  "") or "").lower() or
+                any(q in (a or "").lower() for a in r.get("attack_ids", [])) or
+                any(q in (t or "").lower() for t in r.get("tactics", []))]
+
+    total  = len(rows)
+    offset = page * limit
+    items  = rows[offset:offset + limit]
+    return jsonify({
+        "items": items,
+        "total": total,
+        "page":  page,
+        "pages": max(1, (total + limit - 1) // limit),
+    })
+
+
+@app.route("/api/mitre/ttp_extracted/by_attack_id/<attack_id>")
+def api_mitre_ttp_extracted_by_attack_id(attack_id: str):
+    """All posts whose extracted TTPs include the given ATT&CK ID."""
+    rows = _db.get_ttp_extracted_by_attack_id(attack_id.upper())
+    return jsonify({"items": rows, "total": len(rows), "attack_id": attack_id.upper()})
+
+
 @app.route("/api/mitre/library/entry/<path:slug>")
 def api_mitre_library_entry(slug: str):
     entry = _db.get_mitre_entry(slug)
@@ -670,11 +716,12 @@ def api_malpedia_search():
 @app.route("/api/semantic/status")
 def api_semantic_status():
     try:
-        from semantic import available, embedded_count, tagged_count, data_source
+        from semantic import available, embedded_count, tagged_count, ttp_count, data_source
         return jsonify({
             "available":      available(),
             "embedded_posts": embedded_count(),
             "tagged_posts":   tagged_count(),
+            "ttp_posts":      ttp_count(),
             "source":         data_source(),
         })
     except Exception as e:

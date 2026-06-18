@@ -70,13 +70,14 @@ def _post_text(post: dict) -> str:
 _cache: dict | None = None
 
 
-def _load_from_db() -> tuple[list[dict], dict[str, list[float]], dict[str, list[str]], dict[str, dict]] | None:
+def _load_from_db() -> tuple[list[dict], dict[str, list[float]], dict[str, list[str]], dict[str, dict], dict[str, str]] | None:
     try:
         sys.path.insert(0, str(Path(__file__).parent))
         import db
-        rows     = db.get_kb_embeddings_all(EMBED_MODEL)
-        tags     = db.get_kb_tags_all(None)       # union of all tagging models
-        ttp_rows = db.get_ttp_extracted_all(None) # all models; latest confidence wins per slug
+        rows      = db.get_kb_embeddings_all(EMBED_MODEL)
+        tags      = db.get_kb_tags_all(None)
+        ttp_rows  = db.get_ttp_extracted_all(None)
+        summaries = db.get_kb_summaries_all(None)
     except Exception as e:
         print(f"[semantic] db load error: {e}")
         return None
@@ -116,17 +117,17 @@ def _load_from_db() -> tuple[list[dict], dict[str, list[float]], dict[str, list[
             _conf_rank.get(ttps[slug]["confidence"], 2)
         ):
             ttps[slug] = entry
-    return posts, embs, tags, ttps
+    return posts, embs, tags, ttps, summaries
 
 
-def _load_from_json() -> tuple[list[dict], dict[str, list[float]], dict[str, list[str]], dict[str, dict]] | None:
+def _load_from_json() -> tuple[list[dict], dict[str, list[float]], dict[str, list[str]], dict[str, dict], dict[str, str]] | None:
     try:
         if not _LIBRARY_CACHE.exists() or not _EMB_CACHE.exists():
             return None
         posts = json.loads(_LIBRARY_CACHE.read_text())
         raw   = json.loads(_EMB_CACHE.read_text())
         embs  = {item["slug"]: item["embedding"] for item in raw}
-        return posts, embs, {}, {}  # no tags/ttps in legacy json
+        return posts, embs, {}, {}, {}  # no tags/ttps/summaries in legacy json
     except Exception:
         return None
 
@@ -144,20 +145,28 @@ def _load_index() -> tuple[list[dict], dict[str, list[float]], dict[str, list[st
         data   = _load_from_json()
         source = "json"
     if data is None:
-        _cache = {"posts": [], "embs": {}, "tags": {}, "ttps": {},
+        _cache = {"posts": [], "embs": {}, "tags": {}, "ttps": {}, "summaries": {},
                   "db_mtime": db_mtime, "source": "none"}
         return [], {}, {}
 
-    posts, embs, tags, ttps = data
-    _cache = {"posts": posts, "embs": embs, "tags": tags, "ttps": ttps,
+    posts, embs, tags, ttps, summaries = data
+    _cache = {"posts": posts, "embs": embs, "tags": tags, "ttps": ttps, "summaries": summaries,
               "db_mtime": db_mtime, "source": source}
     return posts, embs, tags
 
 
 def _load_ttps() -> dict[str, dict]:
-    """Return {slug: {attack_ids, tactics, confidence, rationale}} from cache."""
     _load_index()
     return _cache.get("ttps", {}) if _cache else {}
+
+
+def _load_summaries() -> dict[str, str]:
+    _load_index()
+    return _cache.get("summaries", {}) if _cache else {}
+
+
+def summary_count() -> int:
+    return len(_load_summaries())
 
 
 def data_source() -> str:
@@ -201,7 +210,8 @@ def find_related_posts(query: str, max_results: int = 8,
 
     Results carry `tags` and `ttps` fields for downstream callers (chatbot RAG)."""
     posts, embs, tags = _load_index()
-    ttps = _load_ttps()
+    ttps      = _load_ttps()
+    summaries = _load_summaries()
     if not posts or not embs:
         return []
 
@@ -237,6 +247,7 @@ def find_related_posts(query: str, max_results: int = 8,
             "attack_ids": post.get("attack_ids", []),
             "tags":       tags.get(slug, []),
             "ttps":       ttps.get(slug),
+            "summary":    summaries.get(slug, ""),
             "score":      round(sim, 3),
         })
     return results

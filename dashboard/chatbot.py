@@ -499,6 +499,47 @@ def _stream_ollama(messages: list[dict]) -> Generator[str, None, None]:
         yield f"[=^..^=] Ollama error: {e}"
 
 
+# -- precomputed template response (no LLM, uses worker.py summarize output) ----
+
+def _template_response(question: str, n: int = 3, max_lines: int = 18) -> str | None:
+    """Render top-N retrieved posts as a markdown answer using precomputed summaries.
+    Returns None if no summaries are available (caller falls back to LLM)."""
+    try:
+        import sys as _sys, os as _os
+        _sys.path.insert(0, _os.path.dirname(__file__))
+        from semantic import find_related_posts
+        posts = find_related_posts(question, max_results=n)
+    except Exception:
+        return None
+
+    posts = [p for p in posts if (p.get("summary") or "").strip()]
+    if not posts:
+        return None
+
+    blocks: list[str] = []
+    for p in posts:
+        title   = p.get("title", "")
+        slug    = p.get("slug", "")
+        url     = p.get("blog_url", "")
+        summary = p.get("summary", "").strip()
+        snippet, _, lang = _get_snippet_for_post(p, question=question, max_lines=max_lines)
+
+        ttps = p.get("ttps") or {}
+        aids = ttps.get("attack_ids") or p.get("attack_ids") or []
+        aids_str = ", ".join(f"`{a}`" for a in aids) if aids else ""
+
+        block  = f"### {title}\n\n{summary}\n"
+        if snippet:
+            block += f"\n```{lang}\n{snippet}\n```\n"
+        if aids_str:
+            block += f"\n**ATT&CK:** {aids_str}  "
+        if url:
+            block += f"\n**Read more:** [{slug}]({url})"
+        blocks.append(block)
+
+    return "\n\n---\n\n".join(blocks)
+
+
 # -- direct KB code response (no LLM, instant, demo-grade) -----------------------
 
 def _read_src_file(src_path: str, max_lines: int = 600) -> str:
@@ -879,6 +920,16 @@ def stream_chat(messages: list[dict], provider: str = "ollama") -> Generator[str
         yield {"status": "kb_direct", "msg": "loading code from KB…"}
         response = _direct_kb_response(last_user)
         yield from _stream_kb_chunks(response)
+        return
+
+    # Default for technical questions: render precomputed GPU summaries on CPU.
+    # Falls back to live LLM only when summaries are missing for the matched posts.
+    cfg = _get_ollama_config()
+    n   = cfg.get("context_posts_technical", 3)
+    tpl = _template_response(last_user, n=n, max_lines=cfg.get("max_snippet_lines", 18))
+    if tpl:
+        yield {"status": "kb_template", "msg": "rendering KB answer…"}
+        yield from _stream_kb_chunks(tpl)
         return
 
     yield from _stream_ollama(messages)

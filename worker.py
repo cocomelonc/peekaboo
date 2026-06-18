@@ -362,6 +362,167 @@ def _stale_doc_ids(model: str, meow_root: str) -> list[int]:
 
 
 # --------------------------------------------------------------------------- #
+# KB summaries (precomputed chatbot answers, baked once on GPU)               #
+# --------------------------------------------------------------------------- #
+
+def _build_summary_prompt(doc: dict, code: str) -> str:
+    aids = doc.get("attack_ids") or []
+    if isinstance(aids, str):
+        try: aids = json.loads(aids)
+        except Exception: aids = []
+    aids_s = ", ".join(aids) if aids else "(none)"
+    code_block = code.strip()[:6000] if code else "(no source code available)"
+
+    return f"""You are writing one short reference card for a malware research blog post. Output PLAIN TEXT only. No markdown headings, no code fences, no lists, no bullets.
+
+Write exactly 3 sentences, separated by single spaces:
+1. What the technique does (offensive mechanism).
+2. The key API calls or syscalls or primitives the code uses.
+3. One detection / telemetry signal (Sysmon event ID, ETW provider, registry key, or process artifact).
+
+Hard limit: 380 characters total. No preamble. No 'In this post' or 'This post explains'. Start with the verb or noun directly.
+
+Post:
+- Title: {doc.get("title", "")}
+- Category: {doc.get("category", "")}
+- ATT&CK: {aids_s}
+
+Source snippet:
+{code_block}"""
+
+
+def _normalize_summary(raw: str) -> str:
+    if not raw:
+        return ""
+    s = raw.strip()
+    # strip JSON if model wrapped it
+    if s.startswith("{") and s.endswith("}"):
+        try:
+            obj = json.loads(s)
+            for k in ("summary", "text", "answer", "response"):
+                if isinstance(obj.get(k), str):
+                    s = obj[k].strip()
+                    break
+        except Exception:
+            pass
+    # drop think blocks if any slipped through
+    s = _re.sub(r"<think>.*?</think>", "", s, flags=_re.S).strip()
+    # collapse whitespace, keep single spaces
+    s = _re.sub(r"\s+", " ", s)
+    return s[:600]
+
+
+def _chat_text(prompt: str, model: str, base_url: str,
+               timeout: int = 300, label: str = "worker") -> str:
+    """Single-turn Ollama chat in plain-text mode. Returns the message content."""
+    payload = json.dumps({
+        "model":      model,
+        "stream":     False,
+        "think":      False,
+        "keep_alive": "10m",
+        "options":    {"temperature": 0.15, "num_ctx": 4096, "num_predict": 200},
+        "messages":   [{"role": "user", "content": prompt}],
+    }).encode()
+    url = base_url.rstrip("/") + "/api/chat"
+    try:
+        req = urllib.request.Request(
+            url, data=payload,
+            headers={"Content-Type": "application/json"},
+            method="POST",
+        )
+        with urllib.request.urlopen(req, timeout=timeout) as resp:
+            data = json.loads(resp.read())
+        return data.get("message", {}).get("content", "")
+    except Exception as e:
+        print(f"\n[{label}] chat error: {e}", flush=True)
+        return ""
+
+
+def _stale_summary_doc_ids(model: str, meow_root: str) -> list[int]:
+    from datetime import datetime
+    stale: list[int] = []
+    for r in db.get_kb_summarized_docs(model):
+        resolved = _resolve_src(r.get("src_path", ""), meow_root)
+        if resolved is None:
+            continue
+        try:
+            src_mtime     = datetime.fromtimestamp(resolved.stat().st_mtime)
+            summarized_at = datetime.fromisoformat(r["summarized_at"])
+        except Exception:
+            continue
+        if src_mtime > summarized_at:
+            stale.append(r["id"])
+    return stale
+
+
+def cmd_summarize(args: argparse.Namespace) -> None:
+    """Precompute a 3-sentence summary per doc via LLM. CPU just renders these later."""
+    model     = args.model
+    base_url  = args.url
+    max_lines = args.code_lines
+    timeout   = args.timeout
+    meow_root = args.meow_root or os.environ.get("MEOW_ROOT") or ""
+
+    if meow_root:
+        print(f"[sum] meow_root: {meow_root}", flush=True)
+
+    db.init()
+
+    ok, installed = _ollama_has_model(model, base_url)
+    if not ok:
+        print(f"[sum] model not available: {model}", flush=True)
+        print(f"[sum] installed: {', '.join(installed) or '(none)'}", flush=True)
+        print(f"[sum] fix: ollama pull {model}", flush=True)
+        sys.exit(1)
+
+    if getattr(args, "rebuild", False):
+        n = db.delete_kb_summaries(model)
+        print(f"[sum] --rebuild: wiped {n} summary rows for model={model}", flush=True)
+    elif getattr(args, "rebuild_changed", False):
+        stale = _stale_summary_doc_ids(model, meow_root)
+        if stale:
+            n = db.delete_kb_summaries(model, doc_ids=stale)
+            print(f"[sum] --rebuild-changed: wiped {n} stale summary rows", flush=True)
+        else:
+            print("[sum] --rebuild-changed: nothing stale", flush=True)
+
+    def _run_once() -> int:
+        pending = db.get_kb_docs_without_summary(model)
+        if not pending:
+            print(f"[sum] nothing to do - all docs already summarized with {model}", flush=True)
+            return 0
+
+        print(f"[sum] {len(pending)} docs to summarize with {model} …", flush=True)
+        done = failed = 0
+
+        for i, doc in enumerate(pending, 1):
+            code    = _read_code(doc.get("src_path", ""), max_lines, meow_root)
+            prompt  = _build_summary_prompt(doc, code)
+            raw     = _chat_text(prompt, model, base_url, timeout=timeout, label="sum")
+            summary = _normalize_summary(raw)
+            if not summary:
+                failed += 1
+            db.upsert_kb_summary(doc["id"], model, summary, raw)
+            done += 1
+
+            pct   = int(i / len(pending) * 100)
+            label = f"{i}/{len(pending)} - {doc['slug'][:30]:30s} -> {len(summary)}ch"
+            _progress(pct, label, tag="sum")
+
+        print(f"\n[sum] summarized {done} docs ({failed} empty)", flush=True)
+        return done
+
+    _run_once()
+
+    if args.watch:
+        interval = int(args.watch)
+        print(f"[sum] --watch {interval}s - polling for new docs …", flush=True)
+        while True:
+            time.sleep(interval)
+            _run_once()
+
+
+# --------------------------------------------------------------------------- #
 # TTP extraction (ATT&CK ID mapping via LLM)                                  #
 # --------------------------------------------------------------------------- #
 
@@ -628,6 +789,9 @@ def cmd_status(args: argparse.Namespace) -> None:
         ttp_rows = conn.execute(
             "SELECT model, COUNT(*) n FROM ttp_extracted GROUP BY model"
         ).fetchall()
+        sum_rows = conn.execute(
+            "SELECT model, COUNT(*) n FROM kb_summaries GROUP BY model"
+        ).fetchall()
 
     # docs with src_path (eligible for ttp extraction)
     with sqlite3.connect(db.DB_PATH) as conn:
@@ -661,6 +825,17 @@ def cmd_status(args: argparse.Namespace) -> None:
             except Exception:
                 pass
         print(f"ttp_extracted  : {r['n']}  ({r['model']})  pending: {src_docs - r['n']}, stale: {stale}")
+
+    if not sum_rows:
+        print(f"kb_summaries   : 0  (pending: {s['docs']})")
+    for r in sum_rows:
+        stale = 0
+        if meow_root:
+            try:
+                stale = len(_stale_summary_doc_ids(r["model"], meow_root))
+            except Exception:
+                pass
+        print(f"kb_summaries   : {r['n']}  ({r['model']})  pending: {s['docs'] - r['n']}, stale: {stale}")
 
 
 def cmd_refresh(args: argparse.Namespace) -> None:
@@ -700,6 +875,17 @@ def cmd_refresh(args: argparse.Namespace) -> None:
             rebuild_changed=(not args.rebuild),
         )
         cmd_ttp(ttp_args)
+
+    if getattr(args, "summarize", False):
+        print("\n[refresh] ----- summarize -----", flush=True)
+        sum_args = argparse.Namespace(
+            model=args.sum_model, url=args.url, code_lines=180,
+            timeout=args.timeout, meow_root=args.meow_root,
+            watch=0,
+            rebuild=args.rebuild,
+            rebuild_changed=(not args.rebuild),
+        )
+        cmd_summarize(sum_args)
 
     print("\n[refresh] ----- done -----", flush=True)
     cmd_status(args)
@@ -798,10 +984,26 @@ def _build_parser() -> argparse.ArgumentParser:
     xp.add_argument("--rebuild-changed", action="store_true", dest="rebuild_changed",
                     help="re-extract docs whose meow source is newer than extracted_at")
 
-    rp = sub.add_parser("refresh", help="one-shot incremental update (scan? + init + embed + tag + ttp?)")
+    sp = sub.add_parser("summarize", help="precompute one 3-sentence summary per doc (LLM)")
+    sp.add_argument("--model",           default="qwen3:14b",              help="Ollama chat model")
+    sp.add_argument("--url",             default="http://localhost:11434", help="Ollama base URL")
+    sp.add_argument("--code-lines",      type=int, default=180, dest="code_lines",
+                    help="max src lines fed to the LLM")
+    sp.add_argument("--timeout",         type=int, default=120,            help="per-call timeout (s)")
+    sp.add_argument("--meow-root",       default=None, dest="meow_root",
+                    help="local meow repo path (default: $MEOW_ROOT)")
+    sp.add_argument("--watch",           type=int, default=0, metavar="N",
+                    help="loop every N seconds (0 = run once)")
+    sp.add_argument("--rebuild",         action="store_true",
+                    help="wipe all summaries for this model first, then process all")
+    sp.add_argument("--rebuild-changed", action="store_true", dest="rebuild_changed",
+                    help="re-summarize docs whose meow source is newer than summarized_at")
+
+    rp = sub.add_parser("refresh", help="one-shot incremental update (scan? + init + embed + tag + ttp? + summarize?)")
     rp.add_argument("--embed-model", default="nomic-embed-text", dest="embed_model")
     rp.add_argument("--tag-model",   default="qwen3:1.7b",       dest="tag_model")
     rp.add_argument("--ttp-model",   default="qwen3:14b",        dest="ttp_model")
+    rp.add_argument("--sum-model",   default="qwen3:14b",        dest="sum_model")
     rp.add_argument("--url",         default="http://localhost:11434")
     rp.add_argument("--timeout",     type=int, default=300)
     rp.add_argument("--meow-root",   default=None, dest="meow_root")
@@ -811,6 +1013,8 @@ def _build_parser() -> argparse.ArgumentParser:
                     help="wipe embeddings + tags first, then full re-do")
     rp.add_argument("--ttp",         action="store_true",
                     help="also run TTP extraction after tagging (uses --ttp-model)")
+    rp.add_argument("--summarize",   action="store_true",
+                    help="also run summary precompute after tagging (uses --sum-model)")
 
     return p
 
@@ -829,6 +1033,8 @@ if __name__ == "__main__":
         cmd_tag(args)
     elif args.cmd == "ttp":
         cmd_ttp(args)
+    elif args.cmd == "summarize":
+        cmd_summarize(args)
     elif args.cmd == "refresh":
         cmd_refresh(args)
     elif args.cmd == "status":

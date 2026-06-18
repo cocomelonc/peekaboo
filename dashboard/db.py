@@ -176,6 +176,17 @@ def init() -> None:
         """)
 
         db.execute("""
+            CREATE TABLE IF NOT EXISTS kb_summaries (
+                doc_id        INTEGER NOT NULL REFERENCES kb_docs(id) ON DELETE CASCADE,
+                model         TEXT    NOT NULL DEFAULT '',
+                summary       TEXT    NOT NULL DEFAULT '',
+                raw_output    TEXT    NOT NULL DEFAULT '',
+                summarized_at TEXT    NOT NULL DEFAULT (datetime('now')),
+                PRIMARY KEY (doc_id, model)
+            )
+        """)
+
+        db.execute("""
             CREATE TABLE IF NOT EXISTS ttp_extracted (
                 doc_id       INTEGER NOT NULL REFERENCES kb_docs(id) ON DELETE CASCADE,
                 model        TEXT    NOT NULL DEFAULT '',
@@ -1030,11 +1041,13 @@ def upsert_kb_embedding(doc_id: int, model: str, vector: list[float]) -> None:
 
 def kb_stats() -> dict:
     with _conn() as db:
-        docs         = db.execute("SELECT COUNT(*) FROM kb_docs").fetchone()[0]
-        embeddings   = db.execute("SELECT COUNT(*) FROM kb_embeddings").fetchone()[0]
-        tags         = db.execute("SELECT COUNT(*) FROM kb_tags").fetchone()[0]
+        docs          = db.execute("SELECT COUNT(*) FROM kb_docs").fetchone()[0]
+        embeddings    = db.execute("SELECT COUNT(*) FROM kb_embeddings").fetchone()[0]
+        tags          = db.execute("SELECT COUNT(*) FROM kb_tags").fetchone()[0]
         ttp_extracted = db.execute("SELECT COUNT(*) FROM ttp_extracted").fetchone()[0]
-    return {"docs": docs, "embeddings": embeddings, "tags": tags, "ttp_extracted": ttp_extracted}
+        summaries     = db.execute("SELECT COUNT(*) FROM kb_summaries").fetchone()[0]
+    return {"docs": docs, "embeddings": embeddings, "tags": tags,
+            "ttp_extracted": ttp_extracted, "summaries": summaries}
 
 
 def get_kb_doc_by_id(doc_id: int) -> dict | None:
@@ -1121,6 +1134,104 @@ def get_kb_tags_all(model: str | None = None) -> dict[str, list[str]]:
             out[r["slug"]] = sorted(set(out[r["slug"]]) | set(tags))
         else:
             out[r["slug"]] = tags
+    return out
+
+
+# --------------------------------------------------------------------------- #
+#  KB Summaries (LLM-precomputed, written by worker.py summarize)             #
+# --------------------------------------------------------------------------- #
+
+def get_kb_docs_without_summary(model: str) -> list[dict]:
+    with _conn() as db:
+        rows = db.execute(
+            """
+            SELECT id, slug, title, date, category, attack_ids, src_path
+            FROM kb_docs
+            WHERE id NOT IN (SELECT doc_id FROM kb_summaries WHERE model = ?)
+            ORDER BY id
+            """,
+            (model,),
+        ).fetchall()
+    result = []
+    for r in rows:
+        d = dict(r)
+        try:
+            d["attack_ids"] = json.loads(d["attack_ids"] or "[]")
+        except Exception:
+            d["attack_ids"] = []
+        result.append(d)
+    return result
+
+
+def upsert_kb_summary(doc_id: int, model: str, summary: str, raw_output: str = "") -> None:
+    with _conn() as db:
+        db.execute(
+            """
+            INSERT INTO kb_summaries (doc_id, model, summary, raw_output)
+            VALUES (?, ?, ?, ?)
+            ON CONFLICT(doc_id, model) DO UPDATE SET
+              summary       = excluded.summary,
+              raw_output    = excluded.raw_output,
+              summarized_at = datetime('now')
+            """,
+            (doc_id, model, summary, raw_output),
+        )
+
+
+def delete_kb_summaries(model: str, doc_ids: list[int] | None = None) -> int:
+    with _conn() as db:
+        if doc_ids is None:
+            cur = db.execute("DELETE FROM kb_summaries WHERE model = ?", (model,))
+        else:
+            cur = db.executemany(
+                "DELETE FROM kb_summaries WHERE model = ? AND doc_id = ?",
+                [(model, i) for i in doc_ids],
+            )
+        return cur.rowcount or 0
+
+
+def get_kb_summarized_docs(model: str) -> list[dict]:
+    """Docs with summaries under this model — used to detect stale sources."""
+    with _conn() as db:
+        rows = db.execute(
+            """
+            SELECT d.id, d.slug, d.src_path, s.summarized_at
+            FROM kb_docs d
+            JOIN kb_summaries s ON s.doc_id = d.id
+            WHERE s.model = ?
+            """,
+            (model,),
+        ).fetchall()
+    return [dict(r) for r in rows]
+
+
+def get_kb_summaries_all(model: str | None = None) -> dict[str, str]:
+    """Return {slug: summary} for chatbot template rendering. Latest model wins per slug."""
+    with _conn() as db:
+        if model:
+            rows = db.execute(
+                """
+                SELECT d.slug, s.summary
+                FROM kb_summaries s
+                JOIN kb_docs d ON d.id = s.doc_id
+                WHERE s.model = ? AND s.summary != ''
+                """,
+                (model,),
+            ).fetchall()
+        else:
+            rows = db.execute(
+                """
+                SELECT d.slug, s.summary, s.summarized_at
+                FROM kb_summaries s
+                JOIN kb_docs d ON d.id = s.doc_id
+                WHERE s.summary != ''
+                ORDER BY s.summarized_at
+                """,
+            ).fetchall()
+    out: dict[str, str] = {}
+    for r in rows:
+        if r["slug"]:
+            out[r["slug"]] = r["summary"]
     return out
 
 
