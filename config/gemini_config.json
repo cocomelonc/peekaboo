@@ -1,8 +1,0 @@
-{
-  "api_key": "AQ.Ab8RN6KtsfXIX-8_3gHnrYuW_dKL1tDbJqFtOar28PFXgy8e6g",
-  "model": "gemini-3-flash-preview",
-  "temperature": 0.2,
-  "max_output_tokens": 512,
-  "thinking_budget": 0,
-  "kb_budget": 12000
-}

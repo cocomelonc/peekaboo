@@ -9,9 +9,15 @@ import re
 from pathlib import Path
 
 _BASE          = Path(__file__).parent.parent
-_CONFIG        = _BASE / "config" / "malpedia_config.json"
 _ACTORS_CACHE  = _BASE / "data" / "malpedia_actors_cache.json"
 _FAMILIES_CACHE = _BASE / "data" / "malpedia_families_cache.json"
+
+import cfg as _cfg
+
+
+def _api_token() -> str:
+    return (_cfg.get("malpedia_config") or {}).get("api_token", "").strip()
+
 
 _client = None
 
@@ -22,10 +28,7 @@ def _get_client():
         return _client
     try:
         from malpediaclient import Client
-        cfg = {}
-        if _CONFIG.exists():
-            cfg = json.loads(_CONFIG.read_text())
-        token = cfg.get("api_token", "").strip()
+        token = _api_token()
         _client = Client(apitoken=token) if token else Client()
         return _client
     except Exception as e:
@@ -47,8 +50,7 @@ def get_status() -> dict:
         return {"ok": False, "error": "malpediaclient not available"}
     try:
         v = c.get_version()
-        cfg = json.loads(_CONFIG.read_text()) if _CONFIG.exists() else {}
-        token = cfg.get("api_token", "").strip()
+        token = _api_token()
         return {
             "ok":             True,
             "version":        v.get("version"),
@@ -255,8 +257,7 @@ def get_recent_reports(limit: int = 50) -> list[dict]:
     except ImportError:
         return []
 
-    cfg = json.loads(_CONFIG.read_text()) if _CONFIG.exists() else {}
-    token = cfg.get("api_token", "").strip()
+    token = _api_token()
     headers = {"User-Agent": "Mozilla/5.0"}
     if token:
         headers["Authorization"] = f"apitoken {token}"

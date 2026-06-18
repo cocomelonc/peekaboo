@@ -1,20 +1,33 @@
 """
-peekaboo semantic matching via local Ollama embeddings
-no hardcoded rules - pure cosine similarity on nomic-embed-text
+peekaboo semantic matching via local Ollama embeddings.
+no hardcoded rules — pure cosine similarity on nomic-embed-text.
+
+Data source priority:
+  1. SQLite tables (kb_docs + kb_embeddings) — populated by worker.py
+  2. Legacy JSON cache (data/post_embeddings.json) — fallback for old installs
+
+The in-memory index is invalidated when peekaboo.db's mtime changes,
+so `rsync peekaboo.db` from a GPU box picks up automatically.
 """
 from __future__ import annotations
 import json
 import math
+import sys
 import time
 from pathlib import Path
 
 _BASE          = Path(__file__).parent.parent
 _LIBRARY_CACHE = _BASE / "data" / "library_cache.json"
-_EMB_CACHE     = _BASE / "data" / "post_embeddings.json"
+_EMB_CACHE     = _BASE / "data" / "post_embeddings.json"  # legacy fallback
+_DB_PATH       = Path(__file__).parent / "peekaboo.db"
 
-OLLAMA_URL = "http://localhost:11434/api/embed"
+OLLAMA_URL  = "http://localhost:11434/api/embed"
 EMBED_MODEL = "nomic-embed-text"
 
+
+# --------------------------------------------------------------------------- #
+# Ollama embed                                                                 #
+# --------------------------------------------------------------------------- #
 
 def _embed(texts: list[str]) -> list[list[float]] | None:
     try:
@@ -50,66 +63,109 @@ def _post_text(post: dict) -> str:
     return " | ".join(p for p in parts if p)
 
 
-def _load_library() -> list[dict]:
+# --------------------------------------------------------------------------- #
+# Index loading — DB first, JSON fallback, mtime-invalidated cache             #
+# --------------------------------------------------------------------------- #
+
+_cache: dict | None = None
+
+
+def _load_from_db() -> tuple[list[dict], dict[str, list[float]], dict[str, list[str]]] | None:
     try:
-        if _LIBRARY_CACHE.exists():
-            return json.loads(_LIBRARY_CACHE.read_text())
-    except Exception:
-        pass
-    return []
+        sys.path.insert(0, str(Path(__file__).parent))
+        import db
+        rows = db.get_kb_embeddings_all(EMBED_MODEL)
+        tags = db.get_kb_tags_all(None)  # union of all tagging models
+    except Exception as e:
+        print(f"[semantic] db load error: {e}")
+        return None
+    if not rows:
+        return None
+    posts: list[dict] = []
+    embs:  dict[str, list[float]] = {}
+    for r in rows:
+        slug = r.get("slug") or ""
+        if not slug:
+            continue
+        embs[slug] = r["vector"]
+        posts.append({
+            "slug":       slug,
+            "title":      r.get("title", ""),
+            "date":       r.get("date", ""),
+            "blog_url":   r.get("blog_url", ""),
+            "category":   r.get("category", ""),
+            "attack_ids": r.get("attack_ids", []),
+        })
+    return posts, embs, tags
 
 
-def build_post_embeddings(force: bool = False) -> bool:
-    if not force and _EMB_CACHE.exists():
-        return True
-    posts = _load_library()
-    if not posts:
-        print("[semantic] no library posts found")
-        return False
-
-    texts = [_post_text(p) for p in posts]
-    print(f"[semantic] embedding {len(texts)} posts via {EMBED_MODEL}...")
-    t0 = time.time()
-
-    # batch in chunks of 32 to avoid timeouts
-    all_embs: list[list[float]] = []
-    chunk = 32
-    for i in range(0, len(texts), chunk):
-        batch = texts[i:i + chunk]
-        embs = _embed(batch)
-        if embs is None:
-            print(f"[semantic] embedding failed at chunk {i}")
-            return False
-        all_embs.extend(embs)
-
-    cache = [
-        {"slug": p["slug"], "embedding": e}
-        for p, e in zip(posts, all_embs)
-    ]
-    _EMB_CACHE.write_text(json.dumps(cache, separators=(",", ":")))
-    print(f"[semantic] cached {len(cache)} embeddings in {time.time()-t0:.1f}s -> {_EMB_CACHE}")
-    return True
-
-
-def _load_post_embeddings() -> dict[str, list[float]]:
+def _load_from_json() -> tuple[list[dict], dict[str, list[float]], dict[str, list[str]]] | None:
     try:
-        if _EMB_CACHE.exists():
-            raw = json.loads(_EMB_CACHE.read_text())
-            return {item["slug"]: item["embedding"] for item in raw}
+        if not _LIBRARY_CACHE.exists() or not _EMB_CACHE.exists():
+            return None
+        posts = json.loads(_LIBRARY_CACHE.read_text())
+        raw   = json.loads(_EMB_CACHE.read_text())
+        embs  = {item["slug"]: item["embedding"] for item in raw}
+        return posts, embs, {}  # no tags in legacy json
     except Exception:
-        pass
-    return {}
+        return None
 
 
-def _build_post_index() -> tuple[list[dict], dict[str, list[float]]]:
-    posts = _load_library()
-    embs  = _load_post_embeddings()
-    return posts, embs
+def _load_index() -> tuple[list[dict], dict[str, list[float]], dict[str, list[str]]]:
+    """Cached load. Re-reads when peekaboo.db's mtime changes."""
+    global _cache
+    db_mtime = _DB_PATH.stat().st_mtime if _DB_PATH.exists() else 0.0
+    if _cache and _cache["db_mtime"] == db_mtime:
+        return _cache["posts"], _cache["embs"], _cache["tags"]
 
+    data   = _load_from_db()
+    source = "db"
+    if data is None:
+        data   = _load_from_json()
+        source = "json"
+    if data is None:
+        _cache = {"posts": [], "embs": {}, "tags": {}, "db_mtime": db_mtime, "source": "none"}
+        return [], {}, {}
+
+    posts, embs, tags = data
+    _cache = {"posts": posts, "embs": embs, "tags": tags,
+              "db_mtime": db_mtime, "source": source}
+    return posts, embs, tags
+
+
+def data_source() -> str:
+    """Where retrieval is currently reading from: 'db' | 'json' | 'none'."""
+    _load_index()
+    return _cache["source"] if _cache else "none"
+
+
+def embedded_count() -> int:
+    """Number of posts available for retrieval (from whichever source is active)."""
+    _, embs, _ = _load_index()
+    return len(embs)
+
+
+def tagged_count() -> int:
+    """Number of posts with tags attached (0 if --tag has not been run)."""
+    _, _, tags = _load_index()
+    return len(tags)
+
+
+def invalidate_cache() -> None:
+    global _cache
+    _cache = None
+
+
+# --------------------------------------------------------------------------- #
+# Public retrieval API                                                         #
+# --------------------------------------------------------------------------- #
 
 def find_related_posts(query: str, max_results: int = 8) -> list[dict]:
-    """Embed query, cosine-rank all posts, return top matches."""
-    posts, embs = _build_post_index()
+    """Embed query, cosine-rank all posts, return top matches.
+
+    If kb_tags has entries, results carry a `tags` field for downstream callers
+    (e.g. the chatbot prompt builder)."""
+    posts, embs, tags = _load_index()
     if not posts or not embs:
         return []
 
@@ -133,16 +189,94 @@ def find_related_posts(query: str, max_results: int = 8) -> list[dict]:
     for sim, post in scored[:max_results]:
         if sim < 0.3:
             break
+        slug = post.get("slug", "")
         results.append({
+            "slug":       slug,
             "title":      post.get("title", ""),
             "date":       post.get("date", ""),
             "blog_url":   post.get("blog_url", ""),
             "category":   post.get("category", ""),
             "attack_ids": post.get("attack_ids", []),
+            "tags":       tags.get(slug, []),
             "score":      round(sim, 3),
         })
     return results
 
+
+# --------------------------------------------------------------------------- #
+# Rebuild (writes to DB; used by the "Reindex" button)                         #
+# --------------------------------------------------------------------------- #
+
+def build_post_embeddings(force: bool = False) -> bool:
+    """
+    Embed posts into the DB. `force=True` re-embeds everything.
+
+    The worker (worker.py) is the canonical producer; this function exists
+    so the dashboard's "Reindex" button keeps working without shelling out.
+    """
+    sys.path.insert(0, str(Path(__file__).parent))
+    try:
+        import db
+        db.init()
+    except Exception as e:
+        print(f"[semantic] db init error: {e}")
+        return False
+
+    if not _LIBRARY_CACHE.exists():
+        print(f"[semantic] {_LIBRARY_CACHE} not found")
+        return False
+
+    library = json.loads(_LIBRARY_CACHE.read_text())
+    for entry in library:
+        if not entry.get("slug"):
+            continue
+        db.upsert_kb_doc({
+            "slug":        entry["slug"],
+            "title":       entry.get("title", ""),
+            "date":        entry.get("date", ""),
+            "blog_url":    entry.get("blog_url", ""),
+            "category":    entry.get("category", ""),
+            "attack_ids":  entry.get("attack_ids", []),
+            "src_path":    entry.get("src_path", ""),
+            "implemented": entry.get("implemented", False),
+        })
+
+    if force:
+        import sqlite3
+        try:
+            with sqlite3.connect(db.DB_PATH) as conn:
+                conn.execute("DELETE FROM kb_embeddings WHERE model = ?", (EMBED_MODEL,))
+                conn.commit()
+        except Exception as e:
+            print(f"[semantic] wipe error: {e}")
+            return False
+
+    pending = db.get_kb_docs_without_embedding(EMBED_MODEL)
+    if not pending:
+        invalidate_cache()
+        return True
+
+    print(f"[semantic] embedding {len(pending)} posts via {EMBED_MODEL}…")
+    t0 = time.time()
+    chunk = 32
+    for i in range(0, len(pending), chunk):
+        batch = pending[i:i + chunk]
+        texts = [_post_text(d) for d in batch]
+        embs  = _embed(texts)
+        if embs is None:
+            print(f"[semantic] embedding failed at chunk {i}")
+            return False
+        for doc, vec in zip(batch, embs):
+            db.upsert_kb_embedding(doc["id"], EMBED_MODEL, vec)
+
+    invalidate_cache()
+    print(f"[semantic] embedded {len(pending)} posts in {time.time()-t0:.1f}s")
+    return True
+
+
+# --------------------------------------------------------------------------- #
+# Ollama availability                                                          #
+# --------------------------------------------------------------------------- #
 
 def available() -> bool:
     try:

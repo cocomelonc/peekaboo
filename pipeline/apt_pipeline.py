@@ -86,14 +86,19 @@ _KILL_CHAIN_ORDER = [
 ]
 
 
+import cfg as _cfg
+
+
 def _load_cfg(name: str) -> dict:
-    p = _CFG / f"{name}.json"
-    if p.exists():
-        try:
-            return json.loads(p.read_text())
-        except Exception:
-            pass
-    return {}
+    """Back-compat shim — configs now live in .env via cfg.py."""
+    return _cfg.get(name) or {}
+
+
+def _truthy(v) -> bool:
+    """Parse an env-style boolean (`True`/`true`/`1`/`yes` -> True)."""
+    if isinstance(v, bool):
+        return v
+    return str(v).strip().lower() in ("1", "true", "yes", "on")
 
 
 # --- Agent 1: Malpedia fetch -------------------------------------------------
@@ -457,10 +462,10 @@ def run_pipeline(actor_id: str) -> Generator[dict, None, None]:
     })
 
     pipeline_cfg = _load_cfg("apt_pipeline_config")
-    compile_each = bool(pipeline_cfg.get("compile_each", False))
-    use_ollama   = bool(pipeline_cfg.get("ollama_narration", False))
-    ollama_url   = pipeline_cfg.get("ollama_base_url", "http://localhost:11434")
-    ollama_model = pipeline_cfg.get("ollama_model", "qwen3:0.6b")
+    compile_each = _truthy(pipeline_cfg.get("compile_each", False))
+    use_ollama   = _truthy(pipeline_cfg.get("ollama_narration", False))
+    ollama_url   = pipeline_cfg.get("ollama_base_url") or "http://localhost:11434"
+    ollama_model = pipeline_cfg.get("ollama_model")    or "qwen3:0.6b"
 
     # 1. Fetch actor / family
     yield {"step": 1, "status": "running", "msg": f"fetching actor data: {actor_id}"}

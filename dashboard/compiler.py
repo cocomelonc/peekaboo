@@ -46,20 +46,19 @@ _DEFAULT_MINGW_FLAGS = [
 _DEFAULT_GCC_FLAGS = ["-O2", "-s"]
 
 
+import cfg as _cfg
+
+
 def _load_cfg(name: str) -> dict:
-    p = _CFG_DIR / f"{name}.json"
-    if p.exists():
-        try:
-            return json.loads(p.read_text())
-        except Exception:
-            pass
-    return {}
+    """Back-compat shim — credential configs now live in .env via cfg.py."""
+    return _cfg.get(name) or {}
 
 
-_BUILDER_CFG     = _load_cfg("builder_config")
-MINGW_FLAGS      = _BUILDER_CFG.get("mingw_flags",      _DEFAULT_MINGW_FLAGS)
-GCC_FLAGS        = _BUILDER_CFG.get("gcc_flags",        _DEFAULT_GCC_FLAGS)
-DEFAULT_TIMEOUT  = int(_BUILDER_CFG.get("timeout_sec",  60))
+# builder_config is no longer a config file; flags + timeout are hard-coded
+# defaults below. Override via env later if a tuning knob is actually needed.
+MINGW_FLAGS     = _DEFAULT_MINGW_FLAGS
+GCC_FLAGS       = _DEFAULT_GCC_FLAGS
+DEFAULT_TIMEOUT = 60
 
 
 # -----------------------------------------------------------------------------

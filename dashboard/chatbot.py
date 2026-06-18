@@ -1,6 +1,5 @@
 """
-peekaboo AI chatbot
-supports: Claude (Anthropic), Gemini (Google), local Ollama (RAG)
+peekaboo AI chatbot — Ollama-only (local RAG)
 knowledge base: ~/hacking/meow local codebase + semantic post index
 focused on: C2 channels, binary delivery, malware dev, threat simulation
 """
@@ -12,66 +11,11 @@ import urllib.request
 from pathlib import Path
 from typing import Generator
 
-KB_FILE    = Path(__file__).parent / "knowledge_base.json"
-CONFIG_DIR = Path(__file__).parent.parent / "config"
-
-CLAUDE_MODEL         = "claude-opus-4-6"
-GEMINI_MODEL_DEFAULT = "gemini-2.0-flash"
+KB_FILE              = Path(__file__).parent / "knowledge_base.json"
 OLLAMA_MODEL_DEFAULT = "qwen3:0.6b"
 
 
-# -- system prompts ---------------------------------------------------------------
-
-_SYSTEM_BASE = """You are Peekaboo AI - a high-end technical and educational assistant for the Peekaboo Threat Simulation Framework, created by Zhassulan Zhussupov (@cocomelonc).
-
-Your primary goal is to bridge the gap between offensive research, practice and defensive implementation. You analyze the ~/hacking/meow codebase to explain how adversarial techniques operate at the binary and kernel levels.
-
-Your knowledge is grounded in the ~/hacking/meow codebase - real, working code covering:
-- **C2 (Command & Control) channels**: GitHub Issues/Comments, Telegram webhooks, Bitbucket, VirusTotal, Discord/Slack abuse
-- **Binary delivery via C2**: how implants receive and execute dropped payloads from C2 servers
-- **Process injection**: VirtualAllocEx, EnumDesktopsA callbacks, APC injection, and more
-- **Payload encryption/obfuscation**: Speck, FEAL-8, Lucifer, MARS, Treyfer, custom XOR
-- **Windows persistence**: Registry Run keys, Winlogon, DLL hijacking, scheduled tasks
-- **AV/EDR bypass techniques**: syscalls, API hashing, string encryption, unhooking
-- **Stealer/exfiltration**: collecting system info and exfiltrating via covert channels
-- **Detection engineering**: how blue teams detect these techniques (telemetry, SIGMA rules)
-- **MITRE ATT&CK mapping**: TTP mapping for each technique
-
-The Peekaboo framework currently supports:
-- Crypto: Speck, FEAL-8, Lucifer, MARS, Treyfer, Camellia, A5/1, CAST128, DES, Madryga, Khufu, LOKI, RC5, RC6, SAFER, Skipjack, TEA (Tiny Encryption Algorithm), XTEA
-- Injection: VirtualAllocEx, EnumDesktopsA
-- Persistence: Registry Run, Winlogon, Screensaver Hijacking, File Type Hijacking
-- C2/Stealer: Angelcam, Azure, Telegram, GitHub, Bitbucket, VirusTotal
-
-## C2 binary delivery (key topic for demos):
-C2 binary drop/delivery means the attacker infrastructure pushes a payload to the victim:
-- **Telegram**: bot sends binary file via sendDocument API; victim checks for new docs
-- **GitHub**: implant polls Issues/Releases/Gists for new payload; downloads via raw URL
-- **Bitbucket**: implant polls repo for new commits containing encoded payloads
-- **VirusTotal**: creative abuse - encode command/payload in file metadata or comments
-- **Discord/Slack webhooks**: outbound-only but can host files for retrieval
-
-Always frame content as **educational and defensive** - help researchers understand:
-1. How the technique works mechanically
-2. What telemetry it generates (what defenders can detect)
-3. Which MITRE ATT&CK techniques apply
-4. How to detect/prevent it in a blue team context
-
-Be direct, technical, and practical. Reference specific topic directories (e.g. 2021-09-19-injection-1) when relevant.
-Avoid vague explanations - give concrete details about APIs, memory layouts, WinAPI calls, and actual code from the knowledge base.
-
-## CRITICAL - mandatory response rules (follow these on EVERY response, no exceptions):
-
-1. **Always include at least one code snippet.** Pull from the knowledge base context when available. If the KB has matching code, show it verbatim or adapted - never paraphrase code in words when you can show the actual implementation.
-2. **Use fenced code blocks with a language tag** - ` ```c `, ` ```cpp `, ` ```python `, ` ```nim `, ` ```asm ` etc. Never put code inline without a fence.
-3. **Structure every technical answer** in this order:
-   - Brief explanation (1-3 sentences)
-   - Code snippet from KB (or a representative example in the style of the codebase)
-   - MITRE ATT&CK ID(s) if applicable
-   - Detection / telemetry note (one line minimum)
-4. **Cite the source slug** when using KB code (e.g. `maldev-1`, `injection-2`, `pers-1`).
-5. If a question is completely non-technical (greetings, meta questions), skip the code section but still be concise and direct.
-"""
+# -- system prompt ---------------------------------------------------------------
 
 _OLLAMA_SYSTEM_BASE = """/no_think
 
@@ -96,211 +40,48 @@ Rules:
 
 # -- config loaders ---------------------------------------------------------------
 
-def _get_anthropic_key() -> str:
-    cfg_path = CONFIG_DIR / "anthropic_config.json"
-    if cfg_path.exists():
-        try:
-            data = json.loads(cfg_path.read_text())
-            key  = data.get("api_key", "")
-            if key and not key.startswith("sk-ant-xxx"):
-                return key
-        except Exception:
-            pass
-    return os.environ.get("ANTHROPIC_API_KEY", "")
+import cfg as _cfg
 
 
-def _get_gemini_config() -> dict:
-    cfg_path = CONFIG_DIR / "gemini_config.json"
-    defaults: dict = {
-        "api_key":           "",
-        "model":             GEMINI_MODEL_DEFAULT,
-        "temperature":       0.2,
-        "max_output_tokens": 512,
-        "thinking_budget":   0,
-        "kb_budget":         12_000,
-    }
-    if cfg_path.exists():
-        try:
-            data = json.loads(cfg_path.read_text())
-            defaults.update(data)
-        except Exception as e:
-            print("get gemini config:", str(e))
-    if not defaults["api_key"] or defaults["api_key"].startswith("AIzaxxx"):
-        defaults["api_key"] = os.environ.get("GEMINI_API_KEY", "")
-    return defaults
+def _coerce(d: dict, *, ints: tuple = (), floats: tuple = ()) -> dict:
+    """In-place: convert string env values to numeric types where the schema needs them."""
+    for k in ints:
+        v = d.get(k)
+        if isinstance(v, str) and v:
+            try: d[k] = int(v)
+            except ValueError: pass
+    for k in floats:
+        v = d.get(k)
+        if isinstance(v, str) and v:
+            try: d[k] = float(v)
+            except ValueError: pass
+    return d
 
 
 def _get_ollama_config() -> dict:
-    cfg_path = CONFIG_DIR / "ollama_config.json"
-    defaults: dict = {
+    cfg = _cfg.get("ollama_config") or {}
+    defaults = {
         "base_url": "http://localhost:11434",
-        "model": "qwen3:1.7b",
-
+        "model":    "qwen3:1.7b",
         "temperature": 0.15,
-        "top_p": 0.75,
-        "num_thread": 8,
-
-        # Fast RAG defaults
-        "context_posts": 2,
+        "top_p":       0.75,
+        "num_thread":  8,
+        "context_posts":           2,
         "context_posts_technical": 3,
-
-        # CPU-friendly
-        "num_ctx": 4096,
+        "num_ctx":     4096,
         "num_predict": 384,
-
-        # Keep answers compact
         "max_snippet_lines": 18,
         "fallback_snippets": 1,
-
-        "keep_alive": "10m"
+        "keep_alive":  "10m",
     }
-
-    if cfg_path.exists():
-        try:
-            defaults.update(json.loads(cfg_path.read_text()))
-        except Exception:
-            pass
-
-    return defaults
-
-
-# -- knowledge base (Claude / Gemini full-context path) ---------------------------
-
-def _load_knowledge_base(budget: int = 80_000) -> str:
-    if not KB_FILE.exists():
-        return ""
-    try:
-        kb    = json.loads(KB_FILE.read_text())
-        posts = kb.get("posts", [])
-        if not posts:
-            return ""
-        lines = [
-            f"\n\n## Knowledge Base: {kb.get('author', '')}",
-            f"Source: {kb.get('source', '')}",
-            f"Topics indexed: {len(posts)}",
-            "---",
-        ]
-        used = 0
-        for p in posts:
-            ref   = p.get("ref") or p.get("url", "")
-            chunk = f"\n### {p['title']}\nRef: {ref}\n{p['content']}\n"
-            if used + len(chunk) > budget:
-                break
-            lines.append(chunk)
-            used += len(chunk)
-        return "\n".join(lines)
-    except Exception:
-        return ""
-
-
-def _build_claude_system() -> list[dict] | str:
-    kb_text = _load_knowledge_base()
-    if not kb_text:
-        return _SYSTEM_BASE
-    return [
-        {"type": "text", "text": _SYSTEM_BASE},
-        {"type": "text", "text": kb_text, "cache_control": {"type": "ephemeral"}},
-    ]
-
-
-_GEMINI_DEMO_SUFFIX = """
-
-## Response format (DEMO MODE - follow strictly)
-- Max 3 sentences of explanation.
-- ONE fenced code block from the KB (mandatory for technical questions).
-- ONE MITRE ATT&CK line if applicable.
-- ONE detection/telemetry line.
-- No long tutorials. No multi-section essays. Be fast and direct.
-"""
-
-
-def _build_gemini_system(kb_budget: int = 80_000) -> str:
-    kb_text = _load_knowledge_base(budget=kb_budget)
-    if not kb_text:
-        return _SYSTEM_BASE + _GEMINI_DEMO_SUFFIX
-    return _SYSTEM_BASE + kb_text + _GEMINI_DEMO_SUFFIX
-
-
-# -- Claude streaming -------------------------------------------------------------
-
-def _stream_claude(messages: list[dict]) -> Generator[str, None, None]:
-    import anthropic
-
-    api_key = _get_anthropic_key()
-    if not api_key:
-        yield "[=^..^=] Anthropic API key not set. Add it to config/anthropic_config.json"
-        return
-
-    yield {"status": "connecting", "msg": "connecting to Claude…"}
-    client = anthropic.Anthropic(api_key=api_key)
-    try:
-        yield {"status": "generating", "msg": "generating response…"}
-        with client.messages.stream(
-            model=CLAUDE_MODEL,
-            max_tokens=2048,
-            system=_build_claude_system(),
-            messages=messages,
-            thinking={"type": "adaptive"},
-        ) as stream:
-            for text in stream.text_stream:
-                yield text
-    except anthropic.AuthenticationError:
-        yield "[=^..^=] Invalid Anthropic API key. Check config/anthropic_config.json"
-    except anthropic.APIConnectionError:
-        yield "[=^..^=] Anthropic connection error. Check your internet."
-    except Exception as e:
-        yield f"[=^..^=] Claude error: {e}"
-
-
-# -- Gemini streaming -------------------------------------------------------------
-
-def _stream_gemini(messages: list[dict]) -> Generator[str, None, None]:
-    from google import genai
-    from google.genai import types
-
-    cfg     = _get_gemini_config()
-    api_key = cfg["api_key"]
-    model   = cfg["model"]
-
-    if not api_key:
-        yield "[=^..^=] Gemini API key not set. Add it to config/gemini_config.json"
-        return
-
-    contents = []
-    for m in messages:
-        role = "user" if m["role"] == "user" else "model"
-        contents.append(types.Content(role=role, parts=[types.Part(text=m["content"])]))
-
-    yield {"status": "connecting", "msg": "connecting to Gemini…"}
-    client = genai.Client(api_key=api_key)
-    try:
-        yield {"status": "generating", "msg": f"generating response…"}
-
-        gen_cfg = types.GenerateContentConfig(
-            system_instruction=_build_gemini_system(kb_budget=cfg.get("kb_budget", 12_000)),
-            max_output_tokens=cfg.get("max_output_tokens", 512),
-            temperature=cfg.get("temperature", 0.2),
-        )
-        budget = cfg.get("thinking_budget", 0)
-        try:
-            gen_cfg.thinking_config = types.ThinkingConfig(thinking_budget=budget)
-        except Exception:
-            pass
-
-        response = client.models.generate_content_stream(
-            model=model,
-            contents=contents,
-            config=gen_cfg,
-        )
-        for chunk in response:
-            if chunk.text:
-                yield chunk.text
-    except Exception as e:
-        err = str(e)
-        if "API_KEY_INVALID" in err or "API key" in err:
-            yield "[=^..^=] Invalid Gemini API key. Check config/gemini_config.json"
-        else:
-            yield f"[=^..^=] Gemini error: {e}"
+    for k, v in defaults.items():
+        if not cfg.get(k):
+            cfg[k] = v
+    _coerce(cfg,
+            ints=("num_thread", "context_posts", "context_posts_technical",
+                  "num_ctx", "num_predict", "max_snippet_lines", "fallback_snippets"),
+            floats=("temperature", "top_p"))
+    return cfg
 
 
 # -- technical-question detector (used by RAG and canned gate) --------------------
@@ -537,6 +318,9 @@ def _rag_context(question: str, n: int = 6, max_lines: int = 18) -> str:
         block = f"### {title}\n- Source slug: {source_slug}\n- URL: {url}\n- Category: {cat}"
         if aids:
             block += f"\n- ATT&CK: {aids}"
+        tlist = p.get("tags") or []
+        if tlist:
+            block += f"\n- Tags: {', '.join(tlist)}"
         try:
             block += f"\n- Relevance: {score:.0%}"
         except Exception:
@@ -882,26 +666,23 @@ Ask me any technical question - I'll pull context from the knowledge base and gi
     # 2. What model / provider? ----------------------------------------------------
     (
         r"what model|which (llm|model|ai|provider)|what provider|ollama model|qwen",
-        """## AI Assistant Providers
+        """## AI Assistant — Local Ollama
 
-| Provider | Model | Mode | Strength |
-|---|---|---|---|
-| **Claude** | `claude-opus-4-6` | API + streaming | Best reasoning; extended thinking; full KB prompt-cached |
-| **Gemini** | `gemini-2.0-flash` | API + streaming | Fast; full KB injected as system prompt |
-| **Ollama** | `qwen3:0.6b` (default) | Local / offline | Air-gapped; RAG over top-3 KB posts |
+The assistant runs entirely offline via **Ollama** (no API keys required).
 
-Switch with the provider buttons below the chat input.
+| Component | Model | Purpose |
+|---|---|---|
+| **Chat** | `qwen3:1.7b` (default) | Streamed answers grounded in KB context |
+| **Embeddings** | `nomic-embed-text` | Semantic search over KB posts (768-dim cosine) |
 
-### Claude - prompt-cache detail
-The full knowledge base (~80 k tokens) is sent as a `cache_control: ephemeral` block. Billed once per 5-minute TTL - multi-turn sessions cost ~90 % less.
-
-### Ollama - RAG pipeline
+### RAG pipeline
 ```
 question -> nomic-embed-text (768-dim) -> cosine similarity
-         -> top-3 KB posts -> qwen3 system prompt -> streamed answer
+         -> top-N KB posts -> qwen3 system prompt -> streamed answer
 ```
 
-**Setup:** add API keys to `config/anthropic_config.json` / `config/gemini_config.json`. For Ollama see *"How to set up Ollama?"*."""
+Configure model and parameters via `.env` (OLLAMA_MODEL, OLLAMA_NUM_CTX, etc.).
+For setup instructions see *"How to set up Ollama?"*."""
     ),
 
     # 3. Help / capabilities -------------------------------------------------------
@@ -957,7 +738,7 @@ ollama serve   # listens on http://localhost:11434
 ```
 
 ### 4. Configure Peekaboo
-Edit `config/ollama_config.json`:
+Edit `.env` (OLLAMA_* keys):
 ```json
 {
   "base_url":    "http://localhost:11434",
@@ -1065,10 +846,9 @@ def _stream_canned(answer: str) -> Generator[str, None, None]:
 
 # -- public interface -------------------------------------------------------------
 
-def stream_chat(messages: list[dict], provider: str = "claude") -> Generator[str, None, None]:
+def stream_chat(messages: list[dict], provider: str = "ollama") -> Generator[str, None, None]:
     """
-    Stream a chat response.
-    provider: "claude" | "gemini" | "ollama"
+    Stream a chat response via local Ollama (RAG).
     messages: [{role, content}, ...]
 
     Canned responses fire only for onboarding / help / product questions.
@@ -1085,20 +865,14 @@ def stream_chat(messages: list[dict], provider: str = "claude") -> Generator[str
             yield from _stream_canned(canned)
             return
 
-    # Full-code requests bypass the LLM entirely - demo-fast, never truncated.
-    # Works for every provider; the LLM is only used for explanations now.
+    # Full-code requests bypass the LLM entirely — demo-fast, never truncated.
     if _is_full_code_request(last_user):
         yield {"status": "kb_direct", "msg": "loading code from KB…"}
         response = _direct_kb_response(last_user)
         yield from _stream_kb_chunks(response)
         return
 
-    if provider == "gemini":
-        yield from _stream_gemini(messages)
-    elif provider == "ollama":
-        yield from _stream_ollama(messages)
-    else:
-        yield from _stream_claude(messages)
+    yield from _stream_ollama(messages)
 
 
 def has_knowledge_base() -> bool:
@@ -1123,11 +897,7 @@ def kb_info() -> dict:
 
 
 def providers_status() -> dict:
-    claude_key  = _get_anthropic_key()
-    gemini_cfg  = _get_gemini_config()
     ollama_ok, ollama_model = _ollama_available()
     return {
-        "claude": {"available": bool(claude_key),               "model": CLAUDE_MODEL},
-        "gemini": {"available": bool(gemini_cfg["api_key"]),    "model": gemini_cfg["model"]},
-        "ollama": {"available": ollama_ok,                       "model": ollama_model},
+        "ollama": {"available": ollama_ok, "model": ollama_model},
     }

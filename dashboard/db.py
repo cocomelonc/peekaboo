@@ -133,6 +133,48 @@ def init() -> None:
         db.execute("CREATE INDEX IF NOT EXISTS idx_ttp_impl_blog_slug  ON ttp_implementations(blog_slug)")
         db.execute("CREATE INDEX IF NOT EXISTS idx_ttp_impl_platform   ON ttp_implementations(platform)")
 
+        # ------------------------------------------------------------------ #
+        # KB enrichment tables (written by worker.py, read by chatbot RAG)  #
+        # ------------------------------------------------------------------ #
+        db.execute("""
+            CREATE TABLE IF NOT EXISTS kb_docs (
+                id          INTEGER PRIMARY KEY AUTOINCREMENT,
+                slug        TEXT NOT NULL UNIQUE,
+                title       TEXT NOT NULL DEFAULT '',
+                date        TEXT NOT NULL DEFAULT '',
+                blog_url    TEXT NOT NULL DEFAULT '',
+                category    TEXT NOT NULL DEFAULT '',
+                attack_ids  TEXT NOT NULL DEFAULT '[]',
+                src_path    TEXT NOT NULL DEFAULT '',
+                implemented INTEGER NOT NULL DEFAULT 0,
+                indexed_at  TEXT NOT NULL DEFAULT (datetime('now'))
+            )
+        """)
+        db.execute("CREATE INDEX IF NOT EXISTS idx_kb_docs_slug     ON kb_docs(slug)")
+        db.execute("CREATE INDEX IF NOT EXISTS idx_kb_docs_category ON kb_docs(category)")
+
+        db.execute("""
+            CREATE TABLE IF NOT EXISTS kb_embeddings (
+                doc_id      INTEGER NOT NULL REFERENCES kb_docs(id) ON DELETE CASCADE,
+                model       TEXT    NOT NULL DEFAULT 'nomic-embed-text',
+                vector      TEXT    NOT NULL DEFAULT '[]',
+                dims        INTEGER NOT NULL DEFAULT 768,
+                embedded_at TEXT    NOT NULL DEFAULT (datetime('now')),
+                PRIMARY KEY (doc_id, model)
+            )
+        """)
+
+        db.execute("""
+            CREATE TABLE IF NOT EXISTS kb_tags (
+                doc_id      INTEGER NOT NULL REFERENCES kb_docs(id) ON DELETE CASCADE,
+                model       TEXT    NOT NULL DEFAULT '',
+                tags        TEXT    NOT NULL DEFAULT '[]',
+                raw_output  TEXT    NOT NULL DEFAULT '',
+                tagged_at   TEXT    NOT NULL DEFAULT (datetime('now')),
+                PRIMARY KEY (doc_id, model)
+            )
+        """)
+
         db.execute("""
             CREATE TABLE IF NOT EXISTS patch_history (
                 id          INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -728,6 +770,11 @@ def get_patch_history(limit: int = 10) -> list[dict]:
     return result
 
 
+def clear_patch_history() -> None:
+    with _conn() as db:
+        db.execute("DELETE FROM patch_history")
+
+
 # --------------------------------------------------------------------------- #
 #  TTP Implementations                                                         #
 # --------------------------------------------------------------------------- #
@@ -839,3 +886,201 @@ def count_ttp_techniques() -> int:
 def clear_ttp_implementations() -> None:
     with _conn() as db:
         db.execute("DELETE FROM ttp_implementations")
+
+
+# --------------------------------------------------------------------------- #
+#  KB docs                                                                      #
+# --------------------------------------------------------------------------- #
+
+def upsert_kb_doc(doc: dict) -> int:
+    """Insert or replace a KB doc. Returns the row id."""
+    with _conn() as db:
+        db.execute(
+            """
+            INSERT INTO kb_docs
+              (slug, title, date, blog_url, category, attack_ids, src_path, implemented)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+            ON CONFLICT(slug) DO UPDATE SET
+              title       = excluded.title,
+              date        = excluded.date,
+              blog_url    = excluded.blog_url,
+              category    = excluded.category,
+              attack_ids  = excluded.attack_ids,
+              src_path    = excluded.src_path,
+              implemented = excluded.implemented
+            """,
+            (
+                doc["slug"],
+                doc.get("title") or "",
+                doc.get("date") or "",
+                doc.get("blog_url") or "",
+                doc.get("category") or "",
+                json.dumps(doc.get("attack_ids") or []),
+                doc.get("src_path") or "",
+                1 if doc.get("implemented") else 0,
+            ),
+        )
+        row = db.execute("SELECT id FROM kb_docs WHERE slug = ?", (doc["slug"],)).fetchone()
+        return row[0] if row else -1
+
+
+def get_kb_docs_without_embedding(model: str = "nomic-embed-text") -> list[dict]:
+    """Return all kb_docs that have no entry in kb_embeddings for the given model."""
+    with _conn() as db:
+        rows = db.execute(
+            """
+            SELECT id, slug, title, date, category, attack_ids
+            FROM kb_docs
+            WHERE id NOT IN (SELECT doc_id FROM kb_embeddings WHERE model = ?)
+            ORDER BY id
+            """,
+            (model,),
+        ).fetchall()
+    result = []
+    for r in rows:
+        d = dict(r)
+        try:
+            d["attack_ids"] = json.loads(d["attack_ids"] or "[]")
+        except Exception:
+            d["attack_ids"] = []
+        result.append(d)
+    return result
+
+
+def upsert_kb_embedding(doc_id: int, model: str, vector: list[float]) -> None:
+    with _conn() as db:
+        db.execute(
+            """
+            INSERT INTO kb_embeddings (doc_id, model, vector, dims)
+            VALUES (?, ?, ?, ?)
+            ON CONFLICT(doc_id, model) DO UPDATE SET
+              vector      = excluded.vector,
+              dims        = excluded.dims,
+              embedded_at = datetime('now')
+            """,
+            (doc_id, model, json.dumps(vector), len(vector)),
+        )
+
+
+def kb_stats() -> dict:
+    with _conn() as db:
+        docs       = db.execute("SELECT COUNT(*) FROM kb_docs").fetchone()[0]
+        embeddings = db.execute("SELECT COUNT(*) FROM kb_embeddings").fetchone()[0]
+        tags       = db.execute("SELECT COUNT(*) FROM kb_tags").fetchone()[0]
+    return {"docs": docs, "embeddings": embeddings, "tags": tags}
+
+
+def get_kb_doc_by_id(doc_id: int) -> dict | None:
+    with _conn() as db:
+        row = db.execute("SELECT * FROM kb_docs WHERE id = ?", (doc_id,)).fetchone()
+    if not row:
+        return None
+    d = dict(row)
+    try:
+        d["attack_ids"] = json.loads(d["attack_ids"] or "[]")
+    except Exception:
+        d["attack_ids"] = []
+    return d
+
+
+def get_kb_docs_without_tags(model: str) -> list[dict]:
+    """Return all kb_docs that have no entry in kb_tags for the given model."""
+    with _conn() as db:
+        rows = db.execute(
+            """
+            SELECT id, slug, title, date, category, attack_ids, src_path
+            FROM kb_docs
+            WHERE id NOT IN (SELECT doc_id FROM kb_tags WHERE model = ?)
+            ORDER BY id
+            """,
+            (model,),
+        ).fetchall()
+    result = []
+    for r in rows:
+        d = dict(r)
+        try:
+            d["attack_ids"] = json.loads(d["attack_ids"] or "[]")
+        except Exception:
+            d["attack_ids"] = []
+        result.append(d)
+    return result
+
+
+def upsert_kb_tag(doc_id: int, model: str, tags: list[str], raw_output: str = "") -> None:
+    with _conn() as db:
+        db.execute(
+            """
+            INSERT INTO kb_tags (doc_id, model, tags, raw_output)
+            VALUES (?, ?, ?, ?)
+            ON CONFLICT(doc_id, model) DO UPDATE SET
+              tags       = excluded.tags,
+              raw_output = excluded.raw_output,
+              tagged_at  = datetime('now')
+            """,
+            (doc_id, model, json.dumps(tags), raw_output),
+        )
+
+
+def get_kb_tags_all(model: str | None = None) -> dict[str, list[str]]:
+    """Return {slug: [tags]} for the given model — used by chatbot RAG.
+    If model is None, returns tags from any model (union if multiple)."""
+    with _conn() as db:
+        if model:
+            rows = db.execute(
+                """
+                SELECT d.slug, t.tags
+                FROM kb_tags t
+                JOIN kb_docs d ON d.id = t.doc_id
+                WHERE t.model = ?
+                """,
+                (model,),
+            ).fetchall()
+        else:
+            rows = db.execute(
+                """
+                SELECT d.slug, t.tags
+                FROM kb_tags t
+                JOIN kb_docs d ON d.id = t.doc_id
+                """,
+            ).fetchall()
+    out: dict[str, list[str]] = {}
+    for r in rows:
+        try:
+            tags = json.loads(r["tags"] or "[]")
+        except Exception:
+            tags = []
+        if r["slug"] in out:
+            # union if multiple models
+            out[r["slug"]] = sorted(set(out[r["slug"]]) | set(tags))
+        else:
+            out[r["slug"]] = tags
+    return out
+
+
+def get_kb_embeddings_all(model: str = "nomic-embed-text") -> list[dict]:
+    """Return all (slug, vector) pairs for the given model — used by chatbot RAG."""
+    with _conn() as db:
+        rows = db.execute(
+            """
+            SELECT d.slug, d.title, d.date, d.blog_url, d.category, d.attack_ids,
+                   e.vector
+            FROM kb_embeddings e
+            JOIN kb_docs d ON d.id = e.doc_id
+            WHERE e.model = ?
+            ORDER BY d.id
+            """,
+            (model,),
+        ).fetchall()
+    result = []
+    for r in rows:
+        d = dict(r)
+        try:
+            d["attack_ids"] = json.loads(d["attack_ids"] or "[]")
+        except Exception:
+            d["attack_ids"] = []
+        try:
+            d["vector"] = json.loads(d["vector"] or "[]")
+        except Exception:
+            d["vector"] = []
+        result.append(d)
+    return result
