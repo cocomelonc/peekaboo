@@ -995,8 +995,17 @@ def cmd_apt(args: argparse.Namespace) -> None:
 
     pending = db.get_sessions_without_summary(model)
     if not pending:
-        total = db.count_session_summaries()
-        print(f"[apt] all sessions already have briefs ({total} total)", flush=True)
+        import sqlite3
+        with sqlite3.connect(db.DB_PATH) as conn:
+            n_finished = conn.execute(
+                "SELECT COUNT(*) FROM pipeline_sessions WHERE status='success'"
+            ).fetchone()[0]
+        if n_finished == 0:
+            print("[apt] no finished pipeline sessions found", flush=True)
+            print("[apt] run the APT Campaign pipeline in the dashboard to create sessions", flush=True)
+        else:
+            briefs = db.count_session_summaries(model)
+            print(f"[apt] all {n_finished} finished session(s) already have briefs for {model} ({briefs} total)", flush=True)
         return
 
     ok, installed = _ollama_has_model(model, base_url)
