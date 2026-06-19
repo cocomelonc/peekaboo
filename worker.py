@@ -124,7 +124,12 @@ def cmd_scan(args: argparse.Namespace) -> None:
         print(f"[scan] posts dir not found: {posts_root}", flush=True)
         sys.exit(1)
 
-    entries = mitre.build_library_cache()
+    try:
+        entries = mitre.build_library_cache()
+    except KeyboardInterrupt:
+        print("\n[scan] interrupted - no data written", flush=True)
+        print("[scan] resume: python3 worker.py scan", flush=True)
+        return
     print(f"[scan] wrote {len(entries)} entries to data/library_cache.json", flush=True)
 
 
@@ -140,20 +145,26 @@ def cmd_init(args: argparse.Namespace) -> None:
     print(f"[init] loading {len(library)} docs from library_cache.json …", flush=True)
 
     inserted = 0
-    for entry in library:
-        if not entry.get("slug"):
-            continue
-        db.upsert_kb_doc({
-            "slug":        entry["slug"],
-            "title":       entry.get("title", ""),
-            "date":        entry.get("date", ""),
-            "blog_url":    entry.get("blog_url", ""),
-            "category":    entry.get("category", ""),
-            "attack_ids":  entry.get("attack_ids", []),
-            "src_path":    entry.get("src_path", ""),
-            "implemented": entry.get("implemented", False),
-        })
-        inserted += 1
+    try:
+        for i, entry in enumerate(library, 1):
+            if not entry.get("slug"):
+                continue
+            db.upsert_kb_doc({
+                "slug":        entry["slug"],
+                "title":       entry.get("title", ""),
+                "date":        entry.get("date", ""),
+                "blog_url":    entry.get("blog_url", ""),
+                "category":    entry.get("category", ""),
+                "attack_ids":  entry.get("attack_ids", []),
+                "src_path":    entry.get("src_path", ""),
+                "implemented": entry.get("implemented", False),
+            })
+            inserted += 1
+    except KeyboardInterrupt:
+        remaining = len(library) - i
+        print(f"\n[init] interrupted at {i}/{len(library)}  ({inserted} upserted, {remaining} remaining)", flush=True)
+        print("[init] resume: python3 worker.py init", flush=True)
+        return
 
     stats = db.kb_stats()
     print(f"[init] done - kb_docs: {stats['docs']} rows ({inserted} upserted)", flush=True)
@@ -187,21 +198,27 @@ def cmd_embed(args: argparse.Namespace) -> None:
         print(f"[embed] {len(pending)} docs to embed with {model} …", flush=True)
         done = 0
 
-        for i in range(0, len(pending), batch_sz):
-            batch = pending[i:i + batch_sz]
-            texts = [_post_text(d) for d in batch]
+        try:
+            for i in range(0, len(pending), batch_sz):
+                batch = pending[i:i + batch_sz]
+                texts = [_post_text(d) for d in batch]
 
-            vecs = _embed_batch(texts, model, base_url)
-            if vecs is None:
-                print(f"[embed] batch {i//batch_sz + 1} failed - stopping", flush=True)
-                break
+                vecs = _embed_batch(texts, model, base_url)
+                if vecs is None:
+                    print(f"[embed] batch {i//batch_sz + 1} failed - stopping", flush=True)
+                    break
 
-            for doc, vec in zip(batch, vecs):
-                db.upsert_kb_embedding(doc["id"], model, vec)
-                done += 1
+                for doc, vec in zip(batch, vecs):
+                    db.upsert_kb_embedding(doc["id"], model, vec)
+                    done += 1
 
-            pct = min(100, int((i + len(batch)) / len(pending) * 100))
-            _progress(pct, f"{done}/{len(pending)}", tag="embed")
+                pct = min(100, int((i + len(batch)) / len(pending) * 100))
+                _progress(pct, f"{done}/{len(pending)}", tag="embed")
+        except KeyboardInterrupt:
+            remaining = len(pending) - done
+            print(f"\n[embed] interrupted after {done}/{len(pending)} docs  ({remaining} remaining)", flush=True)
+            print(f"[embed] resume: python3 worker.py embed --model {model}", flush=True)
+            return done
 
         print(f"\n[embed] embedded {done} docs", flush=True)
         return done
@@ -529,21 +546,27 @@ def cmd_summarize(args: argparse.Namespace) -> None:
         print(f"[sum] {len(pending)} docs to summarize with {model} …", flush=True)
         done = failed = 0
 
-        for i, doc in enumerate(pending, 1):
-            code      = _read_code(doc.get("src_path", ""), max_lines, meow_root)
-            post_body = _read_blog_markdown(doc.get("slug", ""), doc.get("date", ""))
-            prompt    = _build_summary_prompt(doc, post_body, code)
-            raw       = _chat_text(prompt, model, base_url, timeout=timeout, label="sum")
-            summary   = _normalize_summary(raw)
-            if not summary:
-                failed += 1
-            db.upsert_kb_summary(doc["id"], model, summary, raw)
-            done += 1
+        try:
+            for i, doc in enumerate(pending, 1):
+                code      = _read_code(doc.get("src_path", ""), max_lines, meow_root)
+                post_body = _read_blog_markdown(doc.get("slug", ""), doc.get("date", ""))
+                prompt    = _build_summary_prompt(doc, post_body, code)
+                raw       = _chat_text(prompt, model, base_url, timeout=timeout, label="sum")
+                summary   = _normalize_summary(raw)
+                if not summary:
+                    failed += 1
+                db.upsert_kb_summary(doc["id"], model, summary, raw)
+                done += 1
 
-            pct    = int(i / len(pending) * 100)
-            srcs   = "+".join(s for s in (["blog"] if post_body else []) + (["code"] if code else []))
-            label  = f"{i}/{len(pending)} - {doc['slug'][:28]:28s} [{srcs or '-'}] -> {len(summary)}ch"
-            _progress(pct, label, tag="sum")
+                pct    = int(i / len(pending) * 100)
+                srcs   = "+".join(s for s in (["blog"] if post_body else []) + (["code"] if code else []))
+                label  = f"{i}/{len(pending)} - {doc['slug'][:28]:28s} [{srcs or '-'}] -> {len(summary)}ch"
+                _progress(pct, label, tag="sum")
+        except KeyboardInterrupt:
+            remaining = len(pending) - i
+            print(f"\n[sum] interrupted at {i}/{len(pending)}  ({done} saved, {remaining} remaining)", flush=True)
+            print(f"[sum] resume: python3 worker.py summarize --model {model}", flush=True)
+            return done
 
         print(f"\n[sum] summarized {done} docs ({failed} empty)", flush=True)
         return done
@@ -701,25 +724,31 @@ def cmd_ttp(args: argparse.Namespace) -> None:
         done   = 0
         failed = 0
 
-        for i, doc in enumerate(pending, 1):
-            code   = _read_code(doc.get("src_path", ""), max_lines, meow_root)
-            prompt = _build_ttp_prompt(doc, code)
-            parsed, raw = _chat_json(prompt, model, base_url, timeout=timeout, label="ttp")
+        try:
+            for i, doc in enumerate(pending, 1):
+                code   = _read_code(doc.get("src_path", ""), max_lines, meow_root)
+                prompt = _build_ttp_prompt(doc, code)
+                parsed, raw = _chat_json(prompt, model, base_url, timeout=timeout, label="ttp")
 
-            if parsed is None:
-                failed += 1
-                attack_ids, tactics, confidence, rationale = [], [], "low", ""
-            else:
-                attack_ids, tactics, confidence, rationale = _normalize_ttps(parsed)
+                if parsed is None:
+                    failed += 1
+                    attack_ids, tactics, confidence, rationale = [], [], "low", ""
+                else:
+                    attack_ids, tactics, confidence, rationale = _normalize_ttps(parsed)
 
-            db.upsert_ttp_extracted(doc["id"], model, attack_ids, tactics,
-                                     confidence, rationale, raw)
-            done += 1
+                db.upsert_ttp_extracted(doc["id"], model, attack_ids, tactics,
+                                         confidence, rationale, raw)
+                done += 1
 
-            pct     = int(i / len(pending) * 100)
-            ids_str = ",".join(attack_ids[:3]) or "(none)"
-            label   = f"{i}/{len(pending)} - {doc['slug'][:28]:28s} -> {ids_str} [{confidence}]"
-            _progress(pct, label, tag="ttp")
+                pct     = int(i / len(pending) * 100)
+                ids_str = ",".join(attack_ids[:3]) or "(none)"
+                label   = f"{i}/{len(pending)} - {doc['slug'][:28]:28s} -> {ids_str} [{confidence}]"
+                _progress(pct, label, tag="ttp")
+        except KeyboardInterrupt:
+            remaining = len(pending) - i
+            print(f"\n[ttp] interrupted at {i}/{len(pending)}  ({done} saved, {remaining} remaining)", flush=True)
+            print(f"[ttp] resume: python3 worker.py ttp --model {model}", flush=True)
+            return done
 
         print(f"\n[ttp] processed {done} docs ({failed} LLM failures)", flush=True)
         return done
@@ -775,23 +804,29 @@ def cmd_tag(args: argparse.Namespace) -> None:
         done   = 0
         failed = 0
 
-        for i, doc in enumerate(pending, 1):
-            code   = _read_code(doc.get("src_path", ""), max_lines, meow_root)
-            prompt = _build_tag_prompt(doc, code)
-            parsed, raw = _chat_json(prompt, model, base_url, timeout=timeout, label="tag")
+        try:
+            for i, doc in enumerate(pending, 1):
+                code   = _read_code(doc.get("src_path", ""), max_lines, meow_root)
+                prompt = _build_tag_prompt(doc, code)
+                parsed, raw = _chat_json(prompt, model, base_url, timeout=timeout, label="tag")
 
-            if parsed is None:
-                failed += 1
-                tags = []
-            else:
-                tags = _normalize_tags(parsed)
+                if parsed is None:
+                    failed += 1
+                    tags = []
+                else:
+                    tags = _normalize_tags(parsed)
 
-            db.upsert_kb_tag(doc["id"], model, tags, raw)
-            done += 1
+                db.upsert_kb_tag(doc["id"], model, tags, raw)
+                done += 1
 
-            pct = int(i / len(pending) * 100)
-            label = f"{i}/{len(pending)} - {doc['slug'][:30]:30s} -> {','.join(tags[:4]) or '(none)'}"
-            _progress(pct, label, tag="tag")
+                pct = int(i / len(pending) * 100)
+                label = f"{i}/{len(pending)} - {doc['slug'][:30]:30s} -> {','.join(tags[:4]) or '(none)'}"
+                _progress(pct, label, tag="tag")
+        except KeyboardInterrupt:
+            remaining = len(pending) - i
+            print(f"\n[tag] interrupted at {i}/{len(pending)}  ({done} saved, {remaining} remaining)", flush=True)
+            print(f"[tag] resume: python3 worker.py tag --model {model}", flush=True)
+            return done
 
         print(f"\n[tag] tagged {done} docs ({failed} failed)", flush=True)
         return done

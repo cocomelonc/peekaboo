@@ -1,6 +1,6 @@
 # Peekaboo
 
-![img](./screenshots/2026-06-18_15-16.png)    
+![img](./screenshots/2026-06-19_08-49.png)    
 
 Peekaboo is a modular framework designed to safely emulate malware behavior. It allows security researchers, red teamers, and blue teamers to reproduce complex threat scenarios - including Command & Control (C2) communication, persistence mechanisms, and lateral movement - without using destructive payloads.
 
@@ -74,9 +74,11 @@ cd dashboard && python3 app.py
 
 ![img](./screenshots/2026-06-18_15-16.png)    
 
-![img](./screenshots/2026-06-11_09-49.png)
+![img](./screenshots/2026-06-11_09-49.png)    
 
-![img](./screenshots/2026-06-11_09-51.png)
+![img](./screenshots/2026-06-11_09-51.png)    
+
+![img](./screenshots/2026-06-19_08-51.png)    
 
 ### modules
 
@@ -116,12 +118,14 @@ python worker.py family             malware family behavioral briefs
 
 All `worker.py` subcommands are **resumable** - they use `NOT IN` SQL patterns to skip already-processed rows. Interrupt and re-run at any time.
 
-`sigma`, `apt`, `actor`, and `family` catch `KeyboardInterrupt` and print a clean resume hint instead of a traceback:
+`scan`, `init`, `embed`, `tag`, `ttp`, `summarize`, `sigma`, `apt`, `actor`, and `family` catch `KeyboardInterrupt` and print a clean resume hint instead of a traceback:
 
-```
+```bash
 [actor] interrupted at 47/312  (46 saved, 265 remaining)
 [actor] resume: python3 worker.py actor --model qwen3:14b
 ```
+
+![img](./screenshots/2026-06-19_08-44.png)    
 
 ---
 
@@ -132,6 +136,8 @@ All `worker.py` subcommands are **resumable** - they use `NOT IN` SQL patterns t
 ```bash
 python worker.py <subcommand> [options]
 ```
+
+![img](./screenshots/2026-06-18_17-35.png)    
 
 ### subcommands
 
@@ -157,7 +163,19 @@ python worker.py scan
 python worker.py scan --posts ~/hacking/meow/_posts
 ```
 
-Walks markdown files, extracts frontmatter (title, date, category, ATT&CK IDs), finds associated source files (`.c`, `.cpp`, `.nim`, `.asm`, `.s`), and upserts into `kb_docs`.
+Walks markdown files, extracts frontmatter (title, date, category, ATT&CK IDs), finds associated source files (`.c`, `.cpp`, `.nim`, `.asm`, `.s`), and writes `data/library_cache.json`. Note: results are built in memory and written atomically at the end - if interrupted, no data is saved and re-running restarts the scan from scratch (fast, CPU-only).
+
+> **Ctrl+C safe** - prints a clean message on interrupt. Re-run to redo the scan.
+
+### init
+
+```bash
+python worker.py init
+```
+
+Imports `data/library_cache.json` into `kb_docs` (idempotent upsert). Each doc is written to DB immediately, so interrupting and re-running will skip already-upserted entries.
+
+> **Ctrl+C safe** - each doc is upserted immediately. Press Ctrl+C at any time; re-run to resume from where it stopped.
 
 ### embed
 
@@ -176,6 +194,8 @@ Computes 768-dim embedding vectors for all docs without an embedding. Stored in 
 | `--rebuild` | off | Wipe existing embeddings and recompute |
 | `--watch N` | off | Re-run every N seconds |
 
+> **Ctrl+C safe** - each batch is written to DB immediately. Press Ctrl+C at any time; re-run the same command to resume from where it stopped. Also exits `--watch` mode cleanly.
+
 ### tag
 
 ```bash
@@ -192,6 +212,8 @@ Asks the LLM to classify each doc with ATT&CK tactic tags (constrained JSON outp
 | `--rebuild-changed` | off | Only retag docs whose source file changed since last tag |
 | `--watch N` | off | Re-run every N seconds |
 
+> **Ctrl+C safe** - each tag is written to DB immediately. Press Ctrl+C at any time; re-run the same command to resume from where it stopped. Also exits `--watch` mode cleanly.
+
 ### ttp
 
 ```bash
@@ -206,6 +228,8 @@ Reads each doc's source code file, asks the LLM to extract MITRE ATT&CK IDs with
 | `--model` | `qwen3:14b` | Ollama chat model (use a larger model for better accuracy) |
 | `--rebuild` | off | Wipe and redo all TTP extraction |
 | `--rebuild-changed` | off | Only redo docs whose source changed |
+
+> **Ctrl+C safe** - each result is written to DB immediately. Press Ctrl+C at any time; re-run the same command to resume from where it stopped.
 
 ### summarize
 
@@ -229,6 +253,8 @@ Reads both the blog post markdown and the associated source code for each doc, t
 | `--rebuild-changed` | off | Only recompute summaries for docs whose source or markdown changed |
 | `--watch N` | off | Re-run every N seconds |
 
+> **Ctrl+C safe** - each summary is written to DB immediately. Press Ctrl+C at any time; re-run the same command to resume from where it stopped. Also exits `--watch` mode cleanly.
+
 ### sigma
 
 ```bash
@@ -241,6 +267,8 @@ python worker.py sigma --model qwen3:14b
 # Full rebuild (if GPU machine also has the sigma repo)
 python worker.py sigma --sigma-path ~/hacking/sigma --rebuild --model qwen3:14b
 ```
+
+![malware](./screenshots/2026-06-18_16-52.png)    
 
 **Step 1 (parse):** Walks all `.yml` Sigma rule files, extracts per-technique event IDs, registry keys, process images, and command-line patterns, and stores them in `artifact_map`. This is the same data the dashboard "Build from Sigma Rules" button produces - but now runnable from the CLI without a browser.
 

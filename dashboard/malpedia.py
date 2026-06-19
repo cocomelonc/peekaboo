@@ -180,27 +180,31 @@ def _extract_ids(result) -> list[str]:
 
 
 def find_actor(needle: str) -> list[str]:
+    needle_l = needle.lower()
     c = _get_client()
-    if not c:
-        return []
-    try:
-        return _extract_ids(c.find_actor(needle))
-    except Exception as e:
-        print(f"[malpedia] find_actor error: {e}")
-        needle_l = needle.lower()
-        return [a for a in list_actors() if needle_l in a.lower()]
+    if c:
+        try:
+            results = _extract_ids(c.find_actor(needle))
+            if results:
+                return results
+        except Exception as e:
+            print(f"[malpedia] find_actor error: {e}")
+    # fallback: filter local cache
+    return [a for a in list_actors() if needle_l in a.lower()]
 
 
 def find_family(needle: str) -> list[str]:
+    needle_l = needle.lower()
     c = _get_client()
-    if not c:
-        return []
-    try:
-        return _extract_ids(c.find_family(needle))
-    except Exception as e:
-        print(f"[malpedia] find_family error: {e}")
-        needle_l = needle.lower()
-        return [f for f in list_families() if needle_l in f.lower()]
+    if c:
+        try:
+            results = _extract_ids(c.find_family(needle))
+            if results:
+                return results
+        except Exception as e:
+            print(f"[malpedia] find_family error: {e}")
+    # fallback: filter local cache
+    return [f for f in list_families() if needle_l in f.lower()]
 
 # -- semantic related post matching via local Ollama embeddings --------------
 
