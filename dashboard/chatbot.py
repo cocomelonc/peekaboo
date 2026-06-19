@@ -63,11 +63,11 @@ def _get_ollama_config() -> dict:
     defaults = {
         "base_url": "http://localhost:11434",
         "model":    "qwen3:1.7b",
-        "temperature": 0.15,
-        "top_p":       0.75,
+        "temperature": 0.7,
+        "top_p":       0.9,
         "num_thread":  8,
-        "context_posts":           2,
-        "context_posts_technical": 3,
+        "context_posts":           4,
+        "context_posts_technical": 6,
         "num_ctx":     4096,
         "num_predict": 384,
         "max_snippet_lines": 18,
@@ -316,7 +316,8 @@ def _rag_context(question: str, n: int = 6, max_lines: int = 18) -> str:
 
         snippet, source_slug, lang = _get_snippet_for_post(p, question=question, max_lines=max_lines)
 
-        block = f"### {title}\n- Source slug: {source_slug}\n- URL: {url}\n- Category: {cat}"
+        src_label = "(book chapter)" if p.get("source_type") == "book" else "(blog post)"
+        block = f"### {title} {src_label}\n- Source slug: {source_slug}\n- URL: {url}\n- Category: {cat}"
         if aids:
             block += f"\n- ATT&CK: {aids}"
         tlist = p.get("tags") or []

@@ -658,6 +658,87 @@ def build_library_cache() -> list[dict]:
     return entries
 
 
+def scan_book_chapters(book_root: Path) -> list[dict]:
+    """Scan a directory of .md book chapters into kb_docs format.
+
+    Chapters get slug 'book/<stem>' to avoid collision with blog post slugs.
+    src_path points to the .md file itself so summarize/ttp workers can read
+    inline code blocks from it.
+    """
+    book_root = Path(book_root)
+    if not book_root.exists():
+        print(f"[mitre] book root not found: {book_root}")
+        return []
+
+    entries = []
+    for f in sorted(book_root.rglob("*.md")):
+        try:
+            text = f.read_text(encoding="utf-8", errors="replace")
+        except Exception:
+            continue
+
+        # slug: book/<relative-path-without-extension>
+        try:
+            rel = f.relative_to(book_root)
+            slug = "book/" + "/".join(list(rel.parts[:-1]) + [rel.stem])
+        except ValueError:
+            slug = "book/" + f.stem
+
+        # title: LaTeX \subsection{...}, then YAML front matter, then # heading, then filename
+        title = f.stem.replace("-", " ").replace("_", " ").title()
+        fm_match = re.match(r'^---\s*\n(.*?)\n---', text, re.DOTALL)
+        latex_m = re.search(r'\\subsection\{(.+?)\}', text)
+        if latex_m:
+            # strip leading chapter number "19. title" -> "title"
+            raw = latex_m.group(1).strip()
+            title = re.sub(r'^\d+\.\s*', '', raw)
+        elif fm_match:
+            tm = re.search(r'^title:\s*["\']?(.+?)["\']?\s*$', fm_match.group(1), re.MULTILINE)
+            if tm:
+                title = tm.group(1).strip('"\'')
+        else:
+            hm = re.search(r'^#\s+(.+)', text, re.MULTILINE)
+            if hm:
+                title = hm.group(1).strip()
+
+        body = text[fm_match.end():] if fm_match else text
+        attack_ids = sorted(set(_ATTACK_RE.findall(body)))
+
+        # category inference from slug + title keywords
+        combined = (slug + " " + title).lower()
+        category = (
+            "injection"   if any(x in combined for x in ("inject", "hollow", "hijack")) else
+            "persistence" if "persist" in combined else
+            "evasion"     if any(x in combined for x in ("evas", "bypass", "obfusc", "anti")) else
+            "crypto"      if any(x in combined for x in ("crypt", "encrypt", "hash")) else
+            "c2"          if any(x in combined for x in ("command", "control", "beacon", " c2")) else
+            "stealer"     if "steal" in combined else
+            "shellcode"   if "shellcode" in combined else
+            "analysis"    if any(x in combined for x in ("analys", "forensic", "detect")) else
+            "other"
+        )
+        if attack_ids:
+            base_id = attack_ids[0].split(".")[0]
+            category = _AID_CATEGORY.get(attack_ids[0], _AID_CATEGORY.get(base_id, category))
+
+        entries.append({
+            "date":        "",
+            "slug":        slug,
+            "title":       title,
+            "category":    category,
+            "attack_ids":  attack_ids,
+            "blog_url":    "",
+            "src_path":    str(f),
+            "snippet":     "",
+            "module":      None,
+            "implemented": False,
+            "source_type": "book",
+        })
+
+    print(f"[mitre] book scan: {len(entries)} chapters from {book_root}")
+    return entries
+
+
 def get_library(category: str = "all") -> list[dict]:
     if _LIBRARY_CACHE.exists():
         try:

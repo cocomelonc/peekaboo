@@ -191,11 +191,17 @@ def init() -> None:
                 attack_ids  TEXT NOT NULL DEFAULT '[]',
                 src_path    TEXT NOT NULL DEFAULT '',
                 implemented INTEGER NOT NULL DEFAULT 0,
+                source_type TEXT NOT NULL DEFAULT 'blog',
                 indexed_at  TEXT NOT NULL DEFAULT (datetime('now'))
             )
         """)
         db.execute("CREATE INDEX IF NOT EXISTS idx_kb_docs_slug     ON kb_docs(slug)")
         db.execute("CREATE INDEX IF NOT EXISTS idx_kb_docs_category ON kb_docs(category)")
+        # migration: add source_type to existing installs
+        try:
+            db.execute("ALTER TABLE kb_docs ADD COLUMN source_type TEXT NOT NULL DEFAULT 'blog'")
+        except Exception:
+            pass  # column already exists
 
         db.execute("""
             CREATE TABLE IF NOT EXISTS kb_embeddings (
@@ -1034,8 +1040,8 @@ def upsert_kb_doc(doc: dict) -> int:
         db.execute(
             """
             INSERT INTO kb_docs
-              (slug, title, date, blog_url, category, attack_ids, src_path, implemented)
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+              (slug, title, date, blog_url, category, attack_ids, src_path, implemented, source_type)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
             ON CONFLICT(slug) DO UPDATE SET
               title       = excluded.title,
               date        = excluded.date,
@@ -1043,7 +1049,8 @@ def upsert_kb_doc(doc: dict) -> int:
               category    = excluded.category,
               attack_ids  = excluded.attack_ids,
               src_path    = excluded.src_path,
-              implemented = excluded.implemented
+              implemented = excluded.implemented,
+              source_type = excluded.source_type
             """,
             (
                 doc["slug"],
@@ -1054,6 +1061,7 @@ def upsert_kb_doc(doc: dict) -> int:
                 json.dumps(doc.get("attack_ids") or []),
                 doc.get("src_path") or "",
                 1 if doc.get("implemented") else 0,
+                doc.get("source_type") or "blog",
             ),
         )
         row = db.execute("SELECT id FROM kb_docs WHERE slug = ?", (doc["slug"],)).fetchone()
@@ -1572,7 +1580,7 @@ def get_kb_embeddings_all(model: str = "nomic-embed-text") -> list[dict]:
         rows = db.execute(
             """
             SELECT d.slug, d.title, d.date, d.blog_url, d.category, d.attack_ids,
-                   e.vector
+                   d.source_type, e.vector
             FROM kb_embeddings e
             JOIN kb_docs d ON d.id = e.doc_id
             WHERE e.model = ?

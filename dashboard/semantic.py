@@ -1,6 +1,6 @@
 """
 peekaboo semantic matching via local Ollama embeddings.
-no hardcoded rules - pure cosine similarity on nomic-embed-text.
+MMR (Maximal Marginal Relevance) retrieval: balances relevance and diversity.
 
 Data source priority:
   1. SQLite tables (kb_docs + kb_embeddings) - populated by worker.py
@@ -91,12 +91,13 @@ def _load_from_db() -> tuple[list[dict], dict[str, list[float]], dict[str, list[
             continue
         embs[slug] = r["vector"]
         posts.append({
-            "slug":       slug,
-            "title":      r.get("title", ""),
-            "date":       r.get("date", ""),
-            "blog_url":   r.get("blog_url", ""),
-            "category":   r.get("category", ""),
-            "attack_ids": r.get("attack_ids", []),
+            "slug":        slug,
+            "title":       r.get("title", ""),
+            "date":        r.get("date", ""),
+            "blog_url":    r.get("blog_url", ""),
+            "category":    r.get("category", ""),
+            "attack_ids":  r.get("attack_ids", []),
+            "source_type": r.get("source_type", "blog"),
         })
     # build ttps index: slug -> {attack_ids, tactics, confidence, rationale}
     # for multi-model rows, high-confidence entry wins over low
@@ -201,14 +202,55 @@ def invalidate_cache() -> None:
 # Public retrieval API                                                         #
 # --------------------------------------------------------------------------- #
 
+def _mmr_select(
+    query_vec: list[float],
+    candidates: list[tuple[float, dict, list[float]]],
+    max_results: int,
+    lambda_: float = 0.6,
+) -> list[tuple[float, dict]]:
+    """Maximal Marginal Relevance: pick diverse-yet-relevant results.
+
+    lambda_=1.0 is pure cosine ranking; lambda_=0.0 is pure diversity.
+    0.6 balances both - avoids returning five process-injection variants
+    for a broad "injection" query.
+    """
+    selected:      list[tuple[float, dict]] = []
+    selected_vecs: list[list[float]]        = []
+    remaining = list(candidates)
+
+    while remaining and len(selected) < max_results:
+        best_idx   = -1
+        best_score = float("-inf")
+        for idx, (sim_q, post, vec) in enumerate(remaining):
+            redundancy = max(
+                (_cosine(vec, sv) for sv in selected_vecs),
+                default=0.0,
+            )
+            mmr = lambda_ * sim_q - (1.0 - lambda_) * redundancy
+            if mmr > best_score:
+                best_score = mmr
+                best_idx   = idx
+        if best_idx == -1:
+            break
+        sim_q, post, vec = remaining.pop(best_idx)
+        selected.append((sim_q, post))
+        selected_vecs.append(vec)
+
+    return selected
+
+
 def find_related_posts(query: str, max_results: int = 8,
                        filter_ttp: str | None = None) -> list[dict]:
-    """Embed query, cosine-rank all posts, return top matches.
+    """Embed query, MMR-rank all posts, return diverse top matches.
+
+    Uses Maximal Marginal Relevance (λ=0.6) over a candidate pool of
+    min(40, 4×max_results) posts so broad queries like 'injection' or
+    'evasion' return varied techniques instead of near-duplicate results.
 
     filter_ttp: if set (e.g. "T1055"), only return posts whose extracted ttps
     include that ATT&CK ID. Useful for TTP-scoped semantic search.
 
-    Results carry `tags` and `ttps` fields for downstream callers (chatbot RAG)."""
+    Results carry `tags`, `ttps`, and `source_type` fields for downstream callers."""
     posts, embs, tags = _load_index()
     ttps      = _load_ttps()
     summaries = _load_summaries()
@@ -220,7 +262,8 @@ def find_related_posts(query: str, max_results: int = 8,
         return []
     q_vec = q_embs[0]
 
-    scored: list[tuple[float, dict]] = []
+    # build candidate list: (sim_to_query, post, post_vec)
+    candidates: list[tuple[float, dict, list[float]]] = []
     for post in posts:
         slug = post.get("slug", "")
         pvec = embs.get(slug)
@@ -229,26 +272,33 @@ def find_related_posts(query: str, max_results: int = 8,
         if filter_ttp and filter_ttp not in (ttps.get(slug) or {}).get("attack_ids", []):
             continue
         sim = _cosine(q_vec, pvec)
-        scored.append((sim, post))
+        if sim >= 0.3:
+            candidates.append((sim, post, pvec))
 
-    scored.sort(key=lambda x: x[0], reverse=True)
+    if not candidates:
+        return []
+
+    # trim to a candidate pool, then apply MMR
+    pool_size  = min(len(candidates), max(40, max_results * 4))
+    candidates.sort(key=lambda x: x[0], reverse=True)
+    pool       = candidates[:pool_size]
+    selected   = _mmr_select(q_vec, pool, max_results, lambda_=0.6)
 
     results = []
-    for sim, post in scored[:max_results]:
-        if sim < 0.3:
-            break
+    for sim, post in selected:
         slug = post.get("slug", "")
         results.append({
-            "slug":       slug,
-            "title":      post.get("title", ""),
-            "date":       post.get("date", ""),
-            "blog_url":   post.get("blog_url", ""),
-            "category":   post.get("category", ""),
-            "attack_ids": post.get("attack_ids", []),
-            "tags":       tags.get(slug, []),
-            "ttps":       ttps.get(slug),
-            "summary":    summaries.get(slug, ""),
-            "score":      round(sim, 3),
+            "slug":        slug,
+            "title":       post.get("title", ""),
+            "date":        post.get("date", ""),
+            "blog_url":    post.get("blog_url", ""),
+            "category":    post.get("category", ""),
+            "attack_ids":  post.get("attack_ids", []),
+            "source_type": post.get("source_type", "blog"),
+            "tags":        tags.get(slug, []),
+            "ttps":        ttps.get(slug),
+            "summary":     summaries.get(slug, ""),
+            "score":       round(sim, 3),
         })
     return results
 

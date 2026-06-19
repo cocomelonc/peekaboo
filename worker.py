@@ -104,6 +104,7 @@ def cmd_scan(args: argparse.Namespace) -> None:
     """Re-scan local _posts/*.markdown -> data/library_cache.json (no network).
 
     Honors $BLOG_POSTS_ROOT and $MEOW_ROOT. CLI flags override env if set.
+    Pass --book PATH to also scan a directory of .md book chapters into kb_docs.
     """
     if args.posts:
         os.environ["BLOG_POSTS_ROOT"] = args.posts
@@ -131,6 +132,23 @@ def cmd_scan(args: argparse.Namespace) -> None:
         print("[scan] resume: python3 worker.py scan", flush=True)
         return
     print(f"[scan] wrote {len(entries)} entries to data/library_cache.json", flush=True)
+
+    # -- optional book chapter scan ------------------------------------------
+    book_path = getattr(args, "book", None) or os.environ.get("BOOK_ROOT", "")
+    if book_path:
+        from pathlib import Path as _Path
+        db.init()
+        chapters = mitre.scan_book_chapters(_Path(book_path))
+        inserted = 0
+        try:
+            for i, ch in enumerate(chapters, 1):
+                db.upsert_kb_doc(ch)
+                inserted += 1
+        except KeyboardInterrupt:
+            print(f"\n[scan] book interrupted at {i}/{len(chapters)}  ({inserted} saved)", flush=True)
+            print(f"[scan] resume: python3 worker.py scan --book {book_path}", flush=True)
+            return
+        print(f"[scan] book: {inserted} chapters upserted into kb_docs", flush=True)
 
 
 def cmd_init(args: argparse.Namespace) -> None:
@@ -1501,6 +1519,8 @@ def _build_parser() -> argparse.ArgumentParser:
                     help="path to _posts/ (default: $BLOG_POSTS_ROOT)")
     sc.add_argument("--meow-root", default=None, dest="meow_root",
                     help="local meow repo path (default: $MEOW_ROOT)")
+    sc.add_argument("--book",      default=None, dest="book",
+                    help="path to book .md chapters directory (default: $BOOK_ROOT)")
 
     sub.add_parser("init",   help="import library_cache.json -> kb_docs")
     sub.add_parser("status", help="show row counts")
