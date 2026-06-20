@@ -26,6 +26,7 @@ _SCHEMA: dict[str, dict[str, str]] = {
     "ollama_config": {
         "base_url":                "OLLAMA_BASE_URL",
         "model":                   "OLLAMA_MODEL",
+        "bearer_token":            "OLLAMA_BEARER_TOKEN",
         "temperature":             "OLLAMA_TEMPERATURE",
         "top_p":                   "OLLAMA_TOP_P",
         "num_thread":              "OLLAMA_NUM_THREAD",
@@ -81,7 +82,7 @@ _SCHEMA: dict[str, dict[str, str]] = {
 
 _SECRET_FIELDS = {
     "bot_token", "github_token", "api_key", "api_token",
-    "bitbucket_token_base64", "vt_api_key", "azure_pat",
+    "bearer_token", "bitbucket_token_base64", "vt_api_key", "azure_pat",
 }
 
 

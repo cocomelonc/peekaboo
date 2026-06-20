@@ -27,8 +27,7 @@ Peekaboo is a modular framework designed to safely emulate malware behavior. It 
 - **lightweight dashboard** - a python-based C2 backend and dashboard for real-time monitoring of active "beacons".
 - **MITRE ATT&CK R&D** - browse 200+ blog post techniques mapped to ATT&CK IDs with inline source code, LLM-extracted TTPs, and per-post GPU-precomputed briefs.
 - **Malpedia integration** - threat actor and malware family lookup with semantic blog post matching via local LLM embeddings.
-- **AI assistant** - local RAG chatbot (Ollama/qwen3) trained on blog posts and codebase; GPU-precomputed summaries served instantly with typing animation; fully offline.
-- **Quick Brief** - type any technique name in the AI assistant panel and get a GPU-precomputed 3-sentence brief instantly - no LLM call at request time.
+- **AI assistant** - direct Ollama gateway; one canned answer for "what is Peekaboo?", everything else streamed live from Ollama; no RAG, no DB lookups at chat time.
 - **APT campaign pipeline** - end-to-end automated pipeline: Malpedia actor -> threat reports -> TTP extraction -> module selection -> binary compile.
 - **YARA rule generator** - auto-generate YARA rules from compiled binaries or uploaded samples.
 - **VirusTotal scanner** - submit binaries for AV detection scoring; lookup by SHA256; poll analysis results.
@@ -94,7 +93,7 @@ cd dashboard && python3 app.py
 | **Artifact Map** | 400+ ATT&CK techniques cross-referenced with 4,000+ Sigma rules; per-technique event IDs, registry, process, and cmdline artifacts; GPU-precomputed detection briefs |
 | **MITRE ATT&CK** | Browse 200+ blog posts mapped to ATT&CK techniques; Extracted TTPs tab; per-post GPU briefs; inline source code viewer |
 | **Malpedia** | Threat actor and malware family lookup with semantic blog post matching |
-| **AI Assistant** | Local RAG chatbot; GPU-precomputed summaries served with typing animation; Quick Brief lookup; fully offline |
+| **AI Assistant** | Direct Ollama gateway; instant canned answer for "what is Peekaboo?", all other questions streamed live from Ollama |
 | **Settings** | Read-only viewer for `.env`-loaded API keys and service configs |
 
 ---
@@ -165,7 +164,7 @@ python worker.py <subcommand> [options]
 | `apt` | GPU/LLM | Precompute 3-sentence campaign brief per finished pipeline session |
 | `actor` | GPU/LLM | Precompute threat profile brief per Malpedia actor |
 | `family` | GPU/LLM | Precompute behavioral brief per Malpedia malware family |
-| `refresh` | all | One-shot incremental update: scan → init → embed → tag → (ttp?) → (summarize?) |
+| `refresh` | all | One-shot incremental update: scan -> init -> embed -> tag -> (ttp?) -> (summarize?) |
 | `status` | CPU | Show row counts, pending counts, and stale counts for all tables |
 
 ### scan
@@ -252,9 +251,7 @@ python worker.py summarize --model qwen3:14b --posts ~/hacking/meow/_posts
 
 Reads both the blog post markdown and the associated source code for each doc, then asks the LLM to write a 3-sentence summary: what the technique does, how it works at the API/syscall level, and what defenders should look for. Summaries are stored in `kb_summaries` and served by:
 
-- The **AI assistant** template response path (no live LLM call - just DB read + typing animation)
 - The **BRIEF block** in the MITRE Library detail card
-- The **Quick Brief** lookup in the AI assistant panel
 
 | flag | default | description |
 |------|---------|-------------|
@@ -394,7 +391,7 @@ python worker.py refresh
 python worker.py refresh --scan --ttp --summarize --meow-root ~/hacking/meow
 ```
 
-One-shot incremental pipeline: runs scan (optional) → init → embed → tag → ttp (optional) → summarize (optional). Skips already-processed rows in every step.
+One-shot incremental pipeline: runs scan (optional) -> init -> embed -> tag -> ttp (optional) -> summarize (optional). Skips already-processed rows in every step.
 
 | flag | default | description |
 |------|---------|-------------|
@@ -502,12 +499,12 @@ The Malpedia tab connects to the [Malpedia REST API](https://malpedia.caad.fkie.
 - Search actors by name, country, or malware family
 - Expand any actor/family to see techniques, aliases, and semantically matched blog posts with similarity score
 - Each actor/family detail card has a `[brief]` button in the title - shows the GPU-precomputed threat profile or behavioral brief in the slide panel (no LLM at render time; requires `worker.py actor` / `worker.py family`)
-- Each related blog post row has a `[brief]` button → KB summary from `worker.py summarize`
+- Each related blog post row has a `[brief]` button -> KB summary from `worker.py summarize`
 - Requires a Malpedia API key in `.env` (`MALPEDIA_API_TOKEN`)
 
 ### APT campaign pipeline
 
-Fully automated five-stage pipeline: Malpedia actor → threat reports → TTP extraction → module selection → binary compile.
+Fully automated five-stage pipeline: Malpedia actor -> threat reports -> TTP extraction -> module selection -> binary compile.
 
 ![img](./screenshots/2026-06-07_23-57.png)
 
@@ -537,7 +534,7 @@ Cross-references 400+ ATT&CK techniques with 4,000+ Sigma detection rules. For e
 
 **Building the map:**
 
-Option A - browser: open the Artifact Map panel → click **⚙ Build from Sigma Rules**. Progress streams live.
+Option A - browser: open the Artifact Map panel -> click **⚙ Build from Sigma Rules**. Progress streams live.
 
 Option B - CLI (recommended for GPU workflows):
 ```bash
@@ -548,19 +545,16 @@ python worker.py sigma --sigma-path ~/hacking/sigma --parse-only
 
 ### AI assistant
 
-Local RAG chatbot built on the GPU/CPU split architecture.
+Direct Ollama gateway for technical malware research questions.
 
 ![img](./screenshots/2026-05-01_01-55.png)
 
-**How responses work (fastest to slowest):**
+**How responses work:**
 
-1. **Canned answers** - instant; covers "what is Peekaboo?", "how to set up Ollama?", etc.
-2. **KB template response** - DB read only; finds matching blog posts with precomputed GPU summaries, streams full source code + brief + ATT&CK links with typing animation. No live LLM call.
-3. **Live LLM** - fallback for questions with no precomputed coverage; streams from Ollama with RAG context injected.
+1. **"what is Peekaboo?"** - instant canned answer; no LLM call.
+2. **Everything else** - streamed directly from Ollama `/api/chat`; no RAG, no DB lookups.
 
-**Quick Brief** - a compact lookup card above the chat window. Type any technique slug (e.g. `malware-tricks-58`) or keyword (e.g. `persistence`) and press Enter. Fetches the GPU-precomputed brief from the DB and displays it with typing animation. Falls back to a keyword search across the library if the exact slug is not found.
-
-**Provider:** local Ollama (`qwen3:1.7b` default for chat, `qwen3:14b` for GPU enrichment). Configure via `OLLAMA_MODEL` in `.env`.
+**Provider:** configure via `OLLAMA_BASE_URL`, `OLLAMA_MODEL`, and `OLLAMA_BEARER_TOKEN` in `.env`.
 
 ---
 
