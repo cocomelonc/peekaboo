@@ -1,6 +1,6 @@
 # Peekaboo
 
-![img](./screenshots/2026-06-19_08-49.png)    
+![img](./screenshots/mitre.png)    
 
 Peekaboo is a modular framework designed to safely emulate malware behavior. It allows security researchers, red teamers, and blue teamers to reproduce complex threat scenarios - including Command & Control (C2) communication, persistence mechanisms, and lateral movement - without using destructive payloads.
 
@@ -59,7 +59,7 @@ Run:
 python3 peekaboo.py
 ```
 
-![img](./screenshots/2026-01-27_02-45.png)
+![img](./screenshots/peekaboo.png)
 
 ---
 
@@ -71,13 +71,13 @@ The dashboard is a Flask-based web UI that combines C2 monitoring, malware build
 cd dashboard && python3 app.py
 ```
 
-![img](./screenshots/2026-06-18_15-16.png)    
+![img](./screenshots/extracted.png)    
 
-![img](./screenshots/2026-06-11_09-49.png)    
+![img](./screenshots/techlib.png)    
 
-![img](./screenshots/2026-06-11_09-51.png)    
+![img](./screenshots/artifact.png)    
 
-![img](./screenshots/2026-06-19_08-51.png)    
+![img](./screenshots/modulelib.png)    
 
 ### modules
 
@@ -94,7 +94,6 @@ cd dashboard && python3 app.py
 | **MITRE ATT&CK** | Browse 200+ blog posts mapped to ATT&CK techniques; Extracted TTPs tab; per-post GPU briefs; inline source code viewer |
 | **Malpedia** | Threat actor and malware family lookup with semantic blog post matching |
 | **AI Assistant** | Direct Ollama gateway; instant canned answer for "what is Peekaboo?", all other questions streamed live from Ollama |
-| **Settings** | Read-only viewer for `.env`-loaded API keys and service configs |
 
 ---
 
@@ -136,7 +135,7 @@ All `worker.py` subcommands are **resumable** - they use `NOT IN` SQL patterns t
 [actor] resume: python3 worker.py actor --model qwen3:14b
 ```
 
-![img](./screenshots/2026-06-19_08-44.png)    
+![img](./screenshots/worker_family.png)    
 
 ---
 
@@ -148,7 +147,7 @@ All `worker.py` subcommands are **resumable** - they use `NOT IN` SQL patterns t
 python worker.py <subcommand> [options]
 ```
 
-![img](./screenshots/2026-06-18_17-35.png)    
+![img](./screenshots/worker_actor.png)    
 
 ### subcommands
 
@@ -277,7 +276,7 @@ python worker.py sigma --model qwen3:14b
 python worker.py sigma --sigma-path ~/hacking/sigma --rebuild --model qwen3:14b
 ```
 
-![malware](./screenshots/2026-06-18_16-52.png)    
+![malware](./screenshots/worker_sigma.png)    
 
 **Step 1 (parse):** Walks all `.yml` Sigma rule files, extracts per-technique event IDs, registry keys, process images, and command-line patterns, and stores them in `artifact_map`. This is the same data the dashboard "Build from Sigma Rules" button produces - but now runnable from the CLI without a browser.
 
@@ -424,7 +423,7 @@ family_summ    : 2300 (qwen3:14b)
 
 ---
 
-## Configuration (`.env`)
+## configuration (`.env`)
 
 All API keys, credentials, and per-service knobs live in a single `.env` file at the project root.
 
@@ -484,17 +483,19 @@ The MITRE ATT&CK tab has four sub-tabs:
 - Each row has a `[brief]` button - click to show the GPU-precomputed 3-sentence summary inline, without opening the full detail card
 - Click any row to expand the full detail card with inline source code (C, C++, Nim, assembly), blog post link, and **BRIEF** block (GPU summary with typing animation)
 
-**TTP Implementations** - blog posts indexed by extracted ATT&CK ID with tactic, platform, and blog link. The `ttp_implementations` table is seeded automatically at dashboard startup from the static implementation list in `mitre.py` (no manual step required). Filter by tactic, platform, or keyword; click any ATT&CK ID badge to open a detection brief.
+**TTP Implementations** - blog posts indexed by extracted ATT&CK ID with tactic, platform, and blog link. The `ttp_implementations` table is seeded automatically at dashboard startup from the static implementation list in `mitre.py` (no manual step required). Filter by tactic, platform, or keyword; click any ATT&CK ID badge to open a detection brief.    
+
+![img](./screenshots/mitre_ttp_implementations.png)    
 
 **Extracted TTPs** - LLM-inferred ATT&CK mappings per blog post: technique ID, tactic, confidence level, and rationale. Populated by `worker.py ttp`.
 
-![img](./screenshots/2026-04-28_23-40.png)
+![img](./screenshots/extracted.png)    
 
 ### Malpedia integration
 
 The Malpedia tab connects to the [Malpedia REST API](https://malpedia.caad.fkie.fraunhofer.de/) to browse threat actors and malware families. For each actor or family, related blog posts are matched using **semantic similarity** - the actor/family description is embedded via `nomic-embed-text`, then cosine-ranked against all cached post embeddings.
 
-![img](./screenshots/2026-05-01_01-55_1.png)
+![img](./screenshots/malpedia.png)    
 
 - Search actors by name, country, or malware family
 - Expand any actor/family to see techniques, aliases, and semantically matched blog posts with similarity score
@@ -547,7 +548,7 @@ python worker.py sigma --sigma-path ~/hacking/sigma --parse-only
 
 Direct Ollama gateway for technical malware research questions.
 
-![img](./screenshots/2026-05-01_01-55.png)
+![img](./screenshots/ai_assist.png)    
 
 **How responses work:**
 
@@ -566,7 +567,7 @@ The CLI is a rich interactive terminal application with a top-level REPL and ded
 python3 peekaboo_cli.py
 ```
 
-![img](./screenshots/2026-06-11_08-14.png)
+![img](./screenshots/cli.png)
 
 | command | description |
 |---------|-------------|
