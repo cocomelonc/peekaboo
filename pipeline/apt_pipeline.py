@@ -14,6 +14,7 @@ the per-session manifest.json.
 """
 from __future__ import annotations
 import json
+import random
 import re
 import shutil
 import subprocess
@@ -221,36 +222,92 @@ def _index_registry() -> tuple[list[dict], dict[str, list[dict]]]:
     return registry, by_aid
 
 
-def _score_module(mod: dict, ttp: dict) -> int:
-    """Prefer modules whose category aligns with the TTP tactic."""
-    cat_to_tactic = {
-        "persistence":  "persistence",
-        "injection":    "defense-evasion",
-        "evasion":      "defense-evasion",
-        "cryptography": "defense-evasion",
-        "syscalls":     "defense-evasion",
-        "c2":           "command-and-control",
-        "privesc":      "privilege-escalation",
-        "shellcoding":  "execution",
-        "hooking":      "credential-access",
-    }
-    score = 0
-    if cat_to_tactic.get(mod.get("category", "")) == ttp.get("tactic"):
+_CAT_TO_TACTIC = {
+    "persistence":  "persistence",
+    "injection":    "defense-evasion",
+    "evasion":      "defense-evasion",
+    "cryptography": "defense-evasion",
+    "syscalls":     "defense-evasion",
+    "c2":           "command-and-control",
+    "privesc":      "privilege-escalation",
+    "shellcoding":  "execution",
+    "hooking":      "credential-access",
+}
+
+
+def _score_module(mod: dict, ttp: dict) -> float:
+    """Base score: tactic alignment + quality signals. No randomness here."""
+    score = 0.0
+    if _CAT_TO_TACTIC.get(mod.get("category", "")) == ttp.get("tactic"):
         score += 5
     if mod.get("platform") == "windows":
-        score += 1  # demo target is Windows
+        score += 1
     if mod.get("has_post"):
-        score += 1  # prefer documented modules
+        score += 1
     return score
+
+
+def _recent_module_ids(limit: int = 10) -> set[str]:
+    """Module IDs used across the last N sessions - used to deprioritize repeats."""
+    try:
+        used: set[str] = set()
+        for s in _db.get_pipeline_sessions(limit=limit):
+            for stage in (s.get("params") or {}).get("stages", []):
+                mid = stage.get("module_id")
+                if mid:
+                    used.add(mid)
+        return used
+    except Exception:
+        return set()
+
+
+def _pick_module(candidates: list[dict], ttp: dict,
+                 used_srcs: set[str], recent_ids: set[str]) -> dict | None:
+    """
+    Weighted random pick from the top-5 candidates.
+
+    Scoring layers (applied in order, jitter last so equal-scorers vary):
+      +5  tactic/category alignment
+      +1  windows platform
+      +1  has blog post
+      -10 src_path already used in this session  (hard avoid same file twice)
+      -3  module_id seen in a recent session      (soft deprioritize repeats)
+      +[0,2) random jitter                        (vary picks across runs)
+
+    Top-5 by adjusted score get weights proportional to (score - min + 1),
+    then random.choices picks one. This keeps quality first while ensuring
+    lower-scoring alternatives get a real shot.
+    """
+    if not candidates:
+        return None
+
+    scored: list[tuple[dict, float]] = []
+    for m in candidates:
+        s = _score_module(m, ttp)
+        if m.get("src_path") in used_srcs:
+            s -= 10
+        if m.get("id") in recent_ids:
+            s -= 3
+        s += random.uniform(0, 2.0)
+        scored.append((m, s))
+
+    scored.sort(key=lambda x: x[1], reverse=True)
+    top = scored[:5]
+
+    min_s = top[-1][1]
+    weights = [max(0.1, s - min_s + 1.0) for _, s in top]
+    return random.choices([m for m, _ in top], weights=weights, k=1)[0]
 
 
 def agent_select_modules(ttps: list[dict]) -> dict:
     """
-    For each TTP, pick the best KB module and produce a self-contained 'stage'
-    record. Stages are numbered by kill-chain order so the output looks like a
-    real adversary kill chain.
+    For each TTP, pick a KB module and produce a kill-chain stage record.
+    Selection is randomized (weighted by score) so repeated runs of the same
+    actor produce different malware assemblies - better coverage for blue teams.
     """
     registry, by_aid = _index_registry()
+    recent_ids  = _recent_module_ids()
+    used_srcs: set[str] = set()   # no duplicate source files within one session
     stages: list[dict] = []
 
     for ttp in ttps:
@@ -260,27 +317,30 @@ def agent_select_modules(ttps: list[dict]) -> dict:
         if not candidates:
             continue
 
-        best = max(candidates, key=lambda m: _score_module(m, ttp))
+        best = _pick_module(candidates, ttp, used_srcs, recent_ids)
+        if best is None:
+            continue
+
+        used_srcs.add(best.get("src_path", ""))
         stages.append({
-            "stage_num":   len(stages) + 1,
-            "ttp_id":      aid,
-            "ttp_name":    ttp.get("name", aid),
-            "tactic":      ttp.get("tactic", "unknown"),
-            "evidence":    ttp.get("evidence", ""),
-            "mentions":    ttp.get("mentions", 1),
-            "module_id":   best["id"],
+            "stage_num":    len(stages) + 1,
+            "ttp_id":       aid,
+            "ttp_name":     ttp.get("name", aid),
+            "tactic":       ttp.get("tactic", "unknown"),
+            "evidence":     ttp.get("evidence", ""),
+            "mentions":     ttp.get("mentions", 1),
+            "module_id":    best["id"],
             "module_title": best["title"],
-            "category":    best["category"],
-            "platform":    best["platform"],
-            "compiler":    best.get("compiler", ""),
-            "extra_libs":  best.get("extra_libs", []),
-            "src_path":    best["src_path"],
-            "src_name":    best["src_name"],
-            "blog_url":    best.get("blog_url", ""),
-            "snippet":     (best.get("snippet") or "")[:600],
+            "category":     best["category"],
+            "platform":     best["platform"],
+            "compiler":     best.get("compiler", ""),
+            "extra_libs":   best.get("extra_libs", []),
+            "src_path":     best["src_path"],
+            "src_name":     best["src_name"],
+            "blog_url":     best.get("blog_url", ""),
+            "snippet":      (best.get("snippet") or "")[:600],
         })
 
-    # legacy shape kept so the existing frontend can still render a flat list
     selected_modules = [{
         "attack_id": s["ttp_id"],
         "module_id": s["module_id"],

@@ -2,9 +2,9 @@
 
 ![img](./screenshots/mitre.png)    
 
-Peekaboo is a modular framework designed to safely emulate malware behavior. It allows security researchers, red teamers, and blue teamers to reproduce complex threat scenarios - including Command & Control (C2) communication, persistence mechanisms, and lateral movement - without using destructive payloads.
+peekaboo is a modular framework designed to safely emulate malware behavior. It allows security researchers, red teamers, and blue teamers to reproduce complex threat scenarios - including Command & Control (C2) communication, persistence mechanisms, and lateral movement - without using destructive payloads.     
 
-**The goal of Peekaboo is to accelerate detection engineering and operator training by providing predictable, reproducible, and safe threat artifacts.**
+**The goal of peekaboo is to accelerate detection engineering and operator training by providing predictable, reproducible, and safe threat artifacts.**    
 
 <picture>
   <source media="(prefers-color-scheme: dark)" srcset="https://api.star-history.com/chart?repos=cocomelonc/peekaboo&type=date&theme=dark&legend=top-left" />
@@ -39,7 +39,7 @@ Peekaboo is a modular framework designed to safely emulate malware behavior. It 
 
 ## architecture
 
-Peekaboo consists of 5 main components:
+peekaboo consists of 5 main components:
 First **malware** module - highly portable C/C++ code designed to build specific "behaviors" (for final agent binary) on the target system.
 1. **crypto (malware, agent)** - build-in payload encryption/decryption logic constructor for agents.
 2. **injection (malware, agent)** - build-in injection logic constructor for agents.
@@ -59,7 +59,7 @@ Run:
 python3 peekaboo.py
 ```
 
-![img](./screenshots/peekaboo.png)
+![img](./screenshots/peekaboo.png)    
 
 ---
 
@@ -101,7 +101,7 @@ cd dashboard && python3 app.py
 
 Heavy LLM work runs once on a GPU machine via `worker.py`. Results are stored in `dashboard/peekaboo.db`. The CPU dashboard only does DB reads - zero LLM calls at request time.
 
-```
+```bash
 GPU machine                         CPU machine (dashboard)
 -----------------------------       ----------------------------------
 python worker.py embed              cosine similarity search
@@ -461,7 +461,9 @@ Upload binary samples captured during red team exercises. Each session groups fi
 
 ### YARA Rule Generator
 
-Auto-generates YARA rules from a binary using string extraction, section name heuristics, import pattern matching, and entropy thresholds.
+Auto-generates YARA rules from a binary using string extraction, section name heuristics, import pattern matching, and entropy thresholds.    
+
+![img](./screenshots/yaragen.png)    
 
 - **From Build** - select any compiled build binary
 - **From Session** - select a captured sample
@@ -469,7 +471,11 @@ Auto-generates YARA rules from a binary using string extraction, section name he
 
 ### VirusTotal Scanner
 
-Submit binaries directly to VirusTotal. Features: upload, From Build, From Session, SHA256 lookup, and poll for pending analysis.
+Submit binaries directly to VirusTotal. Features: upload, From Build, From Session, SHA256 lookup, and poll for pending analysis.     
+
+![img](./screenshots/vtscan-1.png)    
+
+![img](./screenshots/vtscan-2.png)    
 
 ### MITRE ATT&CK R&D
 
@@ -479,95 +485,136 @@ The MITRE ATT&CK tab has four sub-tabs:
 
 **Technique Library** - all 200+ blog posts indexed from the [meow](https://github.com/cocomelonc/meow) research repository, mapped to ATT&CK IDs.
 
-- Filter by category (injection, persistence, evasion, cryptography, linux, macos, etc.)
-- Each row has a `[brief]` button - click to show the GPU-precomputed 3-sentence summary inline, without opening the full detail card
-- Click any row to expand the full detail card with inline source code (C, C++, Nim, assembly), blog post link, and **BRIEF** block (GPU summary with typing animation)
+Filter by category (injection, persistence, evasion, cryptography, linux, macos, etc.)    
+Each row has a `[brief]` button - click to show the GPU-precomputed 3-sentence summary inline, without opening the full detail card    
+Click any row to expand the full detail card with inline source code (C, C++, Nim, assembly), blog post link, and **BRIEF** block (GPU summary with typing animation)    
 
-**TTP Implementations** - blog posts indexed by extracted ATT&CK ID with tactic, platform, and blog link. The `ttp_implementations` table is seeded automatically at dashboard startup from the static implementation list in `mitre.py` (no manual step required). Filter by tactic, platform, or keyword; click any ATT&CK ID badge to open a detection brief.    
+**TTP Implementations** - blog posts indexed by extracted ATT&CK ID with tactic, platform, and blog link. The `ttp_implementations` table is seeded automatically at dashboard startup from the static implementation list in `mitre.py` (no manual step required). Filter by tactic, platform, or keyword; click any ATT&CK ID badge to open a detection brief.     
 
 ![img](./screenshots/mitre_ttp_implementations.png)    
 
-**Extracted TTPs** - LLM-inferred ATT&CK mappings per blog post: technique ID, tactic, confidence level, and rationale. Populated by `worker.py ttp`.
+**Extracted TTPs** - LLM-inferred ATT&CK mappings per blog post: technique ID, tactic, confidence level, and rationale. Populated by `worker.py ttp`.    
 
 ![img](./screenshots/extracted.png)    
 
 ### Malpedia integration
 
-The Malpedia tab connects to the [Malpedia REST API](https://malpedia.caad.fkie.fraunhofer.de/) to browse threat actors and malware families. For each actor or family, related blog posts are matched using **semantic similarity** - the actor/family description is embedded via `nomic-embed-text`, then cosine-ranked against all cached post embeddings.
+The Malpedia tab connects to the [Malpedia REST API](https://malpedia.caad.fkie.fraunhofer.de/) to browse threat actors and malware families. For each actor or family, related blog posts are matched using **semantic similarity** - the actor/family description is embedded via `nomic-embed-text`, then cosine-ranked against all cached post embeddings.     
 
 ![img](./screenshots/malpedia.png)    
 
-- Search actors by name, country, or malware family
-- Expand any actor/family to see techniques, aliases, and semantically matched blog posts with similarity score
-- Each actor/family detail card has a `[brief]` button in the title - shows the GPU-precomputed threat profile or behavioral brief in the slide panel (no LLM at render time; requires `worker.py actor` / `worker.py family`)
-- Each related blog post row has a `[brief]` button -> KB summary from `worker.py summarize`
-- Requires a Malpedia API key in `.env` (`MALPEDIA_API_TOKEN`)
+Search actors by name, country, or malware family    
+Expand any actor/family to see techniques, aliases, and semantically matched blog posts with similarity score    
+Each actor/family detail card has a `[brief]` button in the title - shows the GPU-precomputed threat profile or behavioral brief in the slide panel (no LLM at render time; requires `worker.py actor` / `worker.py family`)     
+Each related blog post row has a `[brief]` button -> KB summary from `worker.py summarize`    
+Requires a Malpedia API key in `.env` (`MALPEDIA_API_TOKEN`)      
 
 ### APT campaign pipeline
 
-Fully automated five-stage pipeline: Malpedia actor -> threat reports -> TTP extraction -> module selection -> binary compile.
+Fully automated five-stage pipeline: Malpedia actor -> threat reports -> TTP extraction -> module selection -> binary compile.    
 
-![img](./screenshots/2026-06-07_23-57.png)
+![img](./screenshots/apt-1.png)     
+
+![img](./screenshots/apt-2.png)     
+
+![img](./screenshots/apt-3.png)     
 
 | # | Stage | What it does |
 |---|-------|--------------|
 | 1 | **Malpedia Fetch** | Resolves actor/family ID, retrieves metadata |
 | 2 | **Report Download** | Downloads up to 10 linked threat intelligence reports |
 | 3 | **TTP Extraction** | Extracts ATT&CK IDs via regex; offline, no API calls |
-| 4 | **Module Selection** | Maps TTPs to peekaboo modules |
+| 4 | **Module Selection** | Weighted random pick per TTP from top-5 candidates (see below) |
 | 5 | **Binary Compile** | Builds a Windows PE ready for EDR testing |
 
-![img](./screenshots/2026-06-08_00-01.png)
+![img](./screenshots/apt-4.png)    
 
-All progress streams live to the UI. Every session is persisted to SQLite with Reports, TTPs, and Binary tabs.
+All progress streams live to the UI. Every session is persisted to SQLite with Reports, TTPs, and Binary tabs.    
 
-Each session row in the history table has a `[brief]` button - shows a GPU-precomputed 3-sentence campaign brief (actor, techniques used, detection priority) in the slide panel. No LLM at render time; requires `worker.py apt`.
+Each session row in the history table has a `[brief]` button - shows a GPU-precomputed 3-sentence campaign brief (actor, techniques used, detection priority) in the slide panel. No LLM at render time; requires `worker.py apt`.    
+
+#### Module selection strategy
+
+Running the same actor twice produces a different kill chain each time. This is intentional - the goal is **detection coverage breadth**, not reproducibility.     
+
+`pipeline/apt_pipeline.py` -> `agent_select_modules()` uses a three-layer scoring mechanism:     
+
+**Base score** (deterministic, tactic alignment):      
+
+| Signal | Points |
+|--------|--------|
+| Module category maps to TTP tactic | +5 |
+| Windows platform (primary demo target) | +1 |
+| Has associated blog post | +1 |
+
+**Session deduplication** (hard constraint):     
+
+`−10` if the module's source file was already selected in this session -> guarantees no two stages compile the same `.c`/`.cpp`/`.nim` file     
+
+**Cross-session rotation** (soft pressure):     
+
+`−3` if the module ID appeared in any of the last 10 pipeline sessions -> naturally rotates through the library across repeated runs of the same actor     
+
+**Jitter** (variety):    
+
+`+[0, 2)` uniform random added to every candidate score -> breaks ties and ensures even equal-scoring modules vary across runs     
+
+The top-5 candidates by adjusted score are then passed to `random.choices()` with weights proportional to `(score − min + 1)`. Quality still wins most of the time, but lower-ranked alternatives get a real shot (~20-40% depending on score gaps).    
+
+**Result:** same actor, same extracted TTPs, different malware assembly every run - wider technique coverage for blue team detection tuning.      
 
 ### Artifact Map
 
-Cross-references 400+ ATT&CK techniques with 4,000+ Sigma detection rules. For each technique, the map extracts:
+Cross-references 400+ ATT&CK techniques with 4,000+ Sigma detection rules. For each technique, the map extracts:     
 
-- Windows event IDs (Sysmon + Security)
-- Registry key patterns
-- Process image names
-- Command-line indicators
-- Logsource categories
+Windows event IDs (Sysmon + Security)     
+Registry key patterns    
+Process image names    
+Command-line indicators    
+Logsource categories    
+
+![img](./screenshots/artifact.png)    
 
 **Building the map:**
 
-Option A - browser: open the Artifact Map panel -> click **⚙ Build from Sigma Rules**. Progress streams live.
+Option A - browser: open the Artifact Map panel -> click **⚙ Build from Sigma Rules**. Progress streams live.     
 
-Option B - CLI (recommended for GPU workflows):
+Option B - CLI (recommended for GPU workflows):      
+
 ```bash
 python worker.py sigma --sigma-path ~/hacking/sigma --parse-only
 ```
 
-**Detection briefs:** after building the map, run `worker.py sigma` on the GPU to precompute a detection-focused 3-sentence brief per technique. Briefs appear in the **Overview tab** of each technique's modal with a typing animation - no LLM call at render time.
+**Detection briefs:** after building the map, run `worker.py sigma` on the GPU to precompute a detection-focused 3-sentence brief per technique. Briefs appear in the **Overview tab** of each technique's modal with a typing animation - no LLM call at render time.    
 
 ### AI assistant
 
-Direct Ollama gateway for technical malware research questions.
+Direct Ollama gateway for technical malware research questions.   
 
 ![img](./screenshots/ai_assist.png)    
 
 **How responses work:**
 
-1. **"what is Peekaboo?"** - instant canned answer; no LLM call.
-2. **Everything else** - streamed directly from Ollama `/api/chat`; no RAG, no DB lookups.
+**"what is Peekaboo?"** - instant canned answer; no LLM call.    
+**everything else** - streamed directly from Ollama `/api/chat`; no RAG, no DB lookups.   
 
-**Provider:** configure via `OLLAMA_BASE_URL`, `OLLAMA_MODEL`, and `OLLAMA_BEARER_TOKEN` in `.env`.
+**provider:** configure via `OLLAMA_BASE_URL`, `OLLAMA_MODEL`, and `OLLAMA_BEARER_TOKEN` in `.env`.     
+
+Recommended and tested: `qwen25-coder-offensive:v1-q8`     
 
 ---
 
 ## CLI (`peekaboo_cli.py`)
 
-The CLI is a rich interactive terminal application with a top-level REPL and dedicated sub-REPLs for each module.
+The peekaboo CLI is a rich interactive terminal application with a top-level REPL and dedicated sub-REPLs for each module.      
 
 ```bash
 python3 peekaboo_cli.py
 ```
 
-![img](./screenshots/cli.png)
+![img](./screenshots/cli.png)     
+
+![img](./screenshots/cli-help.png)    
 
 | command | description |
 |---------|-------------|
@@ -583,6 +630,8 @@ python3 peekaboo_cli.py
 
 ### `library` sub-REPL
 
+![img](./screenshots/cli-library.png)    
+
 | command | description |
 |---------|-------------|
 | `list [category]` | List all techniques, optionally filtered by category |
@@ -593,6 +642,8 @@ python3 peekaboo_cli.py
 
 ### `builder` sub-REPL
 
+![img](./screenshots/cli-builder.png)    
+
 | command | description |
 |---------|-------------|
 | `build <injection> [options]` | Build an injection binary |
@@ -602,6 +653,8 @@ python3 peekaboo_cli.py
 
 ### `shellcode` sub-REPL
 
+![img](./screenshots/cli-shellcode.png)    
+
 | command | description |
 |---------|-------------|
 | `analyse <path>` | Analyse raw shellcode: size, entropy, hex dump |
@@ -610,6 +663,8 @@ python3 peekaboo_cli.py
 
 ### `yara` sub-REPL
 
+![img](./screenshots/cli-yara.png)    
+
 | command | description |
 |---------|-------------|
 | `gen <path>` | Generate YARA rule from a PE binary |
@@ -617,6 +672,8 @@ python3 peekaboo_cli.py
 | `save <path>` | Save the last generated rule to a `.yar` file |
 
 ### `malpedia` sub-REPL
+
+![img](./screenshots/cli-malpedia.png)    
 
 | command | description |
 |---------|-------------|
@@ -631,6 +688,8 @@ python3 peekaboo_cli.py
 
 ### `ttp` sub-REPL
 
+![img](./screenshots/cli-ttp.png)    
+
 | command | description |
 |---------|-------------|
 | `list [tactic]` | List all techniques, optionally filtered by tactic |
@@ -640,6 +699,8 @@ python3 peekaboo_cli.py
 | `tactics` | List all ATT&CK tactics |
 
 ### `vtscan` sub-REPL
+
+![img](./screenshots/cli-vtscan.png)    
 
 | command | description |
 |---------|-------------|
