@@ -914,7 +914,15 @@ def api_library_compile(module_id: str):
 
 @app.route("/api/samples")
 def api_samples():
-    return jsonify(_db.get_samples())
+    rows = _db.get_samples()
+    # filter files list to only include files that exist on disk
+    for s in rows:
+        if SAMPLES_DIR.exists():
+            sd = SAMPLES_DIR / s["session_id"]
+            s["files"] = [f for f in s.get("files", []) if (sd / f["name"]).exists()]
+    # exclude sessions with no files left on disk
+    rows = [s for s in rows if s.get("files")]
+    return jsonify(rows)
 
 
 @app.route("/api/samples", methods=["DELETE"])
@@ -1227,8 +1235,10 @@ def api_yara_generate():
     if not session_id or not filename:
         return jsonify({"ok": False, "error": "session_id and filename required"}), 400
     filepath = _guards.safe_child(SAMPLES_DIR, session_id, filename)
-    if not filepath or not filepath.exists():
+    if not filepath:
         return jsonify({"ok": False, "error": "invalid path"}), 400
+    if not filepath.exists():
+        return jsonify({"ok": False, "error": f"file not found on disk: {filename} (sample may have been deleted)"}), 404
     result = _yaragen.generate_rule(filepath)
     return jsonify(result)
 

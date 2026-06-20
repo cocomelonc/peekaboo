@@ -3529,10 +3529,10 @@ async function yaraGenerateFromBuild() {
 }
 
 async function loadYaraScanner() {
-  const samples = await fetch('/api/samples').then(r => r.json()).catch(() => []);
-  _yaraSamples = samples;
   _yaraSelectedSession = '';
   _yaraSelectedFile    = '';
+  const samples = await fetch('/api/samples').then(r => r.json()).catch(() => []);
+  _yaraSamples = samples;
 
   const menu = document.getElementById('yara-session-menu');
   menu.innerHTML = '';
