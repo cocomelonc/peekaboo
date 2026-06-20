@@ -118,6 +118,18 @@ python worker.py family             malware family behavioral briefs
 
 All `worker.py` subcommands are **resumable** - they use `NOT IN` SQL patterns to skip already-processed rows. Interrupt and re-run at any time.
 
+> **WAL checkpoint before scp/rsync** - SQLite runs in WAL mode, so the DB lives in two files (`peekaboo.db` + `peekaboo.db-wal`). Copying them with `scp`/`rsync` non-atomically can produce a corrupted DB on the receiving end if the WAL is mid-write. Always checkpoint first:
+> ```bash
+> # on the GPU server, before copying
+> sqlite3 ~/hacking/peekaboo/dashboard/peekaboo.db "PRAGMA wal_checkpoint(TRUNCATE);"
+> scp gpu-server:~/hacking/peekaboo/dashboard/peekaboo.db dashboard/peekaboo.db
+> ```
+> Alternatively use `.backup` for a guaranteed-consistent snapshot while workers are still running:
+> ```bash
+> sqlite3 ~/hacking/peekaboo/dashboard/peekaboo.db ".backup /tmp/peekaboo_snapshot.db"
+> scp gpu-server:/tmp/peekaboo_snapshot.db dashboard/peekaboo.db
+> ```
+
 `scan`, `init`, `embed`, `tag`, `ttp`, `summarize`, `sigma`, `apt`, `actor`, and `family` catch `KeyboardInterrupt` and print a clean resume hint instead of a traceback:
 
 ```bash
