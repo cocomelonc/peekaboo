@@ -43,6 +43,7 @@ import sys
 import time
 import urllib.request
 from pathlib import Path
+from typing import Callable
 
 # -- path setup so we can import dashboard/db.py without installing the app
 _ROOT = Path(__file__).parent
@@ -196,16 +197,8 @@ def cmd_embed(args: argparse.Namespace) -> None:
 
     db.init()
 
-    ok, installed = _ollama_has_model(model, base_url)
-    if not ok:
-        print(f"[embed] model not available: {model}", flush=True)
-        print(f"[embed] installed: {', '.join(installed) or '(none)'}", flush=True)
-        print(f"[embed] fix: ollama pull {model}", flush=True)
-        sys.exit(1)
-
-    if getattr(args, "rebuild", False):
-        n = db.delete_kb_embeddings(model)
-        print(f"[embed] --rebuild: wiped {n} embedding rows for model={model}", flush=True)
+    _require_model("embed", model, base_url)
+    _maybe_rebuild("embed", model, args, db.delete_kb_embeddings, noun="embedding rows")
 
     def _run_once() -> int:
         pending = db.get_kb_docs_without_embedding(model)
@@ -537,66 +530,24 @@ def cmd_summarize(args: argparse.Namespace) -> None:
 
     db.init()
 
-    ok, installed = _ollama_has_model(model, base_url)
-    if not ok:
-        print(f"[sum] model not available: {model}", flush=True)
-        print(f"[sum] installed: {', '.join(installed) or '(none)'}", flush=True)
-        print(f"[sum] fix: ollama pull {model}", flush=True)
-        sys.exit(1)
+    _require_model("sum", model, base_url)
+    _maybe_rebuild("sum", model, args, db.delete_kb_summaries,
+                   stale_fn=lambda: _stale_summary_doc_ids(model, meow_root), noun="summary rows")
 
-    if getattr(args, "rebuild", False):
-        n = db.delete_kb_summaries(model)
-        print(f"[sum] --rebuild: wiped {n} summary rows for model={model}", flush=True)
-    elif getattr(args, "rebuild_changed", False):
-        stale = _stale_summary_doc_ids(model, meow_root)
-        if stale:
-            n = db.delete_kb_summaries(model, doc_ids=stale)
-            print(f"[sum] --rebuild-changed: wiped {n} stale summary rows", flush=True)
-        else:
-            print("[sum] --rebuild-changed: nothing stale", flush=True)
+    def _process(doc: dict) -> tuple[bool, str]:
+        code      = _read_code(doc.get("src_path", ""), max_lines, meow_root)
+        post_body = _read_blog_markdown(doc.get("slug", ""), doc.get("date", ""))
+        prompt    = _build_summary_prompt(doc, post_body, code)
+        raw       = _chat_text(prompt, model, base_url, timeout=timeout, label="sum")
+        summary   = _normalize_summary(raw)
+        db.upsert_kb_summary(doc["id"], model, summary, raw)
+        srcs  = "+".join(s for s in (["blog"] if post_body else []) + (["code"] if code else []))
+        label = f"{doc['slug'][:28]:28s} [{srcs or '-'}] -> {len(summary)}ch"
+        return bool(summary), label
 
-    def _run_once() -> int:
-        pending = db.get_kb_docs_without_summary(model)
-        if not pending:
-            print(f"[sum] nothing to do - all docs already summarized with {model}", flush=True)
-            return 0
-
-        print(f"[sum] {len(pending)} docs to summarize with {model} …", flush=True)
-        done = failed = 0
-
-        try:
-            for i, doc in enumerate(pending, 1):
-                code      = _read_code(doc.get("src_path", ""), max_lines, meow_root)
-                post_body = _read_blog_markdown(doc.get("slug", ""), doc.get("date", ""))
-                prompt    = _build_summary_prompt(doc, post_body, code)
-                raw       = _chat_text(prompt, model, base_url, timeout=timeout, label="sum")
-                summary   = _normalize_summary(raw)
-                if not summary:
-                    failed += 1
-                db.upsert_kb_summary(doc["id"], model, summary, raw)
-                done += 1
-
-                pct    = int(i / len(pending) * 100)
-                srcs   = "+".join(s for s in (["blog"] if post_body else []) + (["code"] if code else []))
-                label  = f"{i}/{len(pending)} - {doc['slug'][:28]:28s} [{srcs or '-'}] -> {len(summary)}ch"
-                _progress(pct, label, tag="sum")
-        except KeyboardInterrupt:
-            remaining = len(pending) - i
-            print(f"\n[sum] interrupted at {i}/{len(pending)}  ({done} saved, {remaining} remaining)", flush=True)
-            print(f"[sum] resume: python3 worker.py summarize --model {model}", flush=True)
-            return done
-
-        print(f"\n[sum] summarized {done} docs ({failed} empty)", flush=True)
-        return done
-
-    _run_once()
-
-    if args.watch:
-        interval = int(args.watch)
-        print(f"[sum] --watch {interval}s - polling for new docs …", flush=True)
-        while True:
-            time.sleep(interval)
-            _run_once()
+    _run_llm_doc_pipeline("sum", model, lambda: db.get_kb_docs_without_summary(model),
+                          _process, "summarize", watch=args.watch,
+                          action="summarize", verb="summarized", fail_word="empty")
 
 
 # --------------------------------------------------------------------------- #
@@ -714,71 +665,29 @@ def cmd_ttp(args: argparse.Namespace) -> None:
 
     db.init()
 
-    ok, installed = _ollama_has_model(model, base_url)
-    if not ok:
-        print(f"[ttp] model not available: {model}", flush=True)
-        print(f"[ttp] installed: {', '.join(installed) or '(none)'}", flush=True)
-        print(f"[ttp] fix: ollama pull {model}", flush=True)
-        sys.exit(1)
+    _require_model("ttp", model, base_url)
+    _maybe_rebuild("ttp", model, args, db.delete_ttp_extracted,
+                   stale_fn=lambda: _stale_ttp_doc_ids(model, meow_root), noun="ttp rows")
 
-    if getattr(args, "rebuild", False):
-        n = db.delete_ttp_extracted(model)
-        print(f"[ttp] --rebuild: wiped {n} ttp rows for model={model}", flush=True)
-    elif getattr(args, "rebuild_changed", False):
-        stale = _stale_ttp_doc_ids(model, meow_root)
-        if stale:
-            n = db.delete_ttp_extracted(model, doc_ids=stale)
-            print(f"[ttp] --rebuild-changed: wiped {n} stale ttp rows", flush=True)
+    def _process(doc: dict) -> tuple[bool, str]:
+        code   = _read_code(doc.get("src_path", ""), max_lines, meow_root)
+        prompt = _build_ttp_prompt(doc, code)
+        parsed, raw = _chat_json(prompt, model, base_url, timeout=timeout, label="ttp")
+
+        if parsed is None:
+            attack_ids, tactics, confidence, rationale = [], [], "low", ""
         else:
-            print("[ttp] --rebuild-changed: nothing stale", flush=True)
+            attack_ids, tactics, confidence, rationale = _normalize_ttps(parsed)
 
-    def _run_once() -> int:
-        pending = db.get_kb_docs_without_ttps(model)
-        if not pending:
-            print(f"[ttp] nothing to do - all docs already processed with {model}", flush=True)
-            return 0
+        db.upsert_ttp_extracted(doc["id"], model, attack_ids, tactics,
+                                 confidence, rationale, raw)
+        ids_str = ",".join(attack_ids[:3]) or "(none)"
+        label   = f"{doc['slug'][:28]:28s} -> {ids_str} [{confidence}]"
+        return parsed is not None, label
 
-        print(f"[ttp] {len(pending)} docs to extract TTPs from with {model} …", flush=True)
-        done   = 0
-        failed = 0
-
-        try:
-            for i, doc in enumerate(pending, 1):
-                code   = _read_code(doc.get("src_path", ""), max_lines, meow_root)
-                prompt = _build_ttp_prompt(doc, code)
-                parsed, raw = _chat_json(prompt, model, base_url, timeout=timeout, label="ttp")
-
-                if parsed is None:
-                    failed += 1
-                    attack_ids, tactics, confidence, rationale = [], [], "low", ""
-                else:
-                    attack_ids, tactics, confidence, rationale = _normalize_ttps(parsed)
-
-                db.upsert_ttp_extracted(doc["id"], model, attack_ids, tactics,
-                                         confidence, rationale, raw)
-                done += 1
-
-                pct     = int(i / len(pending) * 100)
-                ids_str = ",".join(attack_ids[:3]) or "(none)"
-                label   = f"{i}/{len(pending)} - {doc['slug'][:28]:28s} -> {ids_str} [{confidence}]"
-                _progress(pct, label, tag="ttp")
-        except KeyboardInterrupt:
-            remaining = len(pending) - i
-            print(f"\n[ttp] interrupted at {i}/{len(pending)}  ({done} saved, {remaining} remaining)", flush=True)
-            print(f"[ttp] resume: python3 worker.py ttp --model {model}", flush=True)
-            return done
-
-        print(f"\n[ttp] processed {done} docs ({failed} LLM failures)", flush=True)
-        return done
-
-    _run_once()
-
-    if args.watch:
-        interval = int(args.watch)
-        print(f"[ttp] --watch {interval}s - polling for new docs …", flush=True)
-        while True:
-            time.sleep(interval)
-            _run_once()
+    _run_llm_doc_pipeline("ttp", model, lambda: db.get_kb_docs_without_ttps(model),
+                          _process, "ttp", watch=args.watch,
+                          action="extract TTPs from", fail_word="LLM failures")
 
 
 def cmd_tag(args: argparse.Namespace) -> None:
@@ -794,69 +703,21 @@ def cmd_tag(args: argparse.Namespace) -> None:
 
     db.init()
 
-    ok, installed = _ollama_has_model(model, base_url)
-    if not ok:
-        print(f"[tag] model not available: {model}", flush=True)
-        print(f"[tag] installed: {', '.join(installed) or '(none)'}", flush=True)
-        print(f"[tag] fix: ollama pull {model}", flush=True)
-        sys.exit(1)
+    _require_model("tag", model, base_url)
+    _maybe_rebuild("tag", model, args, db.delete_kb_tags,
+                   stale_fn=lambda: _stale_doc_ids(model, meow_root), noun="tag rows")
 
-    if getattr(args, "rebuild", False):
-        n = db.delete_kb_tags(model)
-        print(f"[tag] --rebuild: wiped {n} tag rows for model={model}", flush=True)
-    elif getattr(args, "rebuild_changed", False):
-        stale = _stale_doc_ids(model, meow_root)
-        if stale:
-            n = db.delete_kb_tags(model, doc_ids=stale)
-            print(f"[tag] --rebuild-changed: wiped {n} stale tag rows", flush=True)
-        else:
-            print(f"[tag] --rebuild-changed: nothing stale", flush=True)
+    def _process(doc: dict) -> tuple[bool, str]:
+        code   = _read_code(doc.get("src_path", ""), max_lines, meow_root)
+        prompt = _build_tag_prompt(doc, code)
+        parsed, raw = _chat_json(prompt, model, base_url, timeout=timeout, label="tag")
+        tags = [] if parsed is None else _normalize_tags(parsed)
+        db.upsert_kb_tag(doc["id"], model, tags, raw)
+        label = f"{doc['slug'][:30]:30s} -> {','.join(tags[:4]) or '(none)'}"
+        return parsed is not None, label
 
-    def _run_once() -> int:
-        pending = db.get_kb_docs_without_tags(model)
-        if not pending:
-            print(f"[tag] nothing to do - all docs already tagged with {model}", flush=True)
-            return 0
-
-        print(f"[tag] {len(pending)} docs to tag with {model} …", flush=True)
-        done   = 0
-        failed = 0
-
-        try:
-            for i, doc in enumerate(pending, 1):
-                code   = _read_code(doc.get("src_path", ""), max_lines, meow_root)
-                prompt = _build_tag_prompt(doc, code)
-                parsed, raw = _chat_json(prompt, model, base_url, timeout=timeout, label="tag")
-
-                if parsed is None:
-                    failed += 1
-                    tags = []
-                else:
-                    tags = _normalize_tags(parsed)
-
-                db.upsert_kb_tag(doc["id"], model, tags, raw)
-                done += 1
-
-                pct = int(i / len(pending) * 100)
-                label = f"{i}/{len(pending)} - {doc['slug'][:30]:30s} -> {','.join(tags[:4]) or '(none)'}"
-                _progress(pct, label, tag="tag")
-        except KeyboardInterrupt:
-            remaining = len(pending) - i
-            print(f"\n[tag] interrupted at {i}/{len(pending)}  ({done} saved, {remaining} remaining)", flush=True)
-            print(f"[tag] resume: python3 worker.py tag --model {model}", flush=True)
-            return done
-
-        print(f"\n[tag] tagged {done} docs ({failed} failed)", flush=True)
-        return done
-
-    _run_once()
-
-    if args.watch:
-        interval = int(args.watch)
-        print(f"[tag] --watch {interval}s - polling for new docs …", flush=True)
-        while True:
-            time.sleep(interval)
-            _run_once()
+    _run_llm_doc_pipeline("tag", model, lambda: db.get_kb_docs_without_tags(model),
+                          _process, "tag", watch=args.watch, action="tag", verb="tagged")
 
 
 def _build_sigma_prompt(entry: dict) -> str:
@@ -946,20 +807,8 @@ def cmd_sigma(args: argparse.Namespace) -> None:
         print("[sigma]   example: python worker.py sigma --sigma-path ~/hacking/sigma", flush=True)
         return
 
-    ok, installed = _ollama_has_model(model, base_url)
-    if not ok:
-        print(f"[sigma] model not available: {model}", flush=True)
-        print(f"[sigma] installed: {', '.join(installed) or '(none)'}", flush=True)
-        print(f"[sigma] fix: ollama pull {model}", flush=True)
-        sys.exit(1)
-
-    if getattr(args, "rebuild", False):
-        import sqlite3
-        with sqlite3.connect(db.DB_PATH) as conn:
-            n = conn.execute(
-                "DELETE FROM artifact_summaries WHERE model=?", (model,)
-            ).rowcount
-        print(f"[sigma] --rebuild: wiped {n} summary rows for model={model}", flush=True)
+    _require_model("sigma", model, base_url)
+    _maybe_rebuild("sigma", model, args, db.delete_artifact_summaries, noun="summary rows")
 
     pending_tids = db.get_artifact_tids_without_summary(model)
     if not pending_tids:
@@ -1044,13 +893,7 @@ def cmd_apt(args: argparse.Namespace) -> None:
 
     db.init()
 
-    if getattr(args, "rebuild", False):
-        import sqlite3
-        with sqlite3.connect(db.DB_PATH) as conn:
-            n = conn.execute(
-                "DELETE FROM session_summaries WHERE model=?", (model,)
-            ).rowcount
-        print(f"[apt] --rebuild: wiped {n} summary rows for model={model}", flush=True)
+    _maybe_rebuild("apt", model, args, db.delete_session_summaries, noun="summary rows")
 
     pending = db.get_sessions_without_summary(model)
     if not pending:
@@ -1067,37 +910,21 @@ def cmd_apt(args: argparse.Namespace) -> None:
             print(f"[apt] all {n_finished} finished session(s) already have briefs for {model} ({briefs} total)", flush=True)
         return
 
-    ok, installed = _ollama_has_model(model, base_url)
-    if not ok:
-        print(f"[apt] model not available: {model}", flush=True)
-        print(f"[apt] installed: {', '.join(installed) or '(none)'}", flush=True)
-        print(f"[apt] fix: ollama pull {model}", flush=True)
-        sys.exit(1)
+    _require_model("apt", model, base_url)
+
+    def _process(sess: dict, i: int, n: int) -> tuple[bool, str]:
+        sid    = sess["session_id"]
+        actor  = sess.get("actor_id", "?")
+        prompt = _build_apt_prompt(sess)
+        raw    = _chat_text(prompt, model, base_url, timeout, label="apt")
+        if raw is None:
+            return False, f"[apt] {i}/{n} FAIL  {sid} ({actor})"
+        summary = _normalize_summary(raw)
+        db.upsert_session_summary(sid, model, summary, raw)
+        return True, f"[apt] {i}/{n} ok    {sid}  ({actor})"
 
     print(f"[apt] {len(pending)} session(s) to brief with {model} …", flush=True)
-    done = failed = 0
-
-    try:
-        for i, sess in enumerate(pending, 1):
-            sid    = sess["session_id"]
-            actor  = sess.get("actor_id", "?")
-            prompt = _build_apt_prompt(sess)
-            raw    = _chat_text(prompt, model, base_url, timeout, label="apt")
-            if raw is None:
-                failed += 1
-                print(f"[apt] {i}/{len(pending)} FAIL  {sid} ({actor})", flush=True)
-                continue
-            summary = _normalize_summary(raw)
-            db.upsert_session_summary(sid, model, summary, raw)
-            done += 1
-            print(f"[apt] {i}/{len(pending)} ok    {sid}  ({actor})", flush=True)
-    except KeyboardInterrupt:
-        remaining = len(pending) - i
-        print(f"\n[apt] interrupted at {i}/{len(pending)}  ({done} saved, {remaining} remaining)", flush=True)
-        print(f"[apt] resume: python3 worker.py apt --model {model}", flush=True)
-        return
-
-    print(f"[apt] done: {done} ok, {failed} failed", flush=True)
+    _run_llm_item_pipeline("apt", model, pending, _process, "apt")
 
 
 def _build_actor_prompt(actor: dict) -> str:
@@ -1159,13 +986,7 @@ def cmd_actor(args: argparse.Namespace) -> None:
         print("[actor] malpediaclient not installed (pip install malpediaclient)", flush=True)
         sys.exit(1)
 
-    if getattr(args, "rebuild", False):
-        import sqlite3
-        with sqlite3.connect(db.DB_PATH) as conn:
-            n = conn.execute(
-                "DELETE FROM actor_summaries WHERE model=?", (model,)
-            ).rowcount
-        print(f"[actor] --rebuild: wiped {n} summary rows for model={model}", flush=True)
+    _maybe_rebuild("actor", model, args, db.delete_actor_summaries, noun="summary rows")
 
     print("[actor] fetching actor list …", flush=True)
     actor_ids = _malp.list_actors()
@@ -1178,39 +999,22 @@ def cmd_actor(args: argparse.Namespace) -> None:
         print(f"[actor] all {len(actor_ids)} actors already have briefs for {model}", flush=True)
         return
 
-    ok, installed = _ollama_has_model(model, base_url)
-    if not ok:
-        print(f"[actor] model not available: {model}", flush=True)
-        print(f"[actor] fix: ollama pull {model}", flush=True)
-        sys.exit(1)
+    _require_model("actor", model, base_url)
+
+    def _process(actor_id: str, i: int, n: int) -> tuple[bool, str]:
+        actor = _malp.get_actor(actor_id)
+        if actor.get("error"):
+            return False, f"[actor] {i}/{n} SKIP  {actor_id}  ({actor['error']})"
+        prompt = _build_actor_prompt(actor)
+        raw    = _chat_text(prompt, model, base_url, timeout, label="actor")
+        if raw is None:
+            return False, f"[actor] {i}/{n} FAIL  {actor_id}"
+        summary = _normalize_summary(raw)
+        db.upsert_actor_summary(actor_id, model, summary, raw)
+        return True, f"[actor] {i}/{n} ok    {actor_id}  ({actor.get('name','')})"
 
     print(f"[actor] {len(pending)}/{len(actor_ids)} actors to brief with {model} …", flush=True)
-    done = failed = 0
-
-    try:
-        for i, actor_id in enumerate(pending, 1):
-            actor = _malp.get_actor(actor_id)
-            if actor.get("error"):
-                failed += 1
-                print(f"[actor] {i}/{len(pending)} SKIP  {actor_id}  ({actor['error']})", flush=True)
-                continue
-            prompt = _build_actor_prompt(actor)
-            raw    = _chat_text(prompt, model, base_url, timeout, label="actor")
-            if raw is None:
-                failed += 1
-                print(f"[actor] {i}/{len(pending)} FAIL  {actor_id}", flush=True)
-                continue
-            summary = _normalize_summary(raw)
-            db.upsert_actor_summary(actor_id, model, summary, raw)
-            done += 1
-            print(f"[actor] {i}/{len(pending)} ok    {actor_id}  ({actor.get('name','')})", flush=True)
-    except KeyboardInterrupt:
-        remaining = len(pending) - i
-        print(f"\n[actor] interrupted at {i}/{len(pending)}  ({done} saved, {remaining} remaining)", flush=True)
-        print(f"[actor] resume: python3 worker.py actor --model {model}", flush=True)
-        return
-
-    print(f"[actor] done: {done} ok, {failed} failed", flush=True)
+    _run_llm_item_pipeline("actor", model, pending, _process, "actor")
 
 
 def _build_family_prompt(family: dict) -> str:
@@ -1260,13 +1064,7 @@ def cmd_family(args: argparse.Namespace) -> None:
         print("[family] malpediaclient not installed (pip install malpediaclient)", flush=True)
         sys.exit(1)
 
-    if getattr(args, "rebuild", False):
-        import sqlite3
-        with sqlite3.connect(db.DB_PATH) as conn:
-            n = conn.execute(
-                "DELETE FROM family_summaries WHERE model=?", (model,)
-            ).rowcount
-        print(f"[family] --rebuild: wiped {n} summary rows for model={model}", flush=True)
+    _maybe_rebuild("family", model, args, db.delete_family_summaries, noun="summary rows")
 
     print("[family] fetching family list …", flush=True)
     family_ids = _malp.list_families()
@@ -1279,39 +1077,22 @@ def cmd_family(args: argparse.Namespace) -> None:
         print(f"[family] all {len(family_ids)} families already have briefs for {model}", flush=True)
         return
 
-    ok, installed = _ollama_has_model(model, base_url)
-    if not ok:
-        print(f"[family] model not available: {model}", flush=True)
-        print(f"[family] fix: ollama pull {model}", flush=True)
-        sys.exit(1)
+    _require_model("family", model, base_url)
+
+    def _process(family_id: str, i: int, n: int) -> tuple[bool, str]:
+        family = _malp.get_family(family_id)
+        if family.get("error"):
+            return False, f"[family] {i}/{n} SKIP  {family_id}  ({family['error']})"
+        prompt = _build_family_prompt(family)
+        raw    = _chat_text(prompt, model, base_url, timeout, label="family")
+        if raw is None:
+            return False, f"[family] {i}/{n} FAIL  {family_id}"
+        summary = _normalize_summary(raw)
+        db.upsert_family_summary(family_id, model, summary, raw)
+        return True, f"[family] {i}/{n} ok    {family_id}  ({family.get('name','')})"
 
     print(f"[family] {len(pending)}/{len(family_ids)} families to brief with {model} …", flush=True)
-    done = failed = 0
-
-    try:
-        for i, family_id in enumerate(pending, 1):
-            family = _malp.get_family(family_id)
-            if family.get("error"):
-                failed += 1
-                print(f"[family] {i}/{len(pending)} SKIP  {family_id}  ({family['error']})", flush=True)
-                continue
-            prompt = _build_family_prompt(family)
-            raw    = _chat_text(prompt, model, base_url, timeout, label="family")
-            if raw is None:
-                failed += 1
-                print(f"[family] {i}/{len(pending)} FAIL  {family_id}", flush=True)
-                continue
-            summary = _normalize_summary(raw)
-            db.upsert_family_summary(family_id, model, summary, raw)
-            done += 1
-            print(f"[family] {i}/{len(pending)} ok    {family_id}  ({family.get('name','')})", flush=True)
-    except KeyboardInterrupt:
-        remaining = len(pending) - i
-        print(f"\n[family] interrupted at {i}/{len(pending)}  ({done} saved, {remaining} remaining)", flush=True)
-        print(f"[family] resume: python3 worker.py family --model {model}", flush=True)
-        return
-
-    print(f"[family] done: {done} ok, {failed} failed", flush=True)
+    _run_llm_item_pipeline("family", model, pending, _process, "family")
 
 
 def cmd_status(args: argparse.Namespace) -> None:
@@ -1493,6 +1274,125 @@ def _progress(pct: int, label: str = "", tag: str = "worker") -> None:
         print(f"\r[{bar}] {pct:3d}%  {label}  ", end="", flush=True)
     else:
         print(f"[{tag}] {pct}% {label}", flush=True)
+
+
+# --------------------------------------------------------------------------- #
+# Shared enrichment-pipeline helpers (used by tag/summarize/ttp/sigma/apt/     #
+# actor/family - all of which check a model, optionally wipe old rows, then   #
+# loop over pending items calling an LLM once per item).                      #
+# --------------------------------------------------------------------------- #
+
+def _require_model(tag: str, model: str, base_url: str) -> None:
+    """Exit the process if `model` isn't pulled in Ollama yet."""
+    ok, installed = _ollama_has_model(model, base_url)
+    if not ok:
+        print(f"[{tag}] model not available: {model}", flush=True)
+        print(f"[{tag}] installed: {', '.join(installed) or '(none)'}", flush=True)
+        print(f"[{tag}] fix: ollama pull {model}", flush=True)
+        sys.exit(1)
+
+
+def _maybe_rebuild(
+    tag: str,
+    model: str,
+    args: argparse.Namespace,
+    delete_fn: Callable[..., int],
+    stale_fn: Callable[[], list[int]] | None = None,
+    noun: str = "rows",
+) -> None:
+    """Handle --rebuild (wipe all rows for `model`) and, if `stale_fn` is
+    given, --rebuild-changed (wipe only rows whose source doc changed)."""
+    if getattr(args, "rebuild", False):
+        n = delete_fn(model)
+        print(f"[{tag}] --rebuild: wiped {n} {noun} for model={model}", flush=True)
+    elif stale_fn is not None and getattr(args, "rebuild_changed", False):
+        stale = stale_fn()
+        if stale:
+            n = delete_fn(model, doc_ids=stale)
+            print(f"[{tag}] --rebuild-changed: wiped {n} stale {noun}", flush=True)
+        else:
+            print(f"[{tag}] --rebuild-changed: nothing stale", flush=True)
+
+
+def _run_llm_doc_pipeline(
+    tag: str,
+    model: str,
+    pending_fn: Callable[[], list[dict]],
+    process_fn: Callable[[dict], tuple[bool, str]],
+    resume_cmd: str,
+    watch: int = 0,
+    action: str = "process",
+    verb: str = "processed",
+    fail_word: str = "failed",
+) -> None:
+    """Resumable per-doc loop with a progress bar and optional --watch polling.
+    `process_fn(doc)` must call the LLM, save the result, and return
+    (success, human-readable progress label)."""
+    def _run_once() -> int:
+        pending = pending_fn()
+        if not pending:
+            print(f"[{tag}] nothing to do - all docs already {verb} with {model}", flush=True)
+            return 0
+
+        print(f"[{tag}] {len(pending)} docs to {action} with {model} …", flush=True)
+        done = failed = 0
+
+        try:
+            for i, doc in enumerate(pending, 1):
+                ok, label = process_fn(doc)
+                if not ok:
+                    failed += 1
+                done += 1
+                pct = int(i / len(pending) * 100)
+                _progress(pct, f"{i}/{len(pending)} - {label}", tag=tag)
+        except KeyboardInterrupt:
+            remaining = len(pending) - i
+            print(f"\n[{tag}] interrupted at {i}/{len(pending)}  ({done} saved, {remaining} remaining)", flush=True)
+            print(f"[{tag}] resume: python3 worker.py {resume_cmd} --model {model}", flush=True)
+            return done
+
+        print(f"\n[{tag}] {verb} {done} docs ({failed} {fail_word})", flush=True)
+        return done
+
+    _run_once()
+
+    if watch:
+        interval = int(watch)
+        print(f"[{tag}] --watch {interval}s - polling for new docs …", flush=True)
+        while True:
+            time.sleep(interval)
+            _run_once()
+
+
+def _run_llm_item_pipeline(
+    tag: str,
+    model: str,
+    pending: list,
+    process_fn: Callable[[object, int, int], tuple[bool, str]],
+    resume_cmd: str,
+) -> int:
+    """Non-watching, print-a-line-per-item loop used by apt/actor/family/sigma.
+    Caller prints its own "N to process" line first (the exact wording/context
+    - e.g. "N/M actors to brief" - differs enough per command to not templat-
+    e). `process_fn(item, i, n)` must call the LLM, save the result, and
+    return (success, the already-formatted line to print for this item)."""
+    done = failed = 0
+
+    try:
+        for i, item in enumerate(pending, 1):
+            ok, line = process_fn(item, i, len(pending))
+            if not ok:
+                failed += 1
+            done += 1
+            print(line, flush=True)
+    except KeyboardInterrupt:
+        remaining = len(pending) - i
+        print(f"\n[{tag}] interrupted at {i}/{len(pending)}  ({done} saved, {remaining} remaining)", flush=True)
+        print(f"[{tag}] resume: python3 worker.py {resume_cmd} --model {model}", flush=True)
+        return done
+
+    print(f"[{tag}] done: {done} ok, {failed} failed", flush=True)
+    return done
 
 
 # --------------------------------------------------------------------------- #

@@ -860,6 +860,12 @@ def get_artifact_summary(tid: str, model: str | None = None) -> str:
     return (row["summary"] or "") if row else ""
 
 
+def delete_artifact_summaries(model: str) -> int:
+    with _conn() as db:
+        cur = db.execute("DELETE FROM artifact_summaries WHERE model = ?", (model,))
+        return cur.rowcount or 0
+
+
 def count_artifact_summaries(model: str | None = None) -> int:
     with _conn() as db:
         if model:
@@ -1666,6 +1672,12 @@ def get_session_summary(session_id: str, model: str | None = None) -> str:
     return (row["summary"] or "") if row else ""
 
 
+def delete_session_summaries(model: str) -> int:
+    with _conn() as db:
+        cur = db.execute("DELETE FROM session_summaries WHERE model = ?", (model,))
+        return cur.rowcount or 0
+
+
 def count_session_summaries(model: str | None = None) -> int:
     with _conn() as db:
         if model:
@@ -1721,6 +1733,12 @@ def get_actor_summary(actor_id: str, model: str | None = None) -> str:
     return (row["summary"] or "") if row else ""
 
 
+def delete_actor_summaries(model: str) -> int:
+    with _conn() as db:
+        cur = db.execute("DELETE FROM actor_summaries WHERE model = ?", (model,))
+        return cur.rowcount or 0
+
+
 def count_actor_summaries(model: str | None = None) -> int:
     with _conn() as db:
         if model:
@@ -1774,6 +1792,12 @@ def get_family_summary(family_id: str, model: str | None = None) -> str:
                 (family_id,),
             ).fetchone()
     return (row["summary"] or "") if row else ""
+
+
+def delete_family_summaries(model: str) -> int:
+    with _conn() as db:
+        cur = db.execute("DELETE FROM family_summaries WHERE model = ?", (model,))
+        return cur.rowcount or 0
 
 
 def count_family_summaries(model: str | None = None) -> int:
