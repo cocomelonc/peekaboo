@@ -68,6 +68,47 @@ THEME = Theme({
 
 console = Console(theme=THEME, highlight=False)
 
+
+# -- shared sub-REPL helpers ---------------------------------------------------
+
+def _import_or_warn(module_name: str):
+    """Import a dashboard module by name, or print a standard warning and
+    return None. Used by every sub-REPL to guard optional dependencies."""
+    import importlib
+    try:
+        return importlib.import_module(module_name)
+    except ImportError as e:
+        console.print(f"[err][=^..^=] {module_name} module unavailable: {e}[/err]")
+        return None
+
+
+def _resolve_partial(key: str, candidates, label: str, prefix: bool = False) -> str | None:
+    """Resolve `key` against `candidates` (dict keys or a list of strings):
+    exact match wins, else a unique substring (or prefix, if `prefix=True`)
+    match, else print an ambiguous/not-found warning and return None."""
+    keys = list(candidates)
+    if key in keys:
+        return key
+    match = (lambda k: k.startswith(key)) if prefix else (lambda k: key in k)
+    hits = [k for k in keys if match(k)]
+    if len(hits) == 1:
+        return hits[0]
+    if len(hits) > 1:
+        shown = ", ".join(hits[:5]) + ("..." if len(hits) > 5 else "")
+        console.print(f"  [warn][=^..^=] ambiguous '{key}': {shown}[/warn]\n")
+        return None
+    console.print(f"  [err][=^..^=] {label} not found: '{key}'[/err]\n")
+    return None
+
+
+def _unknown_cmd(cmd: str, indent: bool = False) -> None:
+    pad = "  " if indent else ""
+    console.print(
+        f"{pad}[warn][=^..^=] unknown command: {cmd}  "
+        f"(type  help  for commands)[/warn]"
+    )
+
+
 # -- severity -> style map -----------------------------------------------------
 SEV_STYLE = {
     "critical": "critical",
@@ -1933,29 +1974,6 @@ ARTIFACT_COMMANDS = [
     "list", "search", "show", "rules", "tactics", "stats", "help", "back",
 ]
 
-ARTIFACT_HELP = [
-    ("list [tactic]",        "list techniques, optionally filtered by tactic"),
-    ("search <query>",       "search T-ID, name or tactic"),
-    ("show <T-ID>",          "full detail: rules, EventIDs, registry keys, processes"),
-    ("rules <T-ID> [level]", "all Sigma rules for a technique (filter: high/medium/low)"),
-    ("tactics",              "tactic overview with technique counts"),
-    ("stats",                "global artifact map statistics"),
-    ("help",                 "show this help"),
-    ("back",                 "return to main menu"),
-]
-
-
-def _artifact_help() -> None:
-    t = Table(box=box.ROUNDED, show_header=True, header_style="bold bright_white on bright_black",
-              border_style="bright_black", padding=(0, 1))
-    t.add_column("command",     style="cmd",  no_wrap=True, min_width=26)
-    t.add_column("description", style="info")
-    for cmd, desc in ARTIFACT_HELP:
-        t.add_row(cmd, desc)
-    console.print()
-    console.print(t)
-    console.print()
-
 
 def _tactic_short(tactic_str: str, max_n: int = 2) -> str:
     parts = [t.strip() for t in tactic_str.split(",") if t.strip()]
@@ -2154,10 +2172,8 @@ def _render_all_rules(e: dict, level_filter: str | None = None) -> None:
 
 def run_artifacts() -> None:
     """Interactive artifact map sub-REPL."""
-    try:
-        import db as _db
-    except ImportError as e:
-        console.print(f"[err][=^..^=] db module unavailable: {e}[/err]")
+    _db = _import_or_warn("db")
+    if _db is None:
         return
 
     with console.status("[info]loading artifact map...[/info]", spinner="dots"):
@@ -2317,24 +2333,10 @@ def run_artifacts() -> None:
             if not args:
                 console.print("[warn][=^..^=] usage: show <T-ID>  e.g.  show T1055[/warn]")
                 continue
-            tid = args[0].upper()
-            entry = tid_map.get(tid)
-            if not entry:
-                # partial match
-                matches = [k for k in tid_map if tid in k]
-                if len(matches) == 1:
-                    entry = tid_map[matches[0]]
-                elif len(matches) > 1:
-                    console.print(
-                        f"  [warn][=^..^=] ambiguous '{tid}': "
-                        f"{', '.join(matches[:6])}"
-                        f"{'...' if len(matches) > 6 else ''}[/warn]\n"
-                    )
-                    continue
-                else:
-                    console.print(f"  [err][=^..^=] T-ID not found: '{tid}'[/err]\n")
-                    continue
-            _render_artifact_detail(entry)
+            tid = _resolve_partial(args[0].upper(), tid_map, "T-ID")
+            if tid is None:
+                continue
+            _render_artifact_detail(tid_map[tid])
 
         # -- rules <T-ID> [level] ----------------------------------------------
         elif cmd == "rules":
@@ -2344,33 +2346,22 @@ def run_artifacts() -> None:
                     "e.g.  rules T1055 high[/warn]"
                 )
                 continue
-            tid = args[0].upper()
             level_filter = args[1].lower() if len(args) > 1 else None
-            entry = tid_map.get(tid)
-            if not entry:
-                matches = [k for k in tid_map if tid in k]
-                if len(matches) == 1:
-                    entry = tid_map[matches[0]]
-                else:
-                    console.print(f"  [err][=^..^=] T-ID not found: '{tid}'[/err]\n")
-                    continue
-            _render_all_rules(entry, level_filter)
+            tid = _resolve_partial(args[0].upper(), tid_map, "T-ID")
+            if tid is None:
+                continue
+            _render_all_rules(tid_map[tid], level_filter)
 
         else:
-            console.print(
-                f"[warn][=^..^=] unknown command: {cmd}  "
-                f"(type  help  for commands)[/warn]"
-            )
+            _unknown_cmd(cmd)
 
 
 # -- shared brief helpers -------------------------------------------------------
 
 def _cli_show_kb_brief(slug: str) -> None:
     """Print the precomputed GPU summary for a KB slug."""
-    try:
-        import db as _db
-    except ImportError:
-        console.print("  [err][=^..^=] db not available[/err]\n")
+    _db = _import_or_warn("db")
+    if _db is None:
         return
     summary = _db.get_kb_summary_for_slug(slug)
     if not summary:
@@ -2392,10 +2383,8 @@ def _cli_show_kb_brief(slug: str) -> None:
 
 def _cli_show_art_brief(tid: str) -> None:
     """Print the precomputed GPU detection brief for an ATT&CK technique ID."""
-    try:
-        import db as _db
-    except ImportError:
-        console.print("  [err][=^..^=] db not available[/err]\n")
+    _db = _import_or_warn("db")
+    if _db is None:
         return
     summary = _db.get_artifact_summary(tid.upper())
     if not summary:
@@ -2415,37 +2404,10 @@ def _cli_show_art_brief(tid: str) -> None:
     console.print()
 
 
-def _cli_show_session_brief(session_id: str) -> None:
-    """Print the precomputed GPU campaign brief for an APT session ID."""
-    try:
-        import db as _db
-    except ImportError:
-        console.print("  [err][=^..^=] db not available[/err]\n")
-        return
-    summary = _db.get_session_summary(session_id)
-    if not summary:
-        console.print(
-            f"  [warn][=^..^=] no campaign brief for '{session_id}'  "
-            f"(run: python worker.py apt)[/warn]\n"
-        )
-        return
-    console.print()
-    console.print(Panel(
-        summary,
-        title=f"[heading] CAMPAIGN BRIEF - {session_id} [/heading]",
-        border_style="bright_magenta",
-        box=box.ROUNDED,
-        padding=(0, 2),
-    ))
-    console.print()
-
-
 def _cli_show_actor_brief(actor_id: str) -> None:
     """Print the precomputed GPU threat profile brief for a Malpedia actor."""
-    try:
-        import db as _db
-    except ImportError:
-        console.print("  [err][=^..^=] db not available[/err]\n")
+    _db = _import_or_warn("db")
+    if _db is None:
         return
     summary = _db.get_actor_summary(actor_id)
     if not summary:
@@ -2467,10 +2429,8 @@ def _cli_show_actor_brief(actor_id: str) -> None:
 
 def _cli_show_family_brief(family_id: str) -> None:
     """Print the precomputed GPU behavioral brief for a Malpedia malware family."""
-    try:
-        import db as _db
-    except ImportError:
-        console.print("  [err][=^..^=] db not available[/err]\n")
+    _db = _import_or_warn("db")
+    if _db is None:
         return
     summary = _db.get_family_summary(family_id)
     if not summary:
@@ -2510,27 +2470,6 @@ LIBRARY_COMMANDS = [
     "list", "search", "show", "brief", "cats", "help", "back",
 ]
 
-LIBRARY_HELP = [
-    ("list [category]",   "list modules, optionally filtered by category"),
-    ("search <query>",    "search by title, T-ID or slug (case-insensitive)"),
-    ("show <slug>",       "show details + source code for a module"),
-    ("brief <slug>",      "show GPU-precomputed 3-sentence brief for a module"),
-    ("cats",              "list all categories with entry counts"),
-    ("help",              "show this help"),
-    ("back",              "return to main menu"),
-]
-
-
-def _library_help() -> None:
-    t = Table(box=box.ROUNDED, show_header=True, header_style="bold bright_white on bright_black",
-              border_style="bright_black", padding=(0, 1))
-    t.add_column("command",     style="cmd",  no_wrap=True, min_width=22)
-    t.add_column("description", style="info")
-    for cmd, desc in LIBRARY_HELP:
-        t.add_row(cmd, desc)
-    console.print()
-    console.print(t)
-    console.print()
 
 
 def _impl_badge(impl: bool) -> Text:
@@ -2651,10 +2590,8 @@ def _render_module_detail(e: dict) -> None:
 
 def run_library() -> None:
     """Interactive module library sub-REPL."""
-    try:
-        import db as _db
-    except ImportError as e:
-        console.print(f"[err][=^..^=] db module unavailable: {e}[/err]")
+    _db = _import_or_warn("db")
+    if _db is None:
         return
 
     all_entries = _db.get_mitre_entries()
@@ -2789,49 +2726,23 @@ def run_library() -> None:
             if not args:
                 console.print("[warn][=^..^=] usage: show <slug>[/warn]")
                 continue
-            slug = args[0]
-            entry = slug_map.get(slug)
-            if not entry:
-                # try partial match
-                matches = [s for s in slug_map if slug in s]
-                if len(matches) == 1:
-                    entry = slug_map[matches[0]]
-                elif len(matches) > 1:
-                    console.print(
-                        f"  [warn][=^..^=] ambiguous slug '{slug}', "
-                        f"matches: {', '.join(matches[:5])}[/warn]\n"
-                    )
-                    continue
-                else:
-                    console.print(
-                        f"  [err][=^..^=] slug not found: '{slug}'[/err]\n"
-                    )
-                    continue
-            _render_module_detail(entry)
+            slug = _resolve_partial(args[0], slug_map, "slug")
+            if slug is None:
+                continue
+            _render_module_detail(slug_map[slug])
 
         # -- brief -------------------------------------------------------------
         elif cmd == "brief":
             if not args:
                 console.print("[warn][=^..^=] usage: brief <slug>[/warn]")
                 continue
-            slug = args[0]
-            if slug not in slug_map:
-                matches = [s for s in slug_map if slug in s]
-                if len(matches) == 1:
-                    slug = matches[0]
-                elif len(matches) > 1:
-                    console.print(f"  [warn][=^..^=] ambiguous: {', '.join(matches[:5])}[/warn]\n")
-                    continue
-                else:
-                    console.print(f"  [err][=^..^=] slug not found: '{slug}'[/err]\n")
-                    continue
+            slug = _resolve_partial(args[0], slug_map, "slug")
+            if slug is None:
+                continue
             _cli_show_kb_brief(slug)
 
         else:
-            console.print(
-                f"[warn][=^..^=] unknown command: {cmd}  "
-                f"(type  help  for commands)[/warn]"
-            )
+            _unknown_cmd(cmd)
 
 
 # -- malpedia lab -------------------------------------------------------------
@@ -3107,10 +3018,8 @@ def _render_family_detail(f: dict) -> None:
 
 def run_malpedia() -> None:
     """Interactive Malpedia sub-REPL."""
-    try:
-        import malpedia as _mp
-    except ImportError as exc:
-        console.print(f"[err][=^..^=] malpedia module unavailable: {exc}[/err]")
+    _mp = _import_or_warn("malpedia")
+    if _mp is None:
         return
 
     if not _mp.available():
@@ -3257,22 +3166,9 @@ def run_malpedia() -> None:
             if not args:
                 console.print("[warn][=^..^=] usage: actor <id>  e.g.  actor lazarus_group[/warn]")
                 continue
-            aid = "_".join(args).lower()
-            # try partial match in cached list
-            if aid not in actor_list:
-                matches = [a for a in actor_list if aid in a]
-                if len(matches) == 1:
-                    aid = matches[0]
-                elif len(matches) > 1:
-                    console.print(
-                        f"  [warn][=^..^=] ambiguous '{aid}': "
-                        f"{', '.join(matches[:5])}"
-                        f"{'...' if len(matches)>5 else ''}[/warn]\n"
-                    )
-                    continue
-                elif not matches:
-                    console.print(f"  [err][=^..^=] actor not found: '{aid}'[/err]\n")
-                    continue
+            aid = _resolve_partial("_".join(args).lower(), actor_list, "actor")
+            if aid is None:
+                continue
             with console.status(f"[info]loading actor: {aid}...[/info]", spinner="dots"):
                 detail = _mp.get_actor(aid)
             _render_actor_detail(detail)
@@ -3282,21 +3178,9 @@ def run_malpedia() -> None:
             if not args:
                 console.print("[warn][=^..^=] usage: family <id>  e.g.  family win.cobalt_strike[/warn]")
                 continue
-            fid = args[0].lower()
-            if fid not in family_list:
-                matches = [f for f in family_list if fid in f]
-                if len(matches) == 1:
-                    fid = matches[0]
-                elif len(matches) > 1:
-                    console.print(
-                        f"  [warn][=^..^=] ambiguous '{fid}': "
-                        f"{', '.join(matches[:5])}"
-                        f"{'...' if len(matches)>5 else ''}[/warn]\n"
-                    )
-                    continue
-                elif not matches:
-                    console.print(f"  [err][=^..^=] family not found: '{fid}'[/err]\n")
-                    continue
+            fid = _resolve_partial(args[0].lower(), family_list, "family")
+            if fid is None:
+                continue
             with console.status(f"[info]loading family: {fid}...[/info]", spinner="dots"):
                 detail = _mp.get_family(fid)
             _render_family_detail(detail)
@@ -3425,10 +3309,7 @@ def run_malpedia() -> None:
             )
 
         else:
-            console.print(
-                f"[warn][=^..^=] unknown command: {cmd}  "
-                f"(type  help  for commands)[/warn]"
-            )
+            _unknown_cmd(cmd)
 
 
 # -- yara lab ------------------------------------------------------------------
@@ -3502,10 +3383,8 @@ def _render_yara_rule(rule_text: str) -> None:
 
 def run_yara() -> None:
     """Interactive YARA lab sub-REPL."""
-    try:
-        import yaragen as _yg
-    except ImportError as exc:
-        console.print(f"[err][=^..^=] yaragen module unavailable: {exc}[/err]")
+    _yg = _import_or_warn("yaragen")
+    if _yg is None:
         return
 
     yr_result: dict | None = None
@@ -3581,10 +3460,8 @@ def run_yara() -> None:
 
         # -- builds -----------------------------------------------------------
         elif cmd == "builds":
-            try:
-                import db as _db_yr
-            except ImportError:
-                console.print("[err][=^..^=] db module unavailable[/err]")
+            _db_yr = _import_or_warn("db")
+            if _db_yr is None:
                 continue
             fresh = _db_yr.get_builds(limit=50)
             t = Table(box=box.ROUNDED, show_header=True,
@@ -3624,10 +3501,8 @@ def run_yara() -> None:
             if not args:
                 console.print("[warn][=^..^=] usage: gen-build <build-id> [filename][/warn]")
                 continue
-            try:
-                import db as _db_yr
-            except ImportError:
-                console.print("[err][=^..^=] db module unavailable[/err]")
+            _db_yr = _import_or_warn("db")
+            if _db_yr is None:
                 continue
             build_id   = args[0]
             want_fname = args[1] if len(args) > 1 else None
@@ -3781,10 +3656,7 @@ def run_yara() -> None:
                 console.print()
 
         else:
-            console.print(
-                f"[warn][=^..^=] unknown command: {cmd}  "
-                f"(type  help  for commands)[/warn]"
-            )
+            _unknown_cmd(cmd)
 
 
 # -- shellcode lab -------------------------------------------------------------
@@ -3878,10 +3750,8 @@ def _sc_settings_line(fmt: str, xform: str, xkey: str, vname: str) -> str:
 
 def run_shellcode() -> None:
     """Interactive shellcode lab sub-REPL."""
-    try:
-        import shellcode as _sc
-    except ImportError as exc:
-        console.print(f"[err][=^..^=] shellcode module unavailable: {exc}[/err]")
+    _sc = _import_or_warn("shellcode")
+    if _sc is None:
         return
 
     sc_raw:   bytes | None = None   # raw loaded bytes
@@ -4213,10 +4083,7 @@ def run_shellcode() -> None:
                 console.print(f"  [err][=^..^=] write error: {exc}[/err]\n")
 
         else:
-            console.print(
-                f"[warn][=^..^=] unknown command: {cmd}  "
-                f"(type  help  for commands)[/warn]"
-            )
+            _unknown_cmd(cmd)
 
 
 # -- builder -------------------------------------------------------------------
@@ -4559,15 +4426,11 @@ def _render_ttp_show(attack_id: str, rows: list[dict]) -> None:
 
 def run_ttp() -> None:
     """Interactive TTP sub-REPL."""
-    try:
-        import db as _db
-    except ImportError as e:
-        console.print(f"[err][=^..^=] db module unavailable: {e}[/err]")
+    _db = _import_or_warn("db")
+    if _db is None:
         return
-    try:
-        import discovery as _disc
-    except ImportError as e:
-        console.print(f"[err][=^..^=] discovery module unavailable: {e}[/err]")
+    _disc = _import_or_warn("discovery")
+    if _disc is None:
         return
 
     # load all rows once; refresh updates this
@@ -4853,28 +4716,19 @@ def run_ttp() -> None:
                 console.print(f"  [err][=^..^=] refresh failed: {ex}[/err]\n")
 
         else:
-            console.print(
-                f"[warn][=^..^=] unknown command: {cmd}  "
-                f"(type  help  for commands)[/warn]"
-            )
+            _unknown_cmd(cmd)
 
 
 def run_builder() -> None:
     """Interactive builder sub-REPL."""
-    try:
-        import discovery as _disc
-    except ImportError as exc:
-        console.print(f"[err][=^..^=] discovery module unavailable: {exc}[/err]")
+    _disc = _import_or_warn("discovery")
+    if _disc is None:
         return
-    try:
-        import compiler as _compiler
-    except ImportError as exc:
-        console.print(f"[err][=^..^=] compiler module unavailable: {exc}[/err]")
+    _compiler = _import_or_warn("compiler")
+    if _compiler is None:
         return
-    try:
-        import db as _db
-    except ImportError as exc:
-        console.print(f"[err][=^..^=] db module unavailable: {exc}[/err]")
+    _db = _import_or_warn("db")
+    if _db is None:
         return
 
     with console.status("[info]scanning modules...[/info]", spinner="dots"):
@@ -5185,20 +5039,10 @@ def run_builder() -> None:
             # -- meow module path ---------------------------------------------
             mod = slug_map.get(slug)
             if not mod:
-                matches = [s for s in slug_map if slug in s]
-                if len(matches) == 1:
-                    slug = matches[0]
-                    mod  = slug_map[slug]
-                elif len(matches) > 1:
-                    console.print(
-                        f"  [warn][=^..^=] ambiguous '{slug}': "
-                        f"{', '.join(matches[:5])}"
-                        f"{'...' if len(matches) > 5 else ''}[/warn]\n"
-                    )
+                slug = _resolve_partial(slug, slug_map, "module")
+                if slug is None:
                     continue
-                else:
-                    console.print(f"  [err][=^..^=] module not found: '{slug}'[/err]\n")
-                    continue
+                mod = slug_map[slug]
 
             # pre-build summary
             console.print()
@@ -5333,28 +5177,17 @@ def run_builder() -> None:
                 # try prefix match from recent builds
                 try:
                     recent = _db.get_builds(100)
-                    matches = [x for x in recent if x["id"].startswith(bid)]
-                    if len(matches) == 1:
-                        b = matches[0]
-                    elif len(matches) > 1:
-                        console.print(
-                            f"  [warn][=^..^=] ambiguous id prefix '{bid}': "
-                            f"{', '.join(x['id'] for x in matches[:4])}[/warn]\n"
-                        )
+                    rid = _resolve_partial(bid, [x["id"] for x in recent], "build", prefix=True)
+                    if rid is None:
                         continue
-                    else:
-                        console.print(f"  [err][=^..^=] build not found: '{bid}'[/err]\n")
-                        continue
+                    b = next(x for x in recent if x["id"] == rid)
                 except Exception as exc:
                     console.print(f"  [err][=^..^=] db error: {exc}[/err]\n")
                     continue
             _render_build_detail(b)
 
         else:
-            console.print(
-                f"[warn][=^..^=] unknown command: {cmd}  "
-                f"(type  help  for commands)[/warn]"
-            )
+            _unknown_cmd(cmd)
 
 
 # -- VirusTotal scanner --------------------------------------------------------
@@ -5452,15 +5285,11 @@ def _vtscan_render_results(r: dict, label: str) -> None:
 
 def run_vtscan() -> None:
     """Interactive VirusTotal scanner sub-REPL."""
-    try:
-        import vtscan as _vt
-    except ImportError as exc:
-        console.print(f"[err][=^..^=] vtscan module unavailable: {exc}[/err]")
+    _vt = _import_or_warn("vtscan")
+    if _vt is None:
         return
-    try:
-        import db as _db
-    except ImportError as exc:
-        console.print(f"[err][=^..^=] db module unavailable: {exc}[/err]")
+    _db = _import_or_warn("db")
+    if _db is None:
         return
 
     builds     = _db.get_builds(limit=200)
@@ -5650,10 +5479,7 @@ def run_vtscan() -> None:
             _vtscan_render_results(r, r.get("name") or args[0][:16])
 
         else:
-            console.print(
-                f"  [warn][=^..^=] unknown command: {cmd}  "
-                f"(type  help  for commands)[/warn]\n"
-            )
+            _unknown_cmd(cmd, indent=True)
 
 
 # -- top-level REPL ------------------------------------------------------------
