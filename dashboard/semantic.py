@@ -10,6 +10,7 @@ The in-memory index is invalidated when peekaboo.db's mtime changes,
 so `rsync peekaboo.db` from a GPU box picks up automatically.
 """
 from __future__ import annotations
+import hashlib
 import json
 import math
 import sys
@@ -44,6 +45,36 @@ def _embed(texts: list[str]) -> list[list[float]] | None:
     except Exception as e:
         print(f"[semantic] embed error: {e}")
         return None
+
+
+def _embed_query(query: str) -> list[float] | None:
+    """Embed a single search query, DB-cached to avoid repeat Ollama calls.
+
+    This is the only live LLM call the dashboard makes. A warm cache means
+    repeated Malpedia / semantic searches cost zero Ollama round-trips.
+    """
+    q = query.strip()
+    if not q:
+        return None
+    h = hashlib.sha256(f"{EMBED_MODEL}\n{q}".encode()).hexdigest()
+    try:
+        import db
+        cached = db.get_query_embedding(h, EMBED_MODEL)
+    except Exception:
+        cached = None
+    if cached:
+        return cached
+
+    embs = _embed([q])
+    if not embs:
+        return None
+    vec = embs[0]
+    try:
+        import db
+        db.put_query_embedding(h, EMBED_MODEL, q, vec)
+    except Exception:
+        pass
+    return vec
 
 
 def _cosine(a: list[float], b: list[float]) -> float:
@@ -257,10 +288,9 @@ def find_related_posts(query: str, max_results: int = 8,
     if not posts or not embs:
         return []
 
-    q_embs = _embed([query])
-    if not q_embs:
+    q_vec = _embed_query(query)
+    if q_vec is None:
         return []
-    q_vec = q_embs[0]
 
     # build candidate list: (sim_to_query, post, post_vec)
     candidates: list[tuple[float, dict, list[float]]] = []

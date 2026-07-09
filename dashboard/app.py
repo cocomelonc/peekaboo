@@ -771,12 +771,26 @@ def api_malpedia_search():
 def api_semantic_status():
     try:
         from semantic import available, embedded_count, tagged_count, ttp_count, data_source
+        avail    = available()
+        embedded = embedded_count()
+        # Degraded: the index is present (posts embedded) but Ollama is offline,
+        # so live query embedding fails and semantic search returns empty.
+        degraded = embedded > 0 and not avail
+        try:
+            cached_queries = _db.query_embedding_count()
+        except Exception:
+            cached_queries = 0
         return jsonify({
-            "available":      available(),
-            "embedded_posts": embedded_count(),
+            "available":      avail,
+            "embedded_posts": embedded,
             "tagged_posts":   tagged_count(),
             "ttp_posts":      ttp_count(),
             "source":         data_source(),
+            "cached_queries": cached_queries,
+            "degraded":       degraded,
+            "hint": ("Ollama offline - start Ollama or run `python worker.py embed`; "
+                     "semantic search is paused until an embed backend is reachable.")
+                    if degraded else "",
         })
     except Exception as e:
         return jsonify({"available": False, "error": str(e)})

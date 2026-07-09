@@ -408,7 +408,8 @@ def _compile_one(stage: dict, out_dir: Path) -> tuple[Path | None, str, str]:
 
 
 def agent_build_stages(stages: list[dict], session_id: str,
-                       compile_each: bool = False) -> tuple[list[Path], dict]:
+                       compile_each: bool = False,
+                       detection: dict | None = None) -> tuple[list[Path], dict]:
     """
     Copy each stage's source into samples/{sid}/ with a kill-chain prefix and
     write a manifest.json. Optionally invoke the matching compiler per stage.
@@ -457,11 +458,41 @@ def agent_build_stages(stages: list[dict], session_id: str,
             else:
                 s["_compile_error"] = (log or "compile failed").splitlines()[-1][:200]
 
+    # Close the loop: a blind-spot TTP (no Sigma coverage) that produced a binary
+    # gets a starter YARA rule auto-generated from that binary, so the gap ships
+    # with a detection instead of just a warning. Source-only stages get a hint.
+    generated_yara: list[dict] = []
+    for s in stages:
+        det = s.get("detection") or {}
+        if det.get("covered"):
+            continue
+        binf = s.get("_out_bin")
+        if not binf:
+            det["yara_hint"] = "compile this stage (compile_each) to auto-generate a YARA rule"
+            continue
+        try:
+            from yaragen import generate_rule
+            res = generate_rule(out_dir / binf)
+            if res.get("ok"):
+                yname = f"hunt_{_safe(s['ttp_id'])}_stage{s['stage_num']:02d}.yar"
+                (out_dir / yname).write_text(res["rule"])
+                det["yara_file"] = yname
+                s["_out_yara"]   = yname
+                produced.append(out_dir / yname)
+                generated_yara.append({
+                    "stage_num": s["stage_num"], "ttp_id": s["ttp_id"], "file": yname,
+                })
+        except Exception:
+            continue
+    if detection is not None:
+        detection["generated_yara"] = generated_yara
+
     manifest = {
         "session_id":  session_id,
         "built_at":    datetime.now().isoformat(),
         "kill_chain":  _KILL_CHAIN_ORDER,
         "compile_each": compile_each,
+        "detection":   detection or {},
         "stages":      stages,
         # quick rollups so the UI can render counts without re-scanning stages
         "counts":      {
@@ -506,6 +537,69 @@ def _ollama_narrate(stage: dict, base_url: str, model: str, timeout: int = 25) -
             return (data.get("message", {}).get("content") or "").strip()
     except Exception:
         return ""
+
+
+# --- Agent 6: detection overlay (purple-team view, no LLM) --------------------
+
+def agent_detection_overlay(stages: list[dict]) -> dict:
+    """Cross-reference each kill-chain stage against the Artifact Map so the
+    session doubles as a blue-team hunt sheet: for every simulated TTP, what a
+    defender should expect to see (Sigma rules, Windows EventIDs, registry keys,
+    processes, command-line indicators).
+
+    Pure DB lookup - no LLM, no network. Mutates each stage in place, adding a
+    `detection` block, and returns a session-level rollup. TTPs with no Sigma
+    coverage are surfaced as `gaps` - the blind spots defenders care about most.
+    """
+    covered_rules: set[str] = set()
+    event_ids:     set[str] = set()
+    gaps:          list[dict] = []
+
+    for s in stages:
+        aid   = s["ttp_id"]
+        entry = _db.get_artifact_entry(aid) or _db.get_artifact_entry(aid.split(".")[0])
+        rules = (entry or {}).get("rules", [])
+        eids  = (entry or {}).get("event_ids", [])
+        count = (entry or {}).get("rule_count", len(rules))
+        covered = bool(rules) or count > 0
+
+        s["detection"] = {
+            "sigma_count": count,
+            "event_ids":   [str(e) for e in eids][:12],
+            "reg_keys":    (entry or {}).get("reg_keys", [])[:8],
+            "processes":   (entry or {}).get("processes", [])[:8],
+            "cmdlines":    (entry or {}).get("cmdlines", [])[:6],
+            "sigma_rules": [
+                {"title": r.get("title", ""), "level": r.get("level", "")}
+                if isinstance(r, dict) else {"title": str(r), "level": ""}
+                for r in rules[:8]
+            ],
+            "covered":     covered,
+        }
+
+        for r in rules:
+            title = r.get("title") if isinstance(r, dict) else str(r)
+            if title:
+                covered_rules.add(title)
+        for e in eids:
+            event_ids.add(str(e))
+        if not covered:
+            gaps.append({
+                "ttp_id":   aid,
+                "ttp_name": s.get("ttp_name", aid),
+                "tactic":   s.get("tactic", "unknown"),
+            })
+
+    total   = len(stages)
+    covered = sum(1 for s in stages if s.get("detection", {}).get("covered"))
+    return {
+        "stages_total":     total,
+        "stages_covered":   covered,
+        "coverage_pct":     round(100 * covered / total) if total else 0,
+        "unique_sigma":     len(covered_rules),
+        "unique_event_ids": sorted(event_ids, key=lambda x: (len(x), x)),
+        "gaps":             gaps,
+    }
 
 
 # --- Main pipeline -----------------------------------------------------------
@@ -566,9 +660,18 @@ def run_pipeline(actor_id: str) -> Generator[dict, None, None]:
     yield {"step": 4, "status": "running", "msg": "mapping each TTP to a KB module…"}
     sel = agent_select_modules(ttps)
     stages = sel["stages"]
+
+    # Detection overlay: turn the attack chain into a blue-team hunt sheet.
+    # Mutates stages in place (adds per-stage `detection`) and returns a rollup.
+    detection = agent_detection_overlay(stages)
+    sel["detection"] = detection
+
     _db.update_pipeline_session(session_id, params=sel)
     yield {"step": 4, "status": "done",
-           "msg": f"{len(stages)} kill-chain stage(s) mapped",
+           "msg": f"{len(stages)} kill-chain stage(s) mapped "
+                  f"- detection coverage {detection['coverage_pct']}% "
+                  f"({detection['stages_covered']}/{detection['stages_total']}), "
+                  f"{len(detection['gaps'])} blind spot(s)",
            "data": sel}
 
     if not stages:
@@ -591,7 +694,8 @@ def run_pipeline(actor_id: str) -> Generator[dict, None, None]:
             s["narration"] = _ollama_narrate(s, ollama_url, ollama_model)
 
     files, manifest = agent_build_stages(stages, session_id,
-                                         compile_each=compile_each)
+                                         compile_each=compile_each,
+                                         detection=detection)
     finished = datetime.now().isoformat()
 
     if files:
@@ -604,6 +708,7 @@ def run_pipeline(actor_id: str) -> Generator[dict, None, None]:
                    "session_id": session_id,
                    "files":      [f.name for f in files],
                    "stages":     stages,
+                   "detection":  detection,
                    "manifest":   "manifest.json",
                }}
     else:

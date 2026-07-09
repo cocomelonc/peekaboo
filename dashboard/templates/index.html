@@ -2896,6 +2896,44 @@ async function runPipeline() {
                 <div class="apt-inner-list">${failRows}</div></div>`;
             }
 
+            // -- DETECTION OVERLAY (blue-team hunt sheet) -----------------
+            const det = data.detection || {};
+            if (det.stages_total) {
+              const pct    = det.coverage_pct || 0;
+              const barCol = pct >= 80 ? 'var(--green)' : pct >= 50 ? '#e5c07b' : 'var(--red)';
+              const detRows = stages.map(s => {
+                const d   = s.detection || {};
+                const col = TACTIC_COLORS[s.tactic] || TACTIC_COLORS.unknown;
+                const head = `<span class="badge badge-red text-xs">${escHtml(s.ttp_id)}</span>
+                  <span class="badge text-xs" style="background:${col}22;color:${col}">${escHtml(s.tactic)}</span>`;
+                if (d.covered) {
+                  const eids = (d.event_ids || []).slice(0, 8).join(', ');
+                  return `<div class="apt-mod-row" style="gap:8px">${head}
+                    <span class="badge badge-green text-xs">${d.sigma_count} sigma</span>
+                    <span class="text-xs text-dim mono" style="flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${eids ? 'EventID ' + escHtml(eids) : ''}</span>
+                  </div>`;
+                }
+                const yara = d.yara_file
+                  ? `<a href="/api/samples/${sid}/download/${encodeURIComponent(d.yara_file)}" class="btn btn-green btn-sm ms-auto">⬇ ${escHtml(d.yara_file)}</a>`
+                  : `<span class="text-xs text-dim ms-auto">${escHtml(d.yara_hint || '')}</span>`;
+                return `<div class="apt-mod-row" style="gap:8px">${head}
+                  <span class="badge badge-red text-xs">NO SIGMA</span>${yara}
+                </div>`;
+              }).join('');
+              html += `<div style="margin-top:16px">
+                <div class="apt-sec-label" style="margin-bottom:6px">🛡 DETECTION OVERLAY — BLUE TEAM</div>
+                <div class="apt-dl-row" style="margin-bottom:8px">
+                  <span class="text-xs text-dim">coverage</span>
+                  <div style="flex:1;max-width:220px;height:8px;background:var(--bg3);border-radius:4px;overflow:hidden">
+                    <div style="width:${pct}%;height:100%;background:${barCol}"></div>
+                  </div>
+                  <span class="text-sm" style="color:${barCol}">${pct}%</span>
+                  <span class="text-xs text-dim">${det.stages_covered}/${det.stages_total} stages · ${det.unique_sigma || 0} sigma · ${(det.unique_event_ids || []).length} EventIDs · ${(det.gaps || []).length} blind spot(s)</span>
+                </div>
+                <div class="apt-inner-list">${detRows}</div>
+              </div>`;
+            }
+
             // manifest download
             html += `<div class="apt-dl-btns" style="margin-top:14px">
               <a href="/api/samples/${sid}/download/manifest.json" class="btn btn-ghost btn-sm">⬇ manifest.json</a>

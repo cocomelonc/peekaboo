@@ -265,6 +265,20 @@ def init() -> None:
         """)
         db.execute("CREATE INDEX IF NOT EXISTS idx_patch_history_created ON patch_history(created DESC)")
 
+        # Runtime query-embedding cache: the ONE live Ollama call the dashboard
+        # makes is embedding a search query. Cache it so repeated searches
+        # (Malpedia lookups, semantic search) cost zero Ollama calls.
+        db.execute("""
+            CREATE TABLE IF NOT EXISTS query_embeddings (
+                query_hash TEXT NOT NULL,
+                model      TEXT NOT NULL DEFAULT 'nomic-embed-text',
+                query      TEXT NOT NULL DEFAULT '',
+                vector     TEXT NOT NULL DEFAULT '[]',
+                created_at TEXT NOT NULL DEFAULT (datetime('now')),
+                PRIMARY KEY (query_hash, model)
+            )
+        """)
+
 
 # --------------------------------------------------------------------------- #
 #  Helpers                                                                      #
@@ -469,7 +483,7 @@ def _psession_row(row: sqlite3.Row) -> dict:
     d = dict(row)
     for k in ("ttps", "params"):
         try:
-            d[k] = json.loads(d[k] or "[]" if k == "ttps" else "{}")
+            d[k] = json.loads(d[k] or ("[]" if k == "ttps" else "{}"))
         except Exception:
             d[k] = [] if k == "ttps" else {}
     return d
@@ -1161,6 +1175,48 @@ def upsert_kb_embedding(doc_id: int, model: str, vector: list[float]) -> None:
             """,
             (doc_id, model, json.dumps(vector), len(vector)),
         )
+
+
+# --------------------------------------------------------------------------- #
+#  Query-embedding cache (runtime)                                             #
+# --------------------------------------------------------------------------- #
+
+def get_query_embedding(query_hash: str, model: str) -> list[float] | None:
+    """Return a cached query vector, or None on miss."""
+    with _conn() as db:
+        row = db.execute(
+            "SELECT vector FROM query_embeddings WHERE query_hash = ? AND model = ?",
+            (query_hash, model),
+        ).fetchone()
+    if not row:
+        return None
+    try:
+        return json.loads(row["vector"])
+    except Exception:
+        return None
+
+
+def put_query_embedding(query_hash: str, model: str,
+                        query: str, vector: list[float]) -> None:
+    with _conn() as db:
+        db.execute(
+            """
+            INSERT INTO query_embeddings (query_hash, model, query, vector)
+            VALUES (?, ?, ?, ?)
+            ON CONFLICT(query_hash, model) DO UPDATE SET
+              vector     = excluded.vector,
+              created_at = datetime('now')
+            """,
+            (query_hash, model, query[:500], json.dumps(vector)),
+        )
+
+
+def query_embedding_count() -> int:
+    with _conn() as db:
+        try:
+            return db.execute("SELECT COUNT(*) FROM query_embeddings").fetchone()[0]
+        except Exception:
+            return 0
 
 
 def kb_stats() -> dict:

@@ -1196,6 +1196,29 @@ def cmd_status(args: argparse.Namespace) -> None:
     for r in family_rows:
         print(f"family_summ    : {r['n']}  ({r['model']})")
 
+    # --- readiness verdict: is this DB ready to serve a CPU dashboard? --------
+    def _mark(done: int, total: int) -> str:
+        if total and done >= total:
+            return "✔"          # ok
+        return "•" if done else "✗"
+
+    docs      = s["docs"]
+    emb_n     = emb_rows[0]["n"] if emb_rows else 0
+    sum_n     = sum_rows[0]["n"] if sum_rows else 0
+    art_n     = art_sum_rows[0]["n"] if art_sum_rows else 0
+    actor_n   = actor_rows[0]["n"] if actor_rows else 0
+    family_n  = family_rows[0]["n"] if family_rows else 0
+
+    print("\nreadiness")
+    print(f"  {_mark(docs, docs)} docs indexed         {docs}")
+    print(f"  {_mark(emb_n, docs)} embeddings ready     {emb_n}/{docs}")
+    print(f"  {_mark(sum_n, docs)} summaries ready      {sum_n}/{docs}")
+    print(f"  {_mark(art_n, art_total)} artifact briefs      {art_n}/{art_total}")
+    print(f"  {_mark(actor_n, actor_n)} actor briefs         {actor_n}")
+    print(f"  {_mark(family_n, family_n)} family briefs        {family_n}")
+    print("  runtime Ollama needed for LIVE semantic search "
+          "(query embedding); precomputed briefs need none.")
+
 
 def cmd_refresh(args: argparse.Namespace) -> None:
     """One-shot incremental update: [scan?] + init + embed pending + tag pending + [ttp?]."""

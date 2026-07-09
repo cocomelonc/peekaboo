@@ -139,6 +139,18 @@ def _status_panel(title: str, body: str, style: str = "cyan") -> None:
     console.print(body.rstrip())
     console.print()
 
+def _rule(title: str, style: str = "cyan") -> None:
+    """Frameless section header: `-- title ------------` (ASCII, colored, no box)."""
+    dash = "-" * max(3, 52 - len(title))
+    console.print(f"\n[{style}]--[/{style}] [bold]{title}[/bold] [{style}]{dash}[/{style}]")
+
+def _bar(pct: int, width: int = 10) -> str:
+    """ASCII progress bar `[####------]` colored by coverage level."""
+    style  = "ok" if pct >= 80 else ("warn" if pct >= 50 else "err")
+    filled = round(pct / 100 * width)
+    # escape the literal opening bracket so rich doesn't parse it as markup
+    return f"[{style}]\\[{'#' * filled}{'-' * (width - filled)}] {pct:>3}%[/{style}]"
+
 def _table(title: str) -> Table:
     return Table(
         title=title,
@@ -1249,6 +1261,164 @@ def cmd_vtscan(args: argparse.Namespace) -> int:
     return 1
 
 
+def cmd_status(args: argparse.Namespace) -> int:
+    """Readiness check: is the local DB ready to serve, and is Ollama needed?"""
+    import sqlite3
+    db = load_db()
+    try:
+        import semantic
+    except Exception:
+        semantic = None
+
+    def _count(sql: str) -> int:
+        try:
+            with sqlite3.connect(db.DB_PATH) as c:
+                return c.execute(sql).fetchone()[0]
+        except Exception:
+            return 0
+
+    docs      = db.kb_stats().get("docs", 0) if hasattr(db, "kb_stats") else _count("SELECT COUNT(*) FROM kb_docs")
+    embedded  = _count("SELECT COUNT(*) FROM kb_embeddings")
+    summaries = _count("SELECT COUNT(*) FROM kb_summaries")
+    art_total = _count("SELECT COUNT(*) FROM artifact_map")
+    art_brief = _count("SELECT COUNT(*) FROM artifact_summaries")
+    actors    = _count("SELECT COUNT(*) FROM actor_summaries")
+    families  = _count("SELECT COUNT(*) FROM family_summaries")
+    cached_q  = db.query_embedding_count() if hasattr(db, "query_embedding_count") else 0
+    ollama    = bool(semantic and semantic.available())
+
+    def _row(label: str, done: int, total: int | None = None) -> str:
+        ok    = done > 0 and (total is None or done >= total)
+        mark  = f"[ok]{_mark('ok')}[/ok]" if ok else f"[warn]{_mark('warn')}[/warn]"
+        value = f"{done}/{total}" if total else str(done)
+        return f"  {mark} {label:<20} {value}"
+
+    if args.json:
+        _emit_json({
+            "docs": docs, "embeddings": embedded, "summaries": summaries,
+            "artifact_techniques": art_total, "artifact_briefs": art_brief,
+            "actor_briefs": actors, "family_briefs": families,
+            "cached_queries": cached_q, "ollama_available": ollama,
+        })
+        return 0
+
+    body = "\n".join([
+        _row("docs indexed",   docs, docs),
+        _row("embeddings",     embedded, docs),
+        _row("summaries",      summaries, docs),
+        _row("artifact briefs", art_brief, art_total),
+        _row("actor briefs",   actors),
+        _row("family briefs",  families),
+        f"  [dim]·[/dim] [meta]cached queries[/meta]       {cached_q}",
+        "",
+        (f"  [ok]{_mark('ok')}[/ok] Ollama reachable - live semantic search enabled"
+         if ollama else
+         f"  [warn]{_mark('warn')}[/warn] Ollama offline - precomputed briefs work; "
+         "live semantic search paused.\n"
+         "     start Ollama, or on the GPU box run: [nav]python worker.py embed[/nav]"),
+    ])
+    _rule("peekaboo readiness")
+    console.print(body)
+    console.print()
+    return 0
+
+
+def _cov_style(pct: int) -> str:
+    return "ok" if pct >= 80 else ("warn" if pct >= 50 else "err")
+
+
+def cmd_pipeline(args: argparse.Namespace) -> int:
+    """APT campaign sessions and their blue-team detection overlay."""
+    db = load_db()
+
+    if args.pipeline_cmd == "show":
+        sid  = args.session_id
+        sess = db.get_pipeline_session(sid)
+        if not sess:
+            console.print(f"  [err]{_mark('err')} no session {sid!r}[/err]\n")
+            return 1
+        params = sess.get("params") or {}
+        stages = params.get("stages") or []
+        det    = params.get("detection") or {}
+
+        if args.json:
+            _emit_json({"session": sid, "actor": sess.get("actor_id"),
+                        "detection": det, "stages": stages})
+            return 0
+
+        _rule(f"campaign {sid}")
+        if not det:
+            console.print(
+                f"  actor [nav]{sess.get('actor_id','?')}[/nav]   "
+                f"stages [meta]{len(stages)}[/meta]   "
+                f"[dim]no detection overlay - re-run this actor to generate one[/dim]"
+            )
+        else:
+            pct = det.get("coverage_pct", 0)
+            console.print(
+                f"  actor [nav]{sess.get('actor_id','?')}[/nav]   "
+                f"stages [meta]{det.get('stages_total', len(stages))}[/meta]   "
+                f"coverage {_bar(pct)}   "
+                f"blind spots [err]{len(det.get('gaps', []))}[/err]"
+            )
+
+        _rule("kill chain", "grey35")
+        for s in stages:
+            d    = s.get("detection")
+            tag  = f"[meta]{s.get('tactic','unknown'):<20}[/meta]"
+            aid  = f"[warn]{s.get('ttp_id',''):<9}[/warn]"
+            name = _short(s.get("ttp_name", ""), 30)
+            if d is None:
+                console.print(f"  {tag} {aid} {name:<32} [dim]module {_short(s.get('module_id',''),24)}[/dim]")
+                continue
+            if d.get("covered"):
+                eids = ", ".join(str(e) for e in (d.get("event_ids") or [])[:6])
+                console.print(f"  {tag} {aid} {name:<32} "
+                              f"[ok]{d.get('sigma_count',0)} sigma[/ok]"
+                              + (f"  [dim]eid {eids}[/dim]" if eids else ""))
+            else:
+                extra = (f"[ok]-> {d['yara_file']}[/ok]" if d.get("yara_file")
+                         else f"[dim]{d.get('yara_hint','')}[/dim]")
+                console.print(f"  {tag} {aid} {name:<32} [err]NO SIGMA[/err]  {extra}")
+
+        gaps = det.get("gaps") or []
+        yars = det.get("generated_yara") or []
+        if yars:
+            _rule("generated detections (blind-spot YARA)", "green")
+            for y in yars:
+                console.print(f"  [ok]{_mark('ok')}[/ok] {y['ttp_id']:<9} [nav]{y['file']}[/nav]")
+        console.print()
+        return 0
+
+    # default: list
+    sessions = db.get_pipeline_sessions()
+    if args.json:
+        _emit_json(sessions)
+        return 0
+    if not sessions:
+        console.print(f"  [warn]{_mark('warn')} no pipeline sessions yet[/warn] - run one from the dashboard APT Campaign tab\n")
+        return 0
+
+    _rule("apt campaigns")
+    console.print("  [dim]session   actor              stages  coverage         gaps  status[/dim]")
+    for s in sessions:
+        det = (s.get("params") or {}).get("detection") or {}
+        pct = det.get("coverage_pct")
+        cov = _bar(pct) if pct is not None else "[dim]     -      [/dim]"
+        gaps = len(det.get("gaps", []))
+        st  = s.get("status", "?")
+        st_c = "ok" if st == "success" else ("err" if st == "failed" else "warn")
+        console.print(
+            f"  [nav]{s.get('session_id',''):<8}[/nav]  "
+            f"{_short(s.get('actor_id',''), 16):<16}  "
+            f"{det.get('stages_total', 0):<6}  {cov}  "
+            f"[err]{gaps:<4}[/err]  [{st_c}]{st}[/{st_c}]"
+        )
+    console.print()
+    _hint("peekaboo pipeline show <session>")
+    return 0
+
+
 # ---------------------------------------------------------------------------
 # argparse
 def build_parser() -> argparse.ArgumentParser:
@@ -1265,6 +1435,13 @@ def build_parser() -> argparse.ArgumentParser:
 
     sub = parser.add_subparsers(dest="command", parser_class=ColorHelpParser)
     sub.add_parser("examples", help="show quick workflows")
+    sub.add_parser("status", help="readiness check (indexed data + Ollama)")
+
+    pipeline = sub.add_parser("pipeline", help="APT campaigns + detection overlay")
+    sp = pipeline.add_subparsers(dest="pipeline_cmd", parser_class=ColorHelpParser)
+    sp.add_parser("list", help="list campaign sessions with coverage")
+    p = sp.add_parser("show", help="purple-team hunt sheet for a session")
+    p.add_argument("session_id")
 
     library = sub.add_parser("library", help="browse research modules")
     sp = library.add_subparsers(dest="library_cmd", parser_class=ColorHelpParser)
@@ -1344,6 +1521,8 @@ def main(argv: list[str] | None = None) -> int:
         return 0
     handlers = {
         "examples": lambda _args: (render_examples() or 0),
+        "status": cmd_status,
+        "pipeline": cmd_pipeline,
         "library": cmd_library,
         "malpedia": cmd_malpedia,
         "ttp": cmd_ttp,

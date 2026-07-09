@@ -28,7 +28,7 @@ peekaboo is a modular framework designed to safely emulate malware behavior. It 
 - **MITRE ATT&CK R&D** - browse 200+ blog post techniques mapped to ATT&CK IDs with inline source code, LLM-extracted TTPs, and per-post GPU-precomputed briefs.
 - **Malpedia integration** - threat actor and malware family lookup with semantic blog post matching via local LLM embeddings.
 - **AI assistant** - direct Ollama gateway; one canned answer for "what is Peekaboo?", everything else streamed live from Ollama; no RAG, no DB lookups at chat time.
-- **APT campaign pipeline** - end-to-end automated pipeline: Malpedia actor -> threat reports -> TTP extraction -> module selection -> binary compile.
+- **APT campaign pipeline** - the research-to-detection spine: Malpedia actor -> threat reports -> TTP extraction -> module selection -> binary compile -> **detection overlay** (per-TTP Sigma rules, EventIDs, and coverage gaps for defenders).
 - **YARA rule generator** - auto-generate YARA rules from compiled binaries or uploaded samples.
 - **VirusTotal scanner** - submit binaries for AV detection scoring; lookup by SHA256; poll analysis results.
 - **Artifact Map** - 400+ ATT&CK techniques cross-referenced with 4,000+ Sigma rules; per-technique EventID coverage, registry keys, processes, command-line indicators; GPU-precomputed detection briefs per technique.
@@ -87,7 +87,7 @@ cd dashboard && python3 app.py
 | **Shellcode** | Parse, transform, encode, analyse and reformat shellcode in 11 output formats |
 | **Module Library** | Browse 190+ malware-research modules sourced from the meow knowledge base |
 | **Samples** | Upload and manage compiled samples organized by session |
-| **APT Campaign** | Fully automated pipeline: actor -> reports -> TTP extraction -> module selection -> binary compile |
+| **APT Campaign** | Research-to-detection pipeline: actor -> reports -> TTP extraction -> module selection -> binary compile -> detection overlay (Sigma/EventID coverage + blind spots) |
 | **VirusTotal** | Submit binaries to VirusTotal for AV detection scoring; lookup by SHA256; poll analysis |
 | **YARA** | Auto-generate YARA rules from any binary (From Build, From Session, or Upload) |
 | **Artifact Map** | 400+ ATT&CK techniques cross-referenced with 4,000+ Sigma rules; per-technique event IDs, registry, process, and cmdline artifacts; GPU-precomputed detection briefs |
@@ -99,7 +99,9 @@ cd dashboard && python3 app.py
 
 ## GPU / CPU split
 
-Heavy LLM work runs once on a GPU machine via `worker.py`. Results are stored in `dashboard/peekaboo.db`. The CPU dashboard only does DB reads - zero LLM calls at request time.
+Heavy LLM **generation** runs once, offline, on a GPU machine via `worker.py` - embeddings, tags, TTP extraction, summaries, Sigma briefs, actor/family/campaign briefs. Results are stored in `dashboard/peekaboo.db`. Serving those precomputed results is **zero-LLM**: the CPU dashboard just reads the DB.
+
+The one exception is **live semantic search**, which embeds the user's query at request time. That is a single lightweight vector, cached in `query_embeddings` (so repeated searches cost nothing), and it degrades gracefully: if Ollama is offline the dashboard keeps serving everything else and flags semantic search as paused rather than crashing. Run `python worker.py status` (GPU) or `peekaboo status` (CPU) for a readiness verdict.
 
 ```bash
 GPU machine                         CPU machine (dashboard)
@@ -511,7 +513,13 @@ Requires a Malpedia API key in `.env` (`MALPEDIA_API_TOKEN`)
 
 ### APT campaign pipeline
 
-Fully automated five-stage pipeline: Malpedia actor -> threat reports -> TTP extraction -> module selection -> binary compile.    
+This is the spine of peekaboo - a single **research-to-detection** pipeline that the rest of the modules feed into:
+
+```
+Malpedia actor -> threat reports -> TTPs -> local modules -> build sample -> detection overlay (Sigma / EventIDs / YARA / VT)
+```
+
+It does not stop at "here is the malware." Every session ends as a **purple-team artifact**: the simulated attack chain *plus* what a defender should expect to see for each stage, *plus* the blind spots where no detection exists.    
 
 ![img](./screenshots/apt-1.png)     
 
@@ -526,10 +534,31 @@ Fully automated five-stage pipeline: Malpedia actor -> threat reports -> TTP ext
 | 3 | **TTP Extraction** | Extracts ATT&CK IDs via regex; offline, no API calls |
 | 4 | **Module Selection** | Weighted random pick per TTP from top-5 candidates (see below) |
 | 5 | **Binary Compile** | Builds a Windows PE ready for EDR testing |
+| 6 | **Detection Overlay** | Cross-references each TTP against the Artifact Map -> expected Sigma rules, Windows EventIDs, registry keys, processes, cmdline indicators; flags TTPs with no coverage as blind spots (no LLM, pure DB join) |
 
 ![img](./screenshots/apt-4.png)    
 
 All progress streams live to the UI. Every session is persisted to SQLite with Reports, TTPs, and Binary tabs.    
+
+#### Detection overlay (purple-team hunt sheet)
+
+Step 6 turns the attack chain into a defender-facing artifact. For every kill-chain stage, `agent_detection_overlay()` (`pipeline/apt_pipeline.py`) joins the stage's ATT&CK ID against the precomputed **Artifact Map** (400+ techniques x 4,000+ Sigma rules) and attaches, per stage, the Sigma rules, Windows EventIDs, registry keys, processes, and command-line indicators a blue team should hunt for. The session `manifest.json` gains a `detection` rollup:
+
+- **coverage %** - how many stages have any detection at all
+- **unique Sigma rules / EventIDs** across the whole chain
+- **gaps** - the TTPs in this chain with *zero* Sigma coverage, i.e. the blind spots
+
+This is pure DB cross-reference - no LLM, no network - so it runs in the same sub-minute pass as the source-only build.    
+
+**Closing the loop.** A blind-spot stage that also produced a compiled binary (`compile_each: true`) gets a **starter YARA rule auto-generated from that binary** (`hunt_<ttp>_stage<NN>.yar`, written into the session dir and listed in `manifest.json`). So a detection gap doesn't just get flagged - it ships with a first-draft detection. Source-only gaps get a hint to compile.
+
+Inspect any session from the terminal - frameless, ASCII, colored:
+
+```bash
+peekaboo pipeline list                 # every campaign + coverage bar + gaps
+peekaboo pipeline show <session_id>    # per-stage hunt sheet: Sigma / EventIDs / blind spots / generated YARA
+peekaboo status                        # readiness: indexed data + whether Ollama is needed
+```
 
 Each session row in the history table has a `[brief]` button - shows a GPU-precomputed 3-sentence campaign brief (actor, techniques used, detection priority) in the slide panel. No LLM at render time; requires `worker.py apt`.    
 
