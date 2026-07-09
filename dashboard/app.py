@@ -946,10 +946,12 @@ def api_samples_clear():
         _db.clear_reports()
         _db.clear_pipeline_sessions()
         _db.clear_patch_history()
-        import shutil
-        if SAMPLES_DIR.exists():
-            for d in SAMPLES_DIR.iterdir():
-                if d.is_dir():
+        # wipe per-session folders in BOTH trees (session-id-shaped dirs only)
+        for root in (SAMPLES_DIR, PIPELINE_DIR):
+            if not root.exists():
+                continue
+            for d in root.iterdir():
+                if d.is_dir() and re.match(r"^[a-f0-9]{8}$", d.name):
                     shutil.rmtree(d, ignore_errors=True)
         return jsonify({"ok": True})
     except Exception as e:
@@ -1063,8 +1065,12 @@ def api_pipeline_clear():
     deleted_files   = 0
     errors: list[str] = []
 
-    if SAMPLES_DIR.exists():
-        for child in SAMPLES_DIR.iterdir():
+    # Wipe per-session folders in BOTH trees: samples/<id>/ (source + binaries)
+    # and pipeline/sessions/<id>/ (pipeline working dir).
+    for root in (SAMPLES_DIR, PIPELINE_DIR):
+        if not root.exists():
+            continue
+        for child in root.iterdir():
             if not child.is_dir():
                 continue
             # only wipe session-id-shaped dirs (8 hex chars), defensive guard
