@@ -600,17 +600,17 @@ Running the same actor twice produces a different kill chain each time. This is 
 
 **Session deduplication** (hard constraint):     
 
-`−10` if the module's source file was already selected in this session -> guarantees no two stages compile the same `.c`/`.cpp`/`.nim` file     
+`-10` if the module's source file was already selected in this session -> guarantees no two stages compile the same `.c`/`.cpp`/`.nim` file     
 
 **Cross-session rotation** (soft pressure):     
 
-`−3` if the module ID appeared in any of the last 10 pipeline sessions -> naturally rotates through the library across repeated runs of the same actor     
+`-3` if the module ID appeared in any of the last 10 pipeline sessions -> naturally rotates through the library across repeated runs of the same actor     
 
 **Jitter** (variety):    
 
 `+[0, 2)` uniform random added to every candidate score -> breaks ties and ensures even equal-scoring modules vary across runs     
 
-The top-5 candidates by adjusted score are then passed to `random.choices()` with weights proportional to `(score − min + 1)`. Quality still wins most of the time, but lower-ranked alternatives get a real shot (~20-40% depending on score gaps).    
+The top-5 candidates by adjusted score are then passed to `random.choices()` with weights proportional to `(score - min + 1)`. Quality still wins most of the time, but lower-ranked alternatives get a real shot (~20-40% depending on score gaps).    
 
 **Result:** same actor, same extracted TTPs, different malware assembly every run - wider technique coverage for blue team detection tuning.      
 
