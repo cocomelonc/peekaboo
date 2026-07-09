@@ -8,7 +8,6 @@ from __future__ import annotations
 
 import argparse
 import json
-import os
 import re
 import sys
 import uuid
@@ -17,10 +16,8 @@ from datetime import datetime
 from pathlib import Path
 from typing import Any
 
-from rich import box
 from rich.console import Console
 from rich.syntax import Syntax
-from rich.table import Table
 from rich.text import Text
 from rich.theme import Theme
 
@@ -34,21 +31,38 @@ PAGE = 20
 THEME = Theme(
     {
         "heading": "bold bright_white",
-        "nav": "bold cyan",
-        "meta": "grey70",
-        "ok": "green",
-        "warn": "yellow",
-        "err": "red",
-        "intel": "magenta",
-        "dim": "grey50",
+        "nav": "bold bright_cyan",   # identifiers, hints, links
+        "title": "white",            # primary text / names
+        "count": "bold bright_cyan", # numeric metrics
+        "evt": "bold #5BC8FF",       # windows event ids
+        "meta": "grey74",            # secondary
+        "ok": "bold bright_green",
+        "warn": "bold bright_yellow",
+        "err": "bold bright_red",
+        "intel": "bold bright_magenta",  # threat-intel briefs
+        "dim": "grey46",             # tertiary
     }
 )
 
-console = Console(theme=THEME, highlight=False)
-PLAIN = False
-CLI_BOX = box.ASCII
-RULE_WIDTH = 78
-COLOR_ENABLED = True
+# Data-driven color maps - color always carries meaning, never decoration.
+# Tactics mirror the dashboard's TACTIC_COLORS so CLI and web read as one tool.
+TACTIC_STYLE = {
+    "reconnaissance": "#9CA3AF", "resource-development": "#A78BFA",
+    "initial-access": "#F97316", "execution": "#30D158",
+    "defense-evasion": "#FFD60A", "persistence": "#0A84FF",
+    "command-and-control": "#FF453A", "privilege-escalation": "#FF9F0A",
+    "credential-access": "#BF5AF2", "discovery": "#64D2FF",
+    "lateral-movement": "#FF8FAD", "collection": "#FFD60A",
+    "exfiltration": "#0A84FF", "impact": "#FF375F", "unknown": "#8A85A8",
+}
+SEV_STYLE = {
+    "critical": "bold #FF453A", "high": "#FF453A", "medium": "#FFD60A",
+    "low": "#64D2FF", "informational": "grey50", "info": "grey50",
+}
+
+# Always-on color: force truecolor even when output is piped or redirected.
+console = Console(theme=THEME, highlight=False, force_terminal=True,
+                  color_system="truecolor")
 
 
 # ---------------------------------------------------------------------------
@@ -57,12 +71,9 @@ def _mark(kind: str) -> str:
     marks = {"ok": "+", "warn": "!", "err": "x"}
     return marks.get(kind, "")
 
-def _icon(value: str) -> str:
-    return "" if PLAIN else value
-
 def _short(value: Any, width: int) -> str:
     text = "" if value is None else str(value)
-    return text if len(text) <= width else text[: max(0, width - 1)] + "…"
+    return text if len(text) <= width else text[: max(0, width - 1)] + "~"
 
 def _json_default(value: Any) -> str:
     if isinstance(value, Path):
@@ -74,17 +85,6 @@ def _json_default(value: Any) -> str:
 def _emit_json(value: Any) -> None:
     console.print(json.dumps(value, ensure_ascii=False, indent=2, default=_json_default))
 
-def _configure_console(no_color: bool = False) -> None:
-    global console, COLOR_ENABLED
-    COLOR_ENABLED = not no_color
-    console = Console(
-        theme=THEME,
-        highlight=False,
-        no_color=no_color,
-        force_terminal=not no_color,
-        color_system="truecolor" if not no_color else "auto",
-    )
-
 def _hint(*commands: str) -> None:
     seen: set[str] = set()
     clean = []
@@ -95,7 +95,7 @@ def _hint(*commands: str) -> None:
     if not clean:
         return
     console.print()
-    console.print(f"  [heading]{'Hint' if PLAIN else '? Try'}:[/heading]")
+    console.print("  [heading]? Try:[/heading]")
     for command in clean:
         console.print(f"  [nav]{command}[/nav]")
     console.print()
@@ -104,15 +104,7 @@ def _strip_markup(value: str) -> str:
     return Text.from_markup(value).plain
 
 def _hash_header(title: str, subtitle: str | None = None, style: str = "cyan") -> None:
-    clean = _strip_markup(title)
-    width = max(28, min(RULE_WIDTH, len(clean) + 8))
-    rule = "#" * width
-    console.print()
-    console.print(f"[{style}]{rule}[/{style}]")
-    console.print(f"[{style}]#[/{style}] [heading]{title}[/heading]")
-    if subtitle:
-        console.print(f"[{style}]#[/{style}] [meta]{subtitle}[/meta]")
-    console.print(f"[{style}]{rule}[/{style}]")
+    _rule(title, style, subtitle)
 
 def _import(name: str):
     try:
@@ -135,31 +127,74 @@ def _resolve(key: str, values: list[str] | dict[str, Any], label: str) -> str | 
     return None
 
 def _status_panel(title: str, body: str, style: str = "cyan") -> None:
-    _hash_header(title, style=style)
+    _rule(title, style)
     console.print(body.rstrip())
     console.print()
 
-def _rule(title: str, style: str = "cyan") -> None:
-    """Frameless section header: `-- title ------------` (ASCII, colored, no box)."""
-    dash = "-" * max(3, 52 - len(title))
-    console.print(f"\n[{style}]--[/{style}] [bold]{title}[/bold] [{style}]{dash}[/{style}]")
+# header bars use a bright bg + black text so they pop and stay readable in any
+# terminal font (pure color attributes, no box-drawing glyphs).
+_BAR_BG = {
+    "cyan": "bright_cyan", "red": "bright_red", "green": "bright_green",
+    "magenta": "bright_magenta", "yellow": "bright_yellow", "blue": "#5BC8FF",
+    "grey35": "grey62",
+}
+
+def _rule(title: str, style: str = "cyan", subtitle: str | None = None) -> None:
+    """The one section header: a bright color bar + trailing rule (ASCII, font-safe)."""
+    bg   = _BAR_BG.get(style, style)
+    dash = "-" * max(4, 50 - len(_strip_markup(title)))
+    console.print(f"\n[bold black on {bg}] {title} [/] [{bg}]{dash}[/]")
+    if subtitle:
+        console.print(f"  [meta]{subtitle}[/meta]")
 
 def _bar(pct: int, width: int = 10) -> str:
     """ASCII progress bar `[####------]` colored by coverage level."""
     style  = "ok" if pct >= 80 else ("warn" if pct >= 50 else "err")
     filled = round(pct / 100 * width)
     # escape the literal opening bracket so rich doesn't parse it as markup
-    return f"[{style}]\\[{'#' * filled}{'-' * (width - filled)}] {pct:>3}%[/{style}]"
+    return f"[{style}]\\[{'#' * filled}{'-' * (width - filled)}] {pct:>3}%[/]"
 
-def _table(title: str) -> Table:
-    return Table(
-        title=title,
-        box=CLI_BOX,
-        show_header=True,
-        header_style="heading",
-        border_style="grey35",
-        padding=(0, 1),
-    )
+# --- frameless column primitives -------------------------------------------
+# Rich markup counts style tags as width, so we pad the *plain* text first,
+# then colorize. Four helpers replace every boxed Table in this file.
+
+def _cell(text: Any, w: int, style: str | None = None, right: bool = False) -> str:
+    s = _short("" if text is None else str(text), w)
+    s = s.rjust(w) if right else s.ljust(w)
+    return f"[{style}]{s}[/]" if style else s
+
+def _row(*cells: str) -> None:
+    console.print("  " + "  ".join(cells))
+
+def _head(*specs: tuple) -> None:
+    """Blank line + dim header row. Each spec is (label, width[, right])."""
+    console.print()
+    _row(*[_cell(s[0], s[1], "dim", s[2] if len(s) > 2 else False) for s in specs])
+
+def _tac(tactic: str, w: int) -> str:
+    """Tactic cell colored (bold) by its ATT&CK tactic (first tactic wins for lists)."""
+    first = re.split(r"[,\s]+", (tactic or "").strip())[0]
+    return _cell(tactic or "-", w, f"bold {TACTIC_STYLE.get(first, TACTIC_STYLE['unknown'])}")
+
+# --- filled "chip" tokens (bright bg + readable fg), font-safe -------------
+
+def _chip(text: str, fg: str, bg: str) -> str:
+    return f"[bold {fg} on {bg}] {text} [/]"
+
+def _chip_cell(token: str, visible: int, w: int, right: bool = False) -> str:
+    """Pad a pre-rendered chip (with known visible width) to fill a column."""
+    pad = " " * max(0, w - visible)
+    return pad + token if right else token + pad
+
+# level -> (fg, bg) for Sigma severity chips
+SEV_CHIP = {
+    "critical":      ("bright_white", "#C1121F"),
+    "high":          ("black",        "#FF7A45"),
+    "medium":        ("black",        "#FFD60A"),
+    "low":           ("black",        "#64D2FF"),
+    "informational": ("bright_white", "grey42"),
+    "info":          ("bright_white", "grey42"),
+}
 
 def _rich_help(raw: str) -> Text:
     text = Text()
@@ -206,49 +241,27 @@ def _rich_help(raw: str) -> Text:
 class ColorHelpParser(argparse.ArgumentParser):
     def print_help(self, file=None) -> None:
         raw = self.format_help()
-        if COLOR_ENABLED and file is None:
+        if file is None:
             console.print(_rich_help(raw), end="")
             return
-        target = file or sys.stdout
-        target.write(raw)
+        (file or sys.stdout).write(raw)
 
 # ---------------------------------------------------------------------------
 # home / examples
 def render_home() -> None:
-    if PLAIN:
-        console.print("PEEKABOO")
-        console.print("Threat Research & Detection Engineering Lab\n")
-        console.print("Explore")
-        console.print("  library      Browse research modules")
-        console.print("  malpedia     Threat actors, families and reports")
-        console.print("  ttp          Explore MITRE ATT&CK techniques")
-        console.print("  artifacts    ATT&CK x Sigma detection coverage\n")
-        console.print("Tools")
-        console.print("  yara         Generate and inspect YARA rules")
-        console.print("  vtscan       VirusTotal analysis")
-        console.print("  builder      Research module build workflow")
-        console.print("  shellcode    Local binary analysis tools\n")
-        console.print("Quick examples")
-        console.print("  peekaboo malpedia search lazarus")
-        console.print("  peekaboo malpedia reports --limit 10")
-        console.print("  peekaboo ttp show T1055")
-        console.print("  peekaboo artifacts rules T1059.001 --level high\n")
-        console.print("Run `peekaboo <command> --help` or `peekaboo examples`.")
-        return
-
     _hash_header("PEEKABOO", "Threat Research & Detection Engineering Lab")
     console.print()
     console.print("  [heading]Explore[/heading]\n")
-    console.print("  > [nav]library[/nav]      Browse research modules")
-    console.print("  > [nav]malpedia[/nav]     Threat actors, families and reports")
-    console.print("  > [nav]ttp[/nav]          Explore MITRE ATT&CK techniques")
-    console.print("  > [nav]artifacts[/nav]    ATT&CK x Sigma detection coverage")
+    console.print("  [dim]>[/dim] [nav]library[/nav]      Browse research modules")
+    console.print("  [dim]>[/dim] [nav]malpedia[/nav]     Threat actors, families and reports")
+    console.print("  [dim]>[/dim] [nav]ttp[/nav]          Explore MITRE ATT&CK techniques")
+    console.print("  [dim]>[/dim] [nav]artifacts[/nav]    ATT&CK x Sigma detection coverage")
     console.print()
     console.print("  [heading]Tools[/heading]\n")
-    console.print("  > [nav]yara[/nav]         Generate and inspect YARA rules")
-    console.print("  > [nav]vtscan[/nav]       VirusTotal analysis")
-    console.print("  > [nav]builder[/nav]      Research module build workflow")
-    console.print("  > [nav]shellcode[/nav]    Local binary analysis tools")
+    console.print("  [dim]>[/dim] [nav]yara[/nav]         Generate and inspect YARA rules")
+    console.print("  [dim]>[/dim] [nav]vtscan[/nav]       VirusTotal analysis")
+    console.print("  [dim]>[/dim] [nav]builder[/nav]      Research module build workflow")
+    console.print("  [dim]>[/dim] [nav]shellcode[/nav]    Local binary analysis tools")
     console.print()
     console.print("  [heading]Quick examples[/heading]\n")
     console.print("  [dim]$[/dim] peekaboo malpedia search lazarus")
@@ -256,43 +269,38 @@ def render_home() -> None:
     console.print("  [dim]$[/dim] peekaboo ttp show T1055")
     console.print("  [dim]$[/dim] peekaboo artifacts rules T1059.001 --level high")
     console.print()
-    console.print("  ? Run [nav]peekaboo <command> --help[/nav]")
-    console.print("  > Run [nav]peekaboo examples[/nav]\n")
+    console.print("  [dim]?[/dim] Run [nav]peekaboo <command> --help[/nav]")
+    console.print("  [dim]>[/dim] Run [nav]peekaboo examples[/nav]\n")
 
 def render_examples() -> None:
     body = """\
-{actor}[heading]Explore a threat actor[/heading]
+  [dim]>[/dim] [heading]Explore a threat actor[/heading]
 
-  [nav]peekaboo malpedia search lazarus[/nav]
-  [nav]peekaboo malpedia actor lazarus_group[/nav]
+    [nav]peekaboo malpedia search lazarus[/nav]
+    [nav]peekaboo malpedia actor lazarus_group[/nav]
 
-{reports}[heading]Browse latest reports[/heading]
+  [dim]>[/dim] [heading]Browse latest reports[/heading]
 
-  [nav]peekaboo malpedia reports --limit 10[/nav]
+    [nav]peekaboo malpedia reports --limit 10[/nav]
 
-{attack}[heading]Explore ATT&CK[/heading]
+  [dim]>[/dim] [heading]Explore ATT&CK[/heading]
 
-  [nav]peekaboo ttp search "process injection"[/nav]
-  [nav]peekaboo ttp show T1055[/nav]
+    [nav]peekaboo ttp search "process injection"[/nav]
+    [nav]peekaboo ttp show T1055[/nav]
 
-{detect}[heading]Check detection coverage[/heading]
+  [dim]>[/dim] [heading]Check detection coverage[/heading]
 
-  [nav]peekaboo artifacts show T1055[/nav]
-  [nav]peekaboo artifacts rules T1059.001 --level high[/nav]
+    [nav]peekaboo artifacts show T1055[/nav]
+    [nav]peekaboo artifacts rules T1059.001 --level high[/nav]
 
-{library}[heading]Browse research library[/heading]
+  [dim]>[/dim] [heading]Browse research library[/heading]
 
-  [nav]peekaboo library list[/nav]
-  [nav]peekaboo library list --category injection[/nav]
-  [nav]peekaboo library search "APC"[/nav]
-""".format(
-        actor=_icon("> "),
-        reports=_icon("> "),
-        attack=_icon("> "),
-        detect=_icon("> "),
-        library=_icon("> "),
-    )
+    [nav]peekaboo library list[/nav]
+    [nav]peekaboo library list --category injection[/nav]
+    [nav]peekaboo library search "APC"[/nav]
+"""
     _hash_header("Quick Start", "Common Peekaboo workflows")
+    console.print()
     console.print(body.rstrip())
     console.print()
 
@@ -327,25 +335,20 @@ def load_vtscan():
 # ---------------------------------------------------------------------------
 # library
 def render_library(rows: list[dict], title: str) -> None:
-    table = _table(f"{title} ({len(rows)})")
-    table.add_column("#", style="meta", justify="right", no_wrap=True)
-    table.add_column("slug", style="nav", no_wrap=True)
-    table.add_column("category", style="meta", no_wrap=True)
-    table.add_column("T-IDs", style="warn", no_wrap=True)
-    table.add_column("impl", justify="center")
-    table.add_column("title")
+    _rule(f"{title} ({len(rows)})")
+    _head(("#", 3, True), ("slug", 26), ("category", 13), ("t-ids", 17), ("impl", 4), ("title", 40))
     for i, item in enumerate(rows, 1):
         tids = " ".join(item.get("attack_ids") or []) or "-"
-        table.add_row(
-            str(i),
-            item.get("slug", "?"),
-            item.get("category", "-"),
-            _short(tids, 18),
-            "[ok]yes[/ok]" if item.get("implemented") else "[meta]-[/meta]",
-            _short(item.get("title", ""), 64),
+        impl = item.get("implemented")
+        _row(
+            _cell(i, 3, "dim", True),
+            _cell(item.get("slug", "?"), 26, "nav"),
+            _cell(item.get("category", "-"), 13, "meta"),
+            _cell(tids, 17, "warn"),
+            _cell("yes" if impl else "-", 4, "ok" if impl else "dim"),
+            _cell(item.get("title", ""), 40, "title"),
         )
     console.print()
-    console.print(table)
 
 LANG_BY_EXT = {
     ".asm": "nasm",
@@ -488,13 +491,11 @@ def cmd_library(args: argparse.Namespace) -> int:
         if args.json:
             _emit_json(dict(counts))
         else:
-            table = _table("Library Categories")
-            table.add_column("category", style="nav")
-            table.add_column("modules", style="meta", justify="right")
+            _rule("library categories")
+            _head(("category", 22), ("modules", 8, True))
             for category, count in sorted(counts.items()):
-                table.add_row(category, str(count))
+                _row(_cell(category, 22, "nav"), _cell(count, 8, "count", True))
             console.print()
-            console.print(table)
         return 0
 
     return 1
@@ -508,31 +509,25 @@ def mp_local_search(mp, kind: str, query: str) -> list[str]:
     return [value for value in values if q in value.lower()]
 
 def render_ids(values: list[str], title: str, column: str) -> None:
-    table = _table(f"{title} ({len(values)})")
-    table.add_column("#", style="meta", justify="right")
-    table.add_column(column, style="nav")
+    _rule(f"{title} ({len(values)})")
+    _head(("#", 3, True), (column, 40))
     for i, value in enumerate(values, 1):
-        table.add_row(str(i), value)
+        _row(_cell(i, 3, "dim", True), _cell(value, 40, "nav"))
     console.print()
-    console.print(table)
 
 def render_reports(reports: list[dict]) -> None:
-    table = _table(f"Recent Reports ({len(reports)})")
-    table.add_column("#", style="meta", justify="right")
-    table.add_column("date", style="meta", no_wrap=True)
-    table.add_column("org", style="nav")
-    table.add_column("title")
-    table.add_column("families", style="warn")
+    _rule(f"recent reports ({len(reports)})")
+    _head(("#", 3, True), ("date", 11), ("org", 16), ("title", 48), ("families", 26))
     for i, report in enumerate(reports, 1):
-        table.add_row(
-            str(i),
-            _short(report.get("date", ""), 11),
-            _short(report.get("org", ""), 16),
-            _short(report.get("title", ""), 56),
-            _short(" ".join(report.get("families", [])[:3]), 30) or "-",
+        fams = " ".join(report.get("families", [])[:3]) or "-"
+        _row(
+            _cell(i, 3, "dim", True),
+            _cell(report.get("date", ""), 11, "dim"),
+            _cell(report.get("org", ""), 16, "nav"),
+            _cell(report.get("title", ""), 48, "title"),
+            _cell(fams, 26, "warn"),
         )
     console.print()
-    console.print(table)
 
 def render_actor(actor: dict) -> None:
     if actor.get("error"):
@@ -734,16 +729,17 @@ def render_ttp(rows: list[dict], title: str) -> None:
         )
         item["impls"] += 1
         item["compilable"] += 1 if row.get("meow_slug") else 0
-    table = _table(f"{title} ({len(by_id)} techniques / {len(rows)} impls)")
-    table.add_column("T-ID", style="nav", no_wrap=True)
-    table.add_column("technique")
-    table.add_column("tactic", style="meta")
-    table.add_column("impls", justify="right", style="meta")
-    table.add_column("build", justify="right", style="ok")
+    _rule(f"{title} ({len(by_id)} techniques / {len(rows)} impls)")
+    _head(("t-id", 10), ("technique", 38), ("tactic", 20), ("impls", 6, True), ("build", 6, True))
     for item in sorted(by_id.values(), key=lambda x: x["attack_id"]):
-        table.add_row(item["attack_id"], _short(item["tech_name"], 46), item["tactic"], str(item["impls"]), str(item["compilable"]))
+        _row(
+            _cell(item["attack_id"], 10, "nav"),
+            _cell(item["tech_name"], 38, "title"),
+            _tac(item["tactic"], 20),
+            _cell(item["impls"], 6, "count", True),
+            _cell(item["compilable"], 6, "ok", True),
+        )
     console.print()
-    console.print(table)
 
 def render_ttp_detail(attack_id: str, rows: list[dict]) -> None:
     if not rows:
@@ -757,14 +753,16 @@ def render_ttp_detail(attack_id: str, rows: list[dict]) -> None:
         f"  Impls     : [nav]{len(rows)}[/nav]\n"
         f"  Buildable : [ok]{sum(1 for row in rows if row.get('meow_slug'))}[/ok]",
     )
-    table = _table("Implementations")
-    table.add_column("#", style="meta", justify="right")
-    table.add_column("module", style="nav")
-    table.add_column("platform", style="meta")
-    table.add_column("notes")
+    _rule("implementations", "grey35")
+    _head(("#", 3, True), ("module", 30), ("platform", 10), ("notes", 48))
     for i, row in enumerate(rows, 1):
-        table.add_row(str(i), row.get("meow_slug") or row.get("blog_slug") or "-", row.get("platform") or "-", _short(row.get("notes", ""), 64))
-    console.print(table)
+        _row(
+            _cell(i, 3, "dim", True),
+            _cell(row.get("meow_slug") or row.get("blog_slug") or "-", 30, "nav"),
+            _cell(row.get("platform") or "-", 10, "meta"),
+            _cell(row.get("notes", ""), 48, "title"),
+        )
+    console.print()
 
 def cmd_ttp(args: argparse.Namespace) -> int:
     db = load_db()
@@ -829,22 +827,18 @@ def cmd_ttp(args: argparse.Namespace) -> int:
     return 1
 
 def render_artifacts(rows: list[dict], title: str) -> None:
-    table = _table(f"{title} ({len(rows)})")
-    table.add_column("T-ID", style="nav", no_wrap=True)
-    table.add_column("name")
-    table.add_column("tactics", style="meta")
-    table.add_column("rules", style="ok", justify="right")
-    table.add_column("EventIDs", style="warn")
+    _rule(f"{title} ({len(rows)})")
+    _head(("t-id", 10), ("name", 38), ("tactic", 20), ("rules", 6, True), ("eventids", 24))
     for row in rows:
-        table.add_row(
-            row.get("tid", "?"),
-            _short(row.get("name") or "", 42),
-            _short(row.get("tactic") or "", 34),
-            str(row.get("rule_count", 0)),
-            _short(" ".join(map(str, row.get("event_ids", [])[:6])), 24) or "-",
+        eids = " ".join(map(str, row.get("event_ids", [])[:6])) or "-"
+        _row(
+            _cell(row.get("tid", "?"), 10, "nav"),
+            _cell(row.get("name") or "", 38, "title"),
+            _tac(row.get("tactic") or "", 20),
+            _cell(row.get("rule_count", 0), 6, "count", True),
+            _cell(eids, 24, "evt"),
         )
     console.print()
-    console.print(table)
 
 def render_artifact_detail(row: dict) -> None:
     _status_panel(
@@ -860,16 +854,24 @@ def render_artifact_detail(row: dict) -> None:
         render_rules(row["tid"], rules)
 
 def render_rules(tid: str, rules: list[dict]) -> None:
-    table = _table(f"Sigma Rules: {tid} ({len(rules)})")
-    table.add_column("#", style="meta", justify="right")
-    table.add_column("level", style="warn")
-    table.add_column("category", style="meta")
-    table.add_column("status", style="meta")
-    table.add_column("title")
+    _rule(f"sigma rules: {tid} ({len(rules)})")
+    _head(("#", 3, True), ("level", 13), ("category", 16), ("status", 10), ("title", 46))
     for i, rule in enumerate(rules, 1):
-        table.add_row(str(i), rule.get("level") or "-", rule.get("category") or "-", rule.get("status") or "-", _short(rule.get("title") or "", 62))
+        lvl = rule.get("level") or "-"
+        key = lvl.lower()
+        if key in SEV_CHIP:
+            fg, bg = SEV_CHIP[key]
+            level_cell = _chip_cell(_chip(lvl, fg, bg), len(lvl) + 2, 13)
+        else:
+            level_cell = _cell(lvl, 13, "dim")
+        _row(
+            _cell(i, 3, "dim", True),
+            level_cell,
+            _cell(rule.get("category") or "-", 16, "meta"),
+            _cell(rule.get("status") or "-", 10, "meta"),
+            _cell(rule.get("title") or "", 46, "title"),
+        )
     console.print()
-    console.print(table)
 
 def cmd_artifacts(args: argparse.Namespace) -> int:
     db = load_db()
@@ -962,13 +964,11 @@ def cmd_artifacts(args: argparse.Namespace) -> int:
         if args.json:
             _emit_json(dict(counts))
         else:
-            table = _table("ATT&CK Tactics")
-            table.add_column("tactic", style="nav")
-            table.add_column("techniques", style="meta", justify="right")
+            _rule("att&ck tactics")
+            _head(("tactic", 24), ("techniques", 11, True))
             for tactic, count in sorted(counts.items()):
-                table.add_row(tactic, str(count))
+                _row(_tac(tactic, 24), _cell(count, 11, "count", True))
             console.print()
-            console.print(table)
         return 0
 
     if args.artifacts_cmd == "brief":
@@ -998,19 +998,27 @@ def build_files(build: dict) -> list[tuple[str, Path]]:
     return files
 
 def render_builds(rows: list[dict], title: str) -> None:
-    table = _table(f"{title} ({len(rows)})")
-    table.add_column("build-id", style="nav")
-    table.add_column("status", style="meta")
-    table.add_column("module")
-    table.add_column("date", style="meta")
-    table.add_column("binaries", style="ok")
+    _rule(f"{title} ({len(rows)})")
+    _head(("build-id", 12), ("status", 11), ("module", 20), ("date", 16), ("binaries", 28))
     for row in rows:
         params = row.get("params", {})
         module = params.get("slug") or params.get("stealer") or params.get("injection") or "-"
         files = " ".join(name for name, _ in build_files(row)) or "-"
-        table.add_row(row.get("id", "?"), row.get("status", "-"), module, _short(row.get("created", ""), 16), files)
+        st = row.get("status", "-")
+        if st == "success":
+            st_cell = _chip_cell(_chip(st, "black", "bright_green"), len(st) + 2, 11)
+        elif "fail" in st:
+            st_cell = _chip_cell(_chip(st, "bright_white", "#C1121F"), len(st) + 2, 11)
+        else:
+            st_cell = _cell(st, 11, "meta")
+        _row(
+            _cell(row.get("id", "?"), 12, "nav"),
+            st_cell,
+            _cell(module, 20, "title"),
+            _cell(row.get("created", ""), 16, "dim"),
+            _cell(files, 28, "ok"),
+        )
     console.print()
-    console.print(table)
 
 def cmd_builder(args: argparse.Namespace) -> int:
     db = load_db()
@@ -1038,16 +1046,17 @@ def cmd_builder(args: argparse.Namespace) -> int:
         if args.json:
             _emit_json(modules)
         else:
-            table = _table(f"{title} ({len(modules)})")
-            table.add_column("slug", style="nav")
-            table.add_column("platform", style="meta")
-            table.add_column("compiler", style="meta")
-            table.add_column("category", style="warn")
-            table.add_column("title")
+            _rule(f"{title} ({len(modules)})")
+            _head(("slug", 26), ("platform", 9), ("compiler", 11), ("category", 13), ("title", 34))
             for item in modules:
-                table.add_row(item["slug"], item.get("platform", "-"), item.get("compiler", "-"), item.get("category", "-"), _short(item.get("title", ""), 60))
+                _row(
+                    _cell(item["slug"], 26, "nav"),
+                    _cell(item.get("platform", "-"), 9, "meta"),
+                    _cell(item.get("compiler", "-"), 11, "meta"),
+                    _cell(item.get("category", "-"), 13, "warn"),
+                    _cell(item.get("title", ""), 34, "title"),
+                )
             console.print()
-            console.print(table)
             _hint(*(f"peekaboo builder build {item['slug']}" for item in modules[:3]))
         return 0 if modules else 1
 
@@ -1429,9 +1438,6 @@ def build_parser() -> argparse.ArgumentParser:
     )
     parser.add_argument("--version", action="version", version=f"%(prog)s {VERSION}")
     parser.add_argument("--json", action="store_true", help="emit JSON where supported")
-    parser.add_argument("--plain", action="store_true", help="use the most minimal ASCII output")
-    parser.add_argument("--no-color", action="store_true", help="disable ANSI color")
-    parser.add_argument("--force-color", action="store_true", help="force ANSI color (default; kept for scripts)")
 
     sub = parser.add_subparsers(dest="command", parser_class=ColorHelpParser)
     sub.add_parser("examples", help="show quick workflows")
@@ -1507,14 +1513,9 @@ def build_parser() -> argparse.ArgumentParser:
     return parser
 
 def main(argv: list[str] | None = None) -> int:
-    global console, PLAIN
     argv = list(sys.argv[1:] if argv is None else argv)
-    PLAIN = bool("--plain" in argv or os.environ.get("NO_EMOJI"))
-    _configure_console(no_color="--no-color" in argv)
     parser = build_parser()
     args = parser.parse_args(argv)
-    PLAIN = bool(args.plain or os.environ.get("NO_EMOJI"))
-    _configure_console(no_color=args.no_color)
 
     if args.command is None:
         render_home()
