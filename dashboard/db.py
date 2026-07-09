@@ -252,6 +252,44 @@ def init() -> None:
         db.execute("CREATE INDEX IF NOT EXISTS idx_ttp_extracted_model ON ttp_extracted(model)")
 
         db.execute("""
+            CREATE TABLE IF NOT EXISTS report_ttp_sources (
+                subject_type TEXT NOT NULL DEFAULT 'actor',
+                subject_id   TEXT NOT NULL DEFAULT '',
+                url          TEXT NOT NULL DEFAULT '',
+                model        TEXT NOT NULL DEFAULT '',
+                title        TEXT NOT NULL DEFAULT '',
+                status       TEXT NOT NULL DEFAULT 'ok',
+                content_type TEXT NOT NULL DEFAULT '',
+                text_chars   INTEGER NOT NULL DEFAULT 0,
+                error        TEXT NOT NULL DEFAULT '',
+                processed_at TEXT NOT NULL DEFAULT (datetime('now')),
+                PRIMARY KEY (subject_type, subject_id, url, model)
+            )
+        """)
+        db.execute("CREATE INDEX IF NOT EXISTS idx_report_sources_subject ON report_ttp_sources(subject_type, subject_id)")
+
+        db.execute("""
+            CREATE TABLE IF NOT EXISTS report_ttps (
+                subject_type  TEXT NOT NULL DEFAULT 'actor',
+                subject_id    TEXT NOT NULL DEFAULT '',
+                report_url    TEXT NOT NULL DEFAULT '',
+                report_title  TEXT NOT NULL DEFAULT '',
+                model         TEXT NOT NULL DEFAULT '',
+                tid           TEXT NOT NULL DEFAULT '',
+                name          TEXT NOT NULL DEFAULT '',
+                tactic        TEXT NOT NULL DEFAULT '',
+                confidence    TEXT NOT NULL DEFAULT 'low',
+                evidence      TEXT NOT NULL DEFAULT '',
+                evidence_hash TEXT NOT NULL DEFAULT '',
+                raw_output    TEXT NOT NULL DEFAULT '',
+                extracted_at  TEXT NOT NULL DEFAULT (datetime('now')),
+                PRIMARY KEY (subject_type, subject_id, report_url, model, tid, evidence_hash)
+            )
+        """)
+        db.execute("CREATE INDEX IF NOT EXISTS idx_report_ttps_subject ON report_ttps(subject_type, subject_id)")
+        db.execute("CREATE INDEX IF NOT EXISTS idx_report_ttps_tid ON report_ttps(tid)")
+
+        db.execute("""
             CREATE TABLE IF NOT EXISTS patch_history (
                 id          INTEGER PRIMARY KEY AUTOINCREMENT,
                 filename    TEXT NOT NULL DEFAULT '',
@@ -1634,6 +1672,150 @@ def count_ttp_extracted(model: str | None = None) -> int:
                 "SELECT COUNT(*) FROM ttp_extracted WHERE model = ?", (model,)
             ).fetchone()[0]
         return db.execute("SELECT COUNT(*) FROM ttp_extracted").fetchone()[0]
+
+
+# --------------------------------------------------------------------------- #
+#  Report TTPs (GPU precompute for offline APT pipeline)                       #
+# --------------------------------------------------------------------------- #
+
+def record_report_ttp_source(subject_type: str, subject_id: str, url: str, model: str,
+                             title: str = "", status: str = "ok",
+                             content_type: str = "", text_chars: int = 0,
+                             error: str = "") -> None:
+    with _conn() as db:
+        db.execute(
+            """
+            INSERT INTO report_ttp_sources
+              (subject_type, subject_id, url, model, title, status, content_type,
+               text_chars, error, processed_at)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            ON CONFLICT(subject_type, subject_id, url, model) DO UPDATE SET
+              title        = excluded.title,
+              status       = excluded.status,
+              content_type = excluded.content_type,
+              text_chars   = excluded.text_chars,
+              error        = excluded.error,
+              processed_at = excluded.processed_at
+            """,
+            (
+                subject_type, subject_id, url, model, title, status, content_type,
+                int(text_chars or 0), error[:500], datetime.now().isoformat(),
+            ),
+        )
+
+
+def get_report_ttp_source_urls(subject_type: str, subject_id: str, model: str) -> set[str]:
+    with _conn() as db:
+        rows = db.execute(
+            """
+            SELECT url FROM report_ttp_sources
+            WHERE subject_type = ? AND subject_id = ? AND model = ?
+              AND status IN ('ok', 'no_ttps', 'too_short')
+            """,
+            (subject_type, subject_id, model),
+        ).fetchall()
+    return {r[0] for r in rows}
+
+
+def delete_report_ttps(subject_type: str, subject_id: str, model: str | None = None) -> int:
+    with _conn() as db:
+        if model:
+            cur1 = db.execute(
+                "DELETE FROM report_ttps WHERE subject_type = ? AND subject_id = ? AND model = ?",
+                (subject_type, subject_id, model),
+            )
+            cur2 = db.execute(
+                "DELETE FROM report_ttp_sources WHERE subject_type = ? AND subject_id = ? AND model = ?",
+                (subject_type, subject_id, model),
+            )
+        else:
+            cur1 = db.execute(
+                "DELETE FROM report_ttps WHERE subject_type = ? AND subject_id = ?",
+                (subject_type, subject_id),
+            )
+            cur2 = db.execute(
+                "DELETE FROM report_ttp_sources WHERE subject_type = ? AND subject_id = ?",
+                (subject_type, subject_id),
+            )
+        return (cur1.rowcount or 0) + (cur2.rowcount or 0)
+
+
+def upsert_report_ttps(entries: list[dict]) -> int:
+    now = datetime.now().isoformat()
+    n = 0
+    with _conn() as db:
+        for e in entries:
+            db.execute(
+                """
+                INSERT INTO report_ttps
+                  (subject_type, subject_id, report_url, report_title, model,
+                   tid, name, tactic, confidence, evidence, evidence_hash,
+                   raw_output, extracted_at)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                ON CONFLICT(subject_type, subject_id, report_url, model, tid, evidence_hash)
+                DO UPDATE SET
+                  report_title = excluded.report_title,
+                  name         = excluded.name,
+                  tactic       = excluded.tactic,
+                  confidence   = excluded.confidence,
+                  evidence     = excluded.evidence,
+                  raw_output   = excluded.raw_output,
+                  extracted_at = excluded.extracted_at
+                """,
+                (
+                    e.get("subject_type", "actor"),
+                    e.get("subject_id", ""),
+                    e.get("report_url", ""),
+                    e.get("report_title", ""),
+                    e.get("model", ""),
+                    e.get("tid", ""),
+                    e.get("name", ""),
+                    e.get("tactic", ""),
+                    e.get("confidence", "low"),
+                    e.get("evidence", ""),
+                    e.get("evidence_hash", ""),
+                    e.get("raw_output", ""),
+                    now,
+                ),
+            )
+            n += 1
+    return n
+
+
+def get_report_ttps(subject_id: str, subject_type: str | None = None,
+                    model: str | None = None) -> list[dict]:
+    sql = "SELECT * FROM report_ttps WHERE subject_id = ?"
+    args: list = [subject_id]
+    if subject_type:
+        sql += " AND subject_type = ?"
+        args.append(subject_type)
+    if model:
+        sql += " AND model = ?"
+        args.append(model)
+    sql += """
+        ORDER BY
+          CASE confidence WHEN 'high' THEN 0 WHEN 'medium' THEN 1 ELSE 2 END,
+          tid, extracted_at DESC
+    """
+    with _conn() as db:
+        rows = db.execute(sql, args).fetchall()
+    return [dict(r) for r in rows]
+
+
+def count_report_ttps(subject_type: str | None = None, subject_id: str | None = None) -> int:
+    sql = "SELECT COUNT(*) FROM report_ttps"
+    args: list = []
+    conds: list[str] = []
+    if subject_type:
+        conds.append("subject_type = ?")
+        args.append(subject_type)
+    if subject_id:
+        conds.append("subject_id = ?")
+        args.append(subject_id)
+    if conds:
+        sql += " WHERE " + " AND ".join(conds)
+    with _conn() as db:
+        return db.execute(sql, args).fetchone()[0]
 
 
 def get_kb_embeddings_all(model: str = "nomic-embed-text") -> list[dict]:

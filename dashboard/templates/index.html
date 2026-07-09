@@ -2795,12 +2795,18 @@ async function runPipeline() {
           if (mods.length) {
             const div = document.createElement('div');
             div.className = 'card card-sm apt-result-card';
-            const rows = mods.map(m =>
-              `<div class="apt-mod-row">
+            const rows = mods.map(m => {
+              const title = m.blog_url
+                ? `<a href="${escAttr(m.blog_url)}" target="_blank" class="text-sm" style="color:var(--cyan)">${escHtml(m.title||m.module_id)}</a>`
+                : `<span class="text-sm">${escHtml(m.title||m.module_id)}</span>`;
+              const score = m.selection_score ? `<span class="badge badge-dim text-xs">score ${escHtml(m.selection_score)}</span>` : '';
+              return `<div class="apt-mod-row">
                 <span class="badge badge-red text-xs">${escHtml(m.attack_id)}</span>
-                <span class="text-sm">${escHtml(m.title||m.module_id)}</span>
+                ${title}
+                ${score}
                 <span class="badge badge-dim text-xs ms-auto">${escHtml(m.category)}</span>
-              </div>`).join('');
+              </div>`;
+            }).join('');
             div.innerHTML = `<div class="apt-sec-label">SELECTED MODULES (${mods.length})</div>
               <div class="apt-inner-list">${rows}</div>`;
             resultsEl.appendChild(div);
@@ -3134,12 +3140,18 @@ async function openSessionDrawer(sessionId) {
     const paramBadges = ['encryption','malware','injection','stealer','persistence']
       .filter(k => params[k] && params[k] !== 'none')
       .map(k => `<span class="badge badge-dim">${k}: ${escHtml(params[k])}</span>`).join('');
-    const mods = (params.selected_modules||[]).map(m =>
-      `<div style="display:flex;align-items:center;gap:8px;padding:6px 0;border-bottom:1px solid var(--sep)">
+    const mods = (params.selected_modules||[]).map(m => {
+      const title = m.blog_url
+        ? `<a href="${escAttr(m.blog_url)}" target="_blank" class="text-sm" style="flex:1;color:var(--cyan)">${escHtml(m.title||m.module_id)}</a>`
+        : `<span class="text-sm" style="flex:1">${escHtml(m.title||m.module_id)}</span>`;
+      const score = m.selection_score ? `<span class="badge badge-dim text-xs">score ${escHtml(m.selection_score)}</span>` : '';
+      return `<div style="display:flex;align-items:center;gap:8px;padding:6px 0;border-bottom:1px solid var(--sep)">
         <span class="badge badge-red" style="font-size:10px;min-width:60px;text-align:center">${escHtml(m.attack_id)}</span>
-        <span class="text-sm" style="flex:1">${escHtml(m.title||m.module_id)}</span>
+        ${title}
+        ${score}
         <span class="badge badge-dim text-xs">${escHtml(m.category)}</span>
-      </div>`).join('');
+      </div>`;
+    }).join('');
     document.getElementById('drawer-tab-binary').innerHTML = `
       ${paramBadges ? `<div class="card card-sm" style="margin-bottom:14px">
         <div class="text-xs text-dim" style="margin-bottom:8px">Build configuration</div>

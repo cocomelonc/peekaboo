@@ -36,6 +36,7 @@ typical workflows:
 from __future__ import annotations
 
 import argparse
+import hashlib
 import json
 import os
 import re as _re
@@ -690,6 +691,291 @@ def cmd_ttp(args: argparse.Namespace) -> None:
                           action="extract TTPs from", fail_word="LLM failures")
 
 
+# --------------------------------------------------------------------------- #
+# Report TTP precompute (HTML/PDF threat reports -> ATT&CK IDs via LLM)       #
+# --------------------------------------------------------------------------- #
+
+def _resolve_report_subject(args: argparse.Namespace) -> tuple[str, str, dict]:
+    sys.path.insert(0, str(_ROOT / "dashboard"))
+    import malpedia
+
+    if args.actor and args.family:
+        print("[reports] choose only one of --actor or --family", flush=True)
+        sys.exit(2)
+    subject_id = args.actor or args.family
+    if not subject_id:
+        print("[reports] required: --actor ID or --family ID", flush=True)
+        sys.exit(2)
+
+    if args.family:
+        data = malpedia.get_family(subject_id)
+        subject_type = "family"
+    else:
+        data = malpedia.get_actor(subject_id)
+        subject_type = "actor"
+        if "error" in data:
+            data = malpedia.get_family(subject_id)
+            subject_type = "family"
+
+    if "error" in data:
+        print(f"[reports] malpedia fetch failed for {subject_id}: {data['error']}", flush=True)
+        sys.exit(1)
+    return subject_type, subject_id, data
+
+
+def _subject_report_urls(subject_type: str, data: dict, limit: int) -> list[dict]:
+    items: list[dict] = []
+
+    def _add(url: str, title: str = "") -> None:
+        url = (url or "").strip()
+        if not url or not url.startswith(("http://", "https://")):
+            return
+        if any(x["url"] == url for x in items):
+            return
+        items.append({"url": url, "title": title.strip()})
+
+    if subject_type == "actor":
+        for url in data.get("refs", []) or []:
+            _add(url)
+        for fam in data.get("families", []) or []:
+            for url in fam.get("urls", []) or []:
+                _add(url, title=fam.get("id", ""))
+    else:
+        for url in data.get("urls", []) or []:
+            _add(url)
+    return items[:limit]
+
+
+def _extract_pdf_text(content: bytes) -> str:
+    try:
+        import fitz  # PyMuPDF
+    except Exception as e:
+        raise RuntimeError("PyMuPDF not installed; run: pip install PyMuPDF") from e
+    text: list[str] = []
+    with fitz.open(stream=content, filetype="pdf") as doc:
+        for page in doc:
+            text.append(page.get_text("text"))
+    return "\n".join(text)
+
+
+def _extract_html_text(content: bytes, encoding: str | None = None) -> str:
+    from bs4 import BeautifulSoup
+
+    html = content.decode(encoding or "utf-8", errors="replace")
+    soup = BeautifulSoup(html, "html.parser")
+    for tag in soup(["script", "style", "noscript", "svg", "form", "nav", "footer"]):
+        tag.decompose()
+    title = soup.title.get_text(" ", strip=True) if soup.title else ""
+    body = soup.get_text("\n", strip=True)
+    return "\n".join(p for p in (title, body) if p)
+
+
+def _clean_report_text(text: str, max_chars: int) -> str:
+    text = _re.sub(r"\r", "\n", text or "")
+    text = _re.sub(r"[ \t]+", " ", text)
+    text = _re.sub(r"\n{3,}", "\n\n", text)
+    return text.strip()[:max_chars]
+
+
+def _fetch_report_text(url: str, timeout: int, max_chars: int) -> tuple[str, str, str]:
+    try:
+        import requests
+    except ImportError as e:
+        raise RuntimeError("requests not installed") from e
+
+    headers = {"User-Agent": "Mozilla/5.0"}
+    r = requests.get(url, timeout=timeout, headers=headers)
+    r.raise_for_status()
+    ctype = (r.headers.get("content-type") or "").lower()
+    content = r.content
+    if "pdf" in ctype or url.lower().split("?", 1)[0].endswith(".pdf") or content[:4] == b"%PDF":
+        kind = "pdf"
+        text = _extract_pdf_text(content)
+    else:
+        kind = "html"
+        text = _extract_html_text(content, r.encoding)
+    return _clean_report_text(text, max_chars), ctype or kind, kind
+
+
+def _artifact_reference() -> tuple[set[str], dict[str, str], dict[str, str]]:
+    valid: set[str] = set()
+    names: dict[str, str] = {}
+    tactics: dict[str, str] = {}
+    for e in db.get_artifact_entries():
+        tid = (e.get("tid") or "").upper()
+        if not _ATTACK_ID_RE.match(tid):
+            continue
+        valid.add(tid)
+        valid.add(tid.split(".")[0])
+        if e.get("name"):
+            names[tid] = e["name"]
+        tac = (e.get("tactic") or "").split(",")[0].strip()
+        if tac:
+            tactics[tid] = tac
+    return valid, names, tactics
+
+
+def _primary_tactic(tid: str, fallback: str = "") -> str:
+    base = tid.split(".")[0]
+    try:
+        from pipeline.apt_pipeline import _TACTIC_MAP
+        return (_TACTIC_MAP.get(tid) or _TACTIC_MAP.get(base) or fallback or "unknown")
+    except Exception:
+        return fallback or "unknown"
+
+
+def _build_report_ttp_prompt(subject_id: str, report_title: str, report_url: str,
+                             text: str) -> str:
+    body = text[:18000]
+    return f"""You are a MITRE ATT&CK analyst. Read this threat intelligence report text and extract ATT&CK techniques that are directly supported by the report.
+
+Subject: {subject_id}
+Report title: {report_title or "(unknown)"}
+Report URL: {report_url}
+
+Return ONLY valid JSON, no markdown:
+{{
+  "ttps": [
+    {{
+      "id": "T1234",
+      "name": "Technique name",
+      "tactic": "defense-evasion",
+      "confidence": "high",
+      "evidence": "short exact quote or close excerpt from the report"
+    }}
+  ]
+}}
+
+Rules:
+- Extract up to 25 techniques.
+- id must be MITRE ATT&CK format T1234 or T1234.567.
+- confidence must be high, medium, or low.
+- evidence must be one short sentence from the report text that justifies the mapping.
+- Prefer precise behavior mappings. Do not infer techniques from actor reputation alone.
+- If no supported techniques are present, return {{"ttps":[]}}.
+
+--- REPORT TEXT ---
+{body}
+--- END REPORT TEXT ---"""
+
+
+def _normalize_report_ttps(parsed: dict, valid_ids: set[str],
+                           names: dict[str, str], tactics: dict[str, str]) -> list[dict]:
+    raw = parsed.get("ttps", []) if isinstance(parsed, dict) else []
+    if isinstance(raw, dict):
+        raw = [raw]
+    out: list[dict] = []
+    seen: set[tuple[str, str]] = set()
+    for item in raw[:30] if isinstance(raw, list) else []:
+        if not isinstance(item, dict):
+            continue
+        tid = str(item.get("id") or item.get("tid") or "").strip().upper()
+        if not _ATTACK_ID_RE.match(tid):
+            continue
+        if valid_ids and tid not in valid_ids and tid.split(".")[0] not in valid_ids:
+            continue
+        conf = str(item.get("confidence") or "low").strip().lower()
+        if conf not in ("high", "medium", "low"):
+            conf = "low"
+        evidence = _re.sub(r"\s+", " ", str(item.get("evidence") or "").strip())[:500]
+        if not evidence:
+            continue
+        key = (tid, evidence.lower())
+        if key in seen:
+            continue
+        seen.add(key)
+        tactic = _primary_tactic(tid, tactics.get(tid) or tactics.get(tid.split(".")[0]) or "")
+        out.append({
+            "tid": tid,
+            "name": names.get(tid) or names.get(tid.split(".")[0]) or str(item.get("name") or tid),
+            "tactic": tactic,
+            "confidence": conf,
+            "evidence": evidence,
+            "evidence_hash": hashlib.sha1(evidence.lower().encode()).hexdigest()[:16],
+        })
+    return out
+
+
+def cmd_reports(args: argparse.Namespace) -> None:
+    """Precompute ATT&CK TTPs from Malpedia report URLs (HTML/PDF) via LLM."""
+    model = args.model
+    base_url = args.url
+    db.init()
+    _require_model("reports", model, base_url)
+
+    subject_type, subject_id, subject = _resolve_report_subject(args)
+    if args.rebuild:
+        wiped = db.delete_report_ttps(subject_type, subject_id, model)
+        print(f"[reports] --rebuild: wiped {wiped} rows for {subject_type}:{subject_id}", flush=True)
+
+    urls = _subject_report_urls(subject_type, subject, args.limit)
+    done_urls = db.get_report_ttp_source_urls(subject_type, subject_id, model)
+    pending = [u for u in urls if u["url"] not in done_urls]
+    valid_ids, names, tactics = _artifact_reference()
+    if not valid_ids:
+        print("[reports] warning: artifact_map is empty; ID validation is disabled", flush=True)
+
+    print(f"[reports] subject: {subject_type}:{subject_id}", flush=True)
+    print(f"[reports] {len(pending)}/{len(urls)} report URL(s) pending with {model}", flush=True)
+
+    saved = failed = 0
+    try:
+        for i, item in enumerate(pending, 1):
+            url = item["url"]
+            title = item.get("title", "")
+            try:
+                text, ctype, kind = _fetch_report_text(url, args.fetch_timeout, args.max_chars)
+            except Exception as e:
+                failed += 1
+                db.record_report_ttp_source(subject_type, subject_id, url, model, title,
+                                            status="fetch_error", error=str(e))
+                print(f"[reports] {i}/{len(pending)} FETCH FAIL {url[:90]}  {e}", flush=True)
+                continue
+
+            if len(text) < 500:
+                db.record_report_ttp_source(subject_type, subject_id, url, model, title,
+                                            status="too_short", content_type=ctype,
+                                            text_chars=len(text), error="text under 500 chars")
+                print(f"[reports] {i}/{len(pending)} skip short {kind} {len(text)}ch {url[:80]}", flush=True)
+                continue
+
+            prompt = _build_report_ttp_prompt(subject_id, title, url, text)
+            parsed, raw = _chat_json(prompt, model, base_url, timeout=args.timeout, label="reports")
+            if parsed is None:
+                failed += 1
+                db.record_report_ttp_source(subject_type, subject_id, url, model, title,
+                                            status="llm_error", content_type=ctype,
+                                            text_chars=len(text), error="invalid JSON")
+                print(f"[reports] {i}/{len(pending)} LLM FAIL {url[:90]}", flush=True)
+                continue
+
+            ttps = _normalize_report_ttps(parsed, valid_ids, names, tactics)
+            entries = []
+            for t in ttps:
+                entries.append({
+                    **t,
+                    "subject_type": subject_type,
+                    "subject_id": subject_id,
+                    "report_url": url,
+                    "report_title": title,
+                    "model": model,
+                    "raw_output": raw,
+                })
+            if entries:
+                saved += db.upsert_report_ttps(entries)
+            db.record_report_ttp_source(subject_type, subject_id, url, model, title,
+                                        status="ok" if entries else "no_ttps",
+                                        content_type=ctype, text_chars=len(text))
+            ids = ",".join(t["tid"] for t in ttps[:6]) or "(none)"
+            print(f"[reports] {i}/{len(pending)} ok {kind:4s} {len(text):5d}ch -> {ids}", flush=True)
+    except KeyboardInterrupt:
+        print(f"\n[reports] interrupted; resume with the same command", flush=True)
+        return
+
+    total = db.count_report_ttps(subject_type, subject_id)
+    print(f"[reports] done: saved {saved} TTP rows, {failed} failed URL(s), subject total {total}", flush=True)
+
+
 def cmd_tag(args: argparse.Namespace) -> None:
     """Classify each doc with constrained-JSON tags via local Ollama. Resumable."""
     model     = args.model
@@ -1114,6 +1400,12 @@ def cmd_status(args: argparse.Namespace) -> None:
         ttp_rows = conn.execute(
             "SELECT model, COUNT(*) n FROM ttp_extracted GROUP BY model"
         ).fetchall()
+        report_rows = conn.execute(
+            "SELECT model, COUNT(*) n FROM report_ttps GROUP BY model"
+        ).fetchall()
+        report_src_total = conn.execute(
+            "SELECT COUNT(*) FROM report_ttp_sources"
+        ).fetchone()[0]
         sum_rows = conn.execute(
             "SELECT model, COUNT(*) n FROM kb_summaries GROUP BY model"
         ).fetchall()
@@ -1149,7 +1441,13 @@ def cmd_status(args: argparse.Namespace) -> None:
                 stale = len(_stale_ttp_doc_ids(r["model"], meow_root))
             except Exception:
                 pass
-        print(f"ttp_extracted  : {r['n']}  ({r['model']})  pending: {src_docs - r['n']}, stale: {stale}")
+        pending = max(0, src_docs - r["n"])
+        print(f"ttp_extracted  : {r['n']}  ({r['model']})  pending: {pending}, stale: {stale}")
+
+    if not report_rows:
+        print(f"report_ttps    : 0  (processed sources: {report_src_total})")
+    for r in report_rows:
+        print(f"report_ttps    : {r['n']}  ({r['model']})  processed sources: {report_src_total}")
 
     if not sum_rows:
         print(f"kb_summaries   : 0  (pending: {s['docs']})")
@@ -1208,6 +1506,7 @@ def cmd_status(args: argparse.Namespace) -> None:
     art_n     = art_sum_rows[0]["n"] if art_sum_rows else 0
     actor_n   = actor_rows[0]["n"] if actor_rows else 0
     family_n  = family_rows[0]["n"] if family_rows else 0
+    report_n  = report_rows[0]["n"] if report_rows else 0
 
     print("\nreadiness")
     print(f"  {_mark(docs, docs)} docs indexed         {docs}")
@@ -1216,6 +1515,7 @@ def cmd_status(args: argparse.Namespace) -> None:
     print(f"  {_mark(art_n, art_total)} artifact briefs      {art_n}/{art_total}")
     print(f"  {_mark(actor_n, actor_n)} actor briefs         {actor_n}")
     print(f"  {_mark(family_n, family_n)} family briefs        {family_n}")
+    print(f"  {_mark(report_n, report_n)} report TTP rows      {report_n}")
     print("  runtime Ollama needed for LIVE semantic search "
           "(query embedding); precomputed briefs need none.")
 
@@ -1487,6 +1787,20 @@ def _build_parser() -> argparse.ArgumentParser:
     xp.add_argument("--rebuild-changed", action="store_true", dest="rebuild_changed",
                     help="re-extract docs whose meow source is newer than extracted_at")
 
+    rep = sub.add_parser("reports", help="precompute TTPs from Malpedia report URLs (HTML/PDF, LLM)")
+    rep.add_argument("--actor",         default=None, help="Malpedia actor ID, e.g. apt29")
+    rep.add_argument("--family",        default=None, help="Malpedia family/tool ID, e.g. win.cobalt_strike")
+    rep.add_argument("--model",         default="qwen3:14b",              help="Ollama chat model")
+    rep.add_argument("--url",           default="http://localhost:11434", help="Ollama base URL")
+    rep.add_argument("--limit",         type=int, default=12,             help="max report URLs to process")
+    rep.add_argument("--timeout",       type=int, default=180,            help="per-LLM-call timeout (s)")
+    rep.add_argument("--fetch-timeout", type=int, default=20, dest="fetch_timeout",
+                     help="per-report download timeout (s)")
+    rep.add_argument("--max-chars",     type=int, default=60000, dest="max_chars",
+                     help="max extracted report text chars sent through cleanup")
+    rep.add_argument("--rebuild",       action="store_true",
+                     help="wipe existing report TTPs for this subject/model first")
+
     sp = sub.add_parser("summarize", help="precompute one 3-sentence summary per doc (LLM)")
     sp.add_argument("--model",           default="qwen3:14b",              help="Ollama chat model")
     sp.add_argument("--url",             default="http://localhost:11434", help="Ollama base URL")
@@ -1571,6 +1885,8 @@ if __name__ == "__main__":
         cmd_tag(args)
     elif args.cmd == "ttp":
         cmd_ttp(args)
+    elif args.cmd == "reports":
+        cmd_reports(args)
     elif args.cmd == "summarize":
         cmd_summarize(args)
     elif args.cmd == "apt":

@@ -164,42 +164,183 @@ def _ttp_name(aid: str) -> str:
     return aid
 
 
+def _attack_reference() -> tuple[set[str], dict[str, str], dict[str, str]]:
+    """Canonical ATT&CK reference from the DB `artifact_map` (400+ real techniques):
+    (valid_ids, id->name, id->tactic).
+
+    This is what makes extraction accurate instead of a regex free-for-all:
+    - `valid_ids` lets us drop garbage T-codes that aren't real techniques.
+    - `id->name` lets us catch techniques mentioned by NAME in report prose.
+    - `id->tactic` gives real kill-chain placement for 400+ techniques instead
+      of the ~50-entry curated fallback.
+
+    Local, no LLM. Falls back to the curated `_TACTIC_MAP` if the DB has no
+    artifact data yet, so the pipeline still runs on a bare install.
+    """
+    valid: set[str]           = set()
+    names: dict[str, str]     = {}
+    tactics: dict[str, str]   = {}
+    try:
+        sys.path.insert(0, str(_BASE / "dashboard"))
+        import db
+        for e in db.get_artifact_entries():
+            tid = (e.get("tid") or "").upper()
+            if not ATTACK_RE.fullmatch(tid):
+                continue
+            valid.add(tid)
+            valid.add(tid.split(".")[0])           # base id counts as valid too
+            if e.get("name"):
+                names[tid] = e["name"]
+            tac = (e.get("tactic") or "").split(",")[0].strip()
+            if tac:
+                tactics[tid] = tac
+    except Exception:
+        pass
+    return valid, names, tactics
+
+
+def _precomputed_report_ttps(actor_data: dict) -> list[dict]:
+    """Return GPU-precomputed report TTPs for this actor/family, if present.
+
+    These rows are produced by `worker.py reports` after HTML/PDF parsing and
+    LLM extraction. When present they make the APT pipeline offline and richer
+    than live regex scraping. Empty result means "fall back to live reports".
+    """
+    subject_id = actor_data.get("id") or ""
+    if not subject_id:
+        return []
+    subject_type = "family" if ("/" in subject_id or "." in subject_id) else "actor"
+    try:
+        rows = _db.get_report_ttps(subject_id, subject_type=subject_type)
+    except Exception:
+        rows = []
+    if not rows:
+        try:
+            rows = _db.get_report_ttps(subject_id)
+        except Exception:
+            rows = []
+    if not rows:
+        return []
+
+    valid_ids, ref_names, ref_tactics = _attack_reference()
+    by_tid: dict[str, dict] = {}
+    conf_rank = {"high": 3, "medium": 2, "low": 1}
+    for row in rows:
+        tid = (row.get("tid") or "").upper()
+        if not ATTACK_RE.fullmatch(tid):
+            continue
+        if valid_ids and tid not in valid_ids and tid.split(".")[0] not in valid_ids:
+            continue
+        base = tid.split(".")[0]
+        tactic = (_TACTIC_MAP.get(tid) or _TACTIC_MAP.get(base)
+                  or row.get("tactic") or ref_tactics.get(tid)
+                  or ref_tactics.get(base) or "unknown")
+        name = row.get("name") or ref_names.get(tid) or ref_names.get(base) or _ttp_name(tid)
+        cur = by_tid.setdefault(tid, {
+            "id": tid,
+            "name": name,
+            "tactic": tactic,
+            "evidence": row.get("evidence", "")[:160],
+            "mentions": 0,
+            "confidence": row.get("confidence", "low"),
+            "source": "precomputed-reports",
+        })
+        cur["mentions"] += 1
+        if conf_rank.get(row.get("confidence", "low"), 1) > conf_rank.get(cur.get("confidence", "low"), 1):
+            cur["confidence"] = row.get("confidence", "low")
+            cur["evidence"] = row.get("evidence", "")[:160]
+
+    order_key = {t: i for i, t in enumerate(_KILL_CHAIN_ORDER)}
+    ttps = list(by_tid.values())
+    ttps.sort(key=lambda t: (order_key.get(t["tactic"], 99), -t["mentions"], t["id"]))
+    return ttps
+
+
 def agent_extract_ttps(report_contents: list[str], actor_data: dict) -> list[dict]:
     """
-    Regex-based MITRE ATT&CK ID extraction across all report bodies.
-    Sorted by appearance frequency (most-cited TTPs first).
-    Optionally enriched from actor.attack_ids if Malpedia returned them.
-    """
-    counts: dict[str, int]            = {}
-    evidence_map: dict[str, str]      = {}
+    Local ATT&CK extraction across all report bodies (no LLM, no network):
 
-    for i, text in enumerate(report_contents):
+      1. explicit T-codes, VALIDATED against the real technique set (garbage
+         like `T1999` or a random `T1234` string is dropped);
+      2. techniques mentioned by NAME in prose (e.g. "process injection",
+         "registry run keys") mapped back to their ATT&CK ID - this is what
+         regex-only missed entirely;
+      3. actor-level Malpedia `attack_ids`, also validated.
+
+    Sorted kill-chain order first, then by mention count.
+    """
+    precomputed = actor_data.get("_precomputed_report_ttps")
+    if precomputed:
+        return precomputed
+
+    valid_ids, ref_names, ref_tactics = _attack_reference()
+
+    counts:   dict[str, int] = {}
+    evidence: dict[str, str] = {}
+
+    def _add(aid: str, snippet: str = "") -> None:
+        aid = aid.upper()
+        counts[aid] = counts.get(aid, 0) + 1
+        if snippet and aid not in evidence:
+            evidence[aid] = re.sub(r"\s+", " ", snippet.strip().replace("\n", " "))
+
+    def _is_valid(aid: str) -> bool:
+        # if we have no reference set (bare install), accept anything (old behavior)
+        return (not valid_ids) or aid in valid_ids or aid.split(".")[0] in valid_ids
+
+    # prose matcher: one alternation regex over real technique names (>=6 chars,
+    # specific enough to be signal). Longest names first so we match greedily.
+    name_to_id: dict[str, str] = {}
+    for tid, n in ref_names.items():
+        # index the full name AND each "/"-separated segment, since ATT&CK sub-
+        # technique names take the form "Registry Run Keys / Startup Folder" and
+        # reports usually cite just one half.
+        for variant in [n, *n.split("/")]:
+            v = variant.strip()
+            if len(v) >= 6:
+                name_to_id.setdefault(v.lower(), tid)
+    name_pat = None
+    if name_to_id:
+        alt = "|".join(re.escape(n) for n in sorted(name_to_id, key=len, reverse=True))
+        name_pat = re.compile(r"(?<![\w-])(" + alt + r")(?![\w-])", re.I)
+
+    for text in report_contents:
         if not text:
             continue
+        # 1. explicit, validated ATT&CK IDs
         for m in ATTACK_RE.finditer(text):
-            aid = m.group()
-            counts[aid] = counts.get(aid, 0) + 1
-            if aid not in evidence_map:
-                start = max(0, m.start() - 60)
-                end   = min(len(text), m.end() + 80)
-                snippet = text[start:end].strip().replace("\n", " ")
-                snippet = re.sub(r"\s+", " ", snippet)
-                evidence_map[aid] = snippet
+            aid = m.group().upper()
+            if not _is_valid(aid):
+                continue
+            s, e = max(0, m.start() - 60), min(len(text), m.end() + 80)
+            _add(aid, text[s:e])
+        # 2. techniques named in prose -> real IDs
+        if name_pat:
+            for m in name_pat.finditer(text):
+                tid = name_to_id.get(m.group(1).lower())
+                if tid:
+                    s, e = max(0, m.start() - 40), min(len(text), m.end() + 90)
+                    _add(tid, text[s:e])
 
-    # actor-level Malpedia metadata sometimes lists TTPs directly
+    # 3. actor-level Malpedia metadata, validated
     for aid in actor_data.get("attack_ids", []) or []:
-        if ATTACK_RE.fullmatch(aid):
-            counts[aid] = counts.get(aid, 0) + 1
+        aid = (aid or "").upper()
+        if ATTACK_RE.fullmatch(aid) and _is_valid(aid):
+            _add(aid)
 
     ttps: list[dict] = []
     for aid, n in counts.items():
         base   = aid.split(".")[0]
-        tactic = _TACTIC_MAP.get(aid) or _TACTIC_MAP.get(base) or "unknown"
+        # curated map has the correct PRIMARY tactic; artifact_map's comma-list
+        # (from Sigma) is only a fallback for techniques the curated map misses.
+        tactic = (_TACTIC_MAP.get(aid) or _TACTIC_MAP.get(base)
+                  or ref_tactics.get(aid) or ref_tactics.get(base) or "unknown")
+        name   = ref_names.get(aid) or ref_names.get(base) or _ttp_name(aid)
         ttps.append({
             "id":       aid,
-            "name":     _ttp_name(aid),
+            "name":     name,
             "tactic":   tactic,
-            "evidence": evidence_map.get(aid, "")[:160],
+            "evidence": evidence.get(aid, "")[:160],
             "mentions": n,
         })
 
@@ -235,8 +376,44 @@ _CAT_TO_TACTIC = {
 }
 
 
+# General markers of an "advanced" trick - signals, not a per-module allowlist.
+# Their presence in a title nudges selection toward the interesting posts over
+# the 101 examples (classic VirtualAllocEx etc.).
+_ADVANCED_MARKERS = (
+    "syscall", "undocumented", "native api", "callback", "unhook", "apc",
+    "hijack", "stomp", "reflective", "manual map", "hell", "halo", "ghost",
+    "hollow", "doppel", "phantom", "tls callback", "hardware breakpoint",
+    "indirect", "direct syscall", "ntcreate", "zwcreate", "ntmap", "ntalloc",
+    "zwqueue", "enumchild", "enumdesktop", "kernelcallbacktable", "module stomp",
+    "fiber", "thread pool", "obfuscat", "encrypt", "hashing",
+)
+
+
+def _sophistication(mod: dict) -> float:
+    """Heuristic 'coolness' derived from real metadata - no hardcoded list.
+
+    Two signals that track how the blog is actually organized:
+      - the numbered series suffix: later posts (`-21`) are the advanced tricks,
+        early ones (`-1`) are the classic 101 examples;
+      - an advanced-API marker in the title (KernelCallbackTable, undocumented
+        Native API, syscalls, ...).
+
+    This is what stops the pipeline picking the boring example when a cooler one
+    is mapped to the same technique.
+    """
+    score = 0.0
+    slug = mod.get("slug", "") or mod.get("id", "")
+    m = re.search(r"(\d+)\s*$", slug)                # trailing series number
+    if m:
+        score += min(int(m.group(1)), 30) * 0.12     # up to +3.6 for late posts
+    title = (mod.get("title", "") or "").lower()
+    if any(k in title for k in _ADVANCED_MARKERS):
+        score += 1.8
+    return score
+
+
 def _score_module(mod: dict, ttp: dict) -> float:
-    """Base score: tactic alignment + quality signals. No randomness here."""
+    """Base score: tactic alignment + quality + sophistication. No randomness here."""
     score = 0.0
     if _CAT_TO_TACTIC.get(mod.get("category", "")) == ttp.get("tactic"):
         score += 5
@@ -244,6 +421,7 @@ def _score_module(mod: dict, ttp: dict) -> float:
         score += 1
     if mod.get("has_post"):
         score += 1
+    score += _sophistication(mod)   # bias toward the interesting tricks
     return score
 
 
@@ -321,6 +499,8 @@ def agent_select_modules(ttps: list[dict]) -> dict:
         if best is None:
             continue
 
+        selection_score = _score_module(best, ttp)
+        sophistication = _sophistication(best)
         used_srcs.add(best.get("src_path", ""))
         stages.append({
             "stage_num":    len(stages) + 1,
@@ -330,6 +510,7 @@ def agent_select_modules(ttps: list[dict]) -> dict:
             "evidence":     ttp.get("evidence", ""),
             "mentions":     ttp.get("mentions", 1),
             "module_id":    best["id"],
+            "module_slug":  best.get("slug", best["id"]),
             "module_title": best["title"],
             "category":     best["category"],
             "platform":     best["platform"],
@@ -338,6 +519,8 @@ def agent_select_modules(ttps: list[dict]) -> dict:
             "src_path":     best["src_path"],
             "src_name":     best["src_name"],
             "blog_url":     best.get("blog_url", ""),
+            "selection_score": round(selection_score, 2),
+            "sophistication": round(sophistication, 2),
             "snippet":      (best.get("snippet") or "")[:600],
         })
 
@@ -347,6 +530,10 @@ def agent_select_modules(ttps: list[dict]) -> dict:
         "title":     s["module_title"],
         "category":  s["category"],
         "platform":  s["platform"],
+        "slug":      s.get("module_slug", s["module_id"]),
+        "blog_url":  s.get("blog_url", ""),
+        "selection_score": s.get("selection_score", 0),
+        "sophistication":  s.get("sophistication", 0),
     } for s in stages]
 
     return {"stages": stages, "selected_modules": selected_modules}
@@ -634,23 +821,32 @@ def run_pipeline(actor_id: str) -> Generator[dict, None, None]:
            "data": {k: v for k, v in actor_data.items()
                     if k not in ("snippet", "related_posts")}}
 
-    # 2. Download reports
-    yield {"step": 2, "status": "running", "msg": "downloading threat reports…"}
-    report_contents: list[str] = []
-    for ev in agent_download(actor_data, session_id):
-        raw = _db.get_reports(session_id)[ev["report_idx"]]["content"]
-        plain = re.sub(r"<[^>]+>", " ", raw)
-        plain = re.sub(r"\s+", " ", plain).strip()[:60000]
-        report_contents.append(plain)
-        yield {"step": 2, "status": "running",
-               "msg": f"downloaded report {ev['report_idx']+1}: {ev['url'][:60]}",
-               "data": {"report": ev}}
-    yield {"step": 2, "status": "done",
-           "msg": f"{len(report_contents)} report(s) downloaded",
-           "data": {"count": len(report_contents)}}
+    precomputed_ttps = _precomputed_report_ttps(actor_data)
+    if precomputed_ttps:
+        actor_data["_precomputed_report_ttps"] = precomputed_ttps
+        report_contents: list[str] = []
+        yield {"step": 2, "status": "done",
+               "msg": f"using {len(precomputed_ttps)} precomputed report TTP(s) from local DB",
+               "data": {"count": 0, "source": "precomputed-reports"}}
+    else:
+        # 2. Download reports (fallback only; demo path should be precomputed)
+        yield {"step": 2, "status": "running", "msg": "downloading threat reports…"}
+        report_contents = []
+        for ev in agent_download(actor_data, session_id):
+            raw = _db.get_reports(session_id)[ev["report_idx"]]["content"]
+            plain = re.sub(r"<[^>]+>", " ", raw)
+            plain = re.sub(r"\s+", " ", plain).strip()[:60000]
+            report_contents.append(plain)
+            yield {"step": 2, "status": "running",
+                   "msg": f"downloaded report {ev['report_idx']+1}: {ev['url'][:60]}",
+                   "data": {"report": ev}}
+        yield {"step": 2, "status": "done",
+               "msg": f"{len(report_contents)} report(s) downloaded",
+               "data": {"count": len(report_contents), "source": "live-download"}}
 
-    # 3. Extract TTPs (local regex only - no API calls)
-    yield {"step": 3, "status": "running", "msg": "extracting TTPs (regex, local)…"}
+    # 3. Extract TTPs (precomputed DB first, local regex fallback)
+    source_msg = "precomputed report TTPs" if precomputed_ttps else "regex, local"
+    yield {"step": 3, "status": "running", "msg": f"extracting TTPs ({source_msg})…"}
     ttps = agent_extract_ttps(report_contents, actor_data)
     _db.update_pipeline_session(session_id, ttps=ttps)
     yield {"step": 3, "status": "done",
@@ -707,14 +903,14 @@ def run_pipeline(actor_id: str) -> Generator[dict, None, None]:
                "data": {
                    "session_id": session_id,
                    "files":      [f.name for f in files],
+                   "manifest":   manifest["session_id"],
+                   "counts":     manifest["counts"],
                    "stages":     stages,
-                   "detection":  detection,
-                   "manifest":   "manifest.json",
                }}
     else:
         _db.update_pipeline_session(session_id, status="failed", finished=finished)
         yield {"step": 5, "status": "error",
-               "msg": "no source files could be copied (check ~/hacking/meow paths)"}
+               "msg": "no artefacts written (source paths missing?)"}
         return
 
     yield {"step": 0, "status": "complete", "msg": "pipeline complete",

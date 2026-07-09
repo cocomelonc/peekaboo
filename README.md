@@ -170,6 +170,7 @@ python worker.py <subcommand> [options]
 | `embed` | GPU | Compute embedding vectors for all unembedded docs (`nomic-embed-text`) |
 | `tag` | GPU/LLM | Classify each doc with constrained-JSON ATT&CK tags |
 | `ttp` | GPU/LLM | Extract MITRE ATT&CK IDs, tactics, confidence, and rationale from source code |
+| `reports` | GPU/LLM | Fetch Malpedia-linked HTML/PDF reports and precompute validated report TTPs for offline APT runs |
 | `summarize` | GPU/LLM | Precompute one 3-sentence summary per blog post (what/how/detection) |
 | `sigma` | CPU+GPU | Parse Sigma rules into artifact map, then precompute detection briefs per technique |
 | `apt` | GPU/LLM | Precompute 3-sentence campaign brief per finished pipeline session |
@@ -252,6 +253,25 @@ Reads each doc's source code file, asks the LLM to extract MITRE ATT&CK IDs with
 | `--rebuild-changed` | off | Only redo docs whose source changed |
 
 > **Ctrl+C safe** - each result is written to DB immediately. Press Ctrl+C at any time; re-run the same command to resume from where it stopped.
+
+### reports
+
+```bash
+python worker.py reports --actor apt29
+python worker.py reports --actor lazarus_group
+python worker.py reports --actor turla
+python worker.py reports --family win.cobalt_strike
+python worker.py reports --family win.agent_tesla
+```
+
+Fetches Malpedia-linked threat reports for one actor/family, extracts text from HTML and PDF reports, asks the LLM for constrained JSON ATT&CK mappings, validates every ID against `artifact_map`, and stores evidence-backed rows in `report_ttps`. The APT pipeline reads these rows first, so demo actors run offline and skip live report downloads; if no precomputed rows exist, the old live regex fallback still runs.
+
+| flag | default | description |
+|------|---------|-------------|
+| `--actor ID` / `--family ID` | - | Malpedia subject to precompute |
+| `--model` | `qwen3:14b` | Ollama chat model |
+| `--limit` | `12` | Max report URLs to process |
+| `--rebuild` | off | Wipe and redo this subject/model |
 
 ### summarize
 
@@ -552,8 +572,8 @@ It does not stop at "here is the malware." Every session ends as a **purple-team
 | # | Stage | What it does |
 |---|-------|--------------|
 | 1 | **Malpedia Fetch** | Resolves actor/family ID, retrieves metadata |
-| 2 | **Report Download** | Downloads up to 10 linked threat intelligence reports |
-| 3 | **TTP Extraction** | Extracts ATT&CK IDs via regex; offline, no API calls |
+| 2 | **Report Source** | Uses GPU-precomputed report TTPs from `report_ttps` when present; otherwise downloads linked reports as fallback |
+| 3 | **TTP Extraction** | Uses validated precomputed HTML/PDF report mappings when present; otherwise falls back to local regex/name matching |
 | 4 | **Module Selection** | Weighted random pick per TTP from top-5 candidates (see below) |
 | 5 | **Binary Compile** | Builds a Windows PE ready for EDR testing |
 | 6 | **Detection Overlay** | Cross-references each TTP against the Artifact Map -> expected Sigma rules, Windows EventIDs, registry keys, processes, cmdline indicators; flags TTPs with no coverage as blind spots (no LLM, pure DB join) |
@@ -597,6 +617,15 @@ Running the same actor twice produces a different kill chain each time. This is 
 | Module category maps to TTP tactic | +5 |
 | Windows platform (primary demo target) | +1 |
 | Has associated blog post | +1 |
+
+**Sophistication score** (metadata-driven, no per-module allowlist):
+
+| Signal | Points |
+|--------|--------|
+| Blog series suffix, e.g. `malware-injection-21` | up to +3.6 |
+| Advanced title markers such as `syscall`, `undocumented`, `Native API`, `KernelCallbackTable`, `ZwQueueApcThread`, `callback`, `thread hijacking` | +1.8 |
+
+This biases shared ATT&CK buckets such as `T1055` toward the more interesting blog examples (`malware-injection-21`, `malware-injection-15`, `malware-injection-14`, etc.) instead of repeatedly picking the introductory `injection-1` / `injection-2` posts.
 
 **Session deduplication** (hard constraint):     
 
