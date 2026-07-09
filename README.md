@@ -606,107 +606,103 @@ Recommended and tested: `qwen25-coder-offensive:v1-q8`
 
 ## CLI (`peekaboo_cli.py`)
 
-The peekaboo CLI is a rich interactive terminal application with a top-level REPL and dedicated sub-REPLs for each module.      
+`peekaboo_cli.py` is a command-first Rich CLI for threat research, detection engineering, and local lab workflows. Running it without arguments shows a compact home screen with the main areas and quick examples. Commands print data first, then suggest the next useful action. Section headers use simple `#` ASCII rules, tables use ASCII grids, and syntax output keeps Rich/Pygments highlighting.
 
 ```bash
 python3 peekaboo_cli.py
 ```
 
-![img](./screenshots/cli.png)     
+![Peekaboo CLI home](./screenshots/cli-home.png)
 
-![img](./screenshots/cli-help.png)    
+Use `examples` for the common workflows:
 
-| command | description |
-|---------|-------------|
-| `library` | Browse and search the MITRE ATT&CK blog post library |
-| `artifacts` | View and rebuild the Artifact Map |
-| `builder` | Compile payloads and stealers interactively |
-| `shellcode` | Shellcode analysis and XOR encoding tools |
-| `yara` | YARA rule generator sub-REPL |
-| `malpedia` | Threat actor and malware family lookup |
-| `ttp` | Browse MITRE ATT&CK techniques |
-| `vtscan` | VirusTotal scanner sub-REPL |
-| `exit` / `quit` | Exit the CLI |
+```bash
+python3 peekaboo_cli.py examples
+```
 
-### `library` sub-REPL
+![Peekaboo CLI examples](./screenshots/cli-examples.png)
 
-![img](./screenshots/cli-library.png)    
+Global flags:
 
-| command | description |
-|---------|-------------|
-| `list [category]` | List all techniques, optionally filtered by category |
-| `search <query>` | Full-text search across technique titles |
-| `show <slug>` | Display metadata panel + syntax-highlighted source code |
-| `brief <slug>` | Print GPU-precomputed 3-sentence summary (from `worker.py summarize`) |
-| `categories` | List all available categories |
+```bash
+python3 peekaboo_cli.py --help
+python3 peekaboo_cli.py --version
+python3 peekaboo_cli.py --force-color
+python3 peekaboo_cli.py --plain
+python3 peekaboo_cli.py --no-color
+python3 peekaboo_cli.py --json artifacts stats
+```
 
-### `builder` sub-REPL
+Quick workflows:
 
-![img](./screenshots/cli-builder.png)    
+```bash
+# Malpedia threat intelligence
+python3 peekaboo_cli.py malpedia search lazarus
+python3 peekaboo_cli.py malpedia actor lazarus_group
+python3 peekaboo_cli.py malpedia reports --limit 10
 
-| command | description |
-|---------|-------------|
-| `build <injection> [options]` | Build an injection binary |
-| `build stealer <name>` | Build a stealer |
-| `list injection` | List all injection techniques |
-| `history` | Show build history |
+# ATT&CK implementations and detection coverage
+python3 peekaboo_cli.py ttp search "process injection"
+python3 peekaboo_cli.py ttp show T1055
+python3 peekaboo_cli.py artifacts show T1055
+python3 peekaboo_cli.py artifacts rules T1059.001 --level high
 
-### `shellcode` sub-REPL
+# Research library
+python3 peekaboo_cli.py library list
+python3 peekaboo_cli.py library list --category injection
+python3 peekaboo_cli.py library search APC
+python3 peekaboo_cli.py library show malware-injection-17
 
-![img](./screenshots/cli-shellcode.png)    
+# Build, YARA, and VT workflows
+python3 peekaboo_cli.py builder list --platform windows
+python3 peekaboo_cli.py builder build malware-injection-17
+python3 peekaboo_cli.py yara gen-build <build-id> --save /tmp/rule.yar
+python3 peekaboo_cli.py vtscan scan <build-id>
+python3 peekaboo_cli.py vtscan lookup <sha256>
+```
 
-| command | description |
-|---------|-------------|
-| `analyse <path>` | Analyse raw shellcode: size, entropy, hex dump |
-| `encode <path> [key]` | XOR-encode shellcode |
-| `decode <path> [key]` | XOR-decode shellcode |
+Malpedia search returns matching actors/families and gives direct next steps:
 
-### `yara` sub-REPL
+![Peekaboo Malpedia search](./screenshots/cli-malpedia-search.png)
 
-![img](./screenshots/cli-yara.png)    
+ATT&CK TTP detail links techniques back to local buildable research modules:
 
-| command | description |
-|---------|-------------|
-| `gen <path>` | Generate YARA rule from a PE binary |
-| `gen-build [id]` | Generate rule from a compiled build binary |
-| `save <path>` | Save the last generated rule to a `.yar` file |
+![Peekaboo ATT&CK TTP show](./screenshots/cli-ttp-show.png)
 
-### `malpedia` sub-REPL
+Detection artifacts expose ATT&CK-to-Sigma coverage and severity filtering:
 
-![img](./screenshots/cli-malpedia.png)    
+![Peekaboo detection artifact rules](./screenshots/cli-artifacts-rules.png)
 
-| command | description |
-|---------|-------------|
-| `actors` | List all threat actors |
-| `families` | List all malware families |
-| `search <query>` | Search by name, country, or alias |
-| `actor <id>` | Show actor detail + matched blog posts |
-| `family <id>` | Show family detail + matched blog posts |
-| `brief <id>` | GPU-precomputed brief - auto-routes to actor profile, family behavioral brief, or KB post summary depending on what `<id>` matches |
-| `yara <family-id>` | Fetch Malpedia YARA rules for a malware family |
-| `reports [N]` | Show N most recent Malpedia threat reports |
+The research library remains browsable from the terminal:
 
-### `ttp` sub-REPL
+![Peekaboo library list](./screenshots/cli-library-list.png)
 
-![img](./screenshots/cli-ttp.png)    
+`library show` renders full source code with Rich/Pygments syntax highlighting,
+line numbers, indentation guides, and language detection for C/C++, Rust,
+Python, Assembly, Nim, Go, shell, YARA, and other Pygments-supported languages.
+
+![Peekaboo library source highlighting](./screenshots/cli-library-show-source.png)
+
+Command groups:
 
 | command | description |
 |---------|-------------|
-| `list [tactic]` | List all techniques, optionally filtered by tactic |
-| `search <query>` | Search by technique name |
-| `show <T-ID>` | Show full technique detail with mapped blog posts |
-| `brief <T-ID>` | Print GPU-precomputed detection brief (from `worker.py sigma`) |
-| `tactics` | List all ATT&CK tactics |
+| `examples` | Show common workflows |
+| `library` | Browse/search research modules and source code |
+| `malpedia` | Threat actors, malware families, reports, and Malpedia YARA |
+| `ttp` | MITRE ATT&CK techniques mapped to local implementations |
+| `artifacts` | ATT&CK x Sigma coverage, EventIDs, registry/process/cmdline artifacts |
+| `builder` | List/build compilable research modules and inspect build history |
+| `yara` | Generate YARA rules from files or build outputs |
+| `vtscan` | Upload binaries, poll analyses, and lookup VirusTotal reports |
+| `shellcode` | Shellcode documentation and local binary analysis help |
 
-### `vtscan` sub-REPL
+Notes:
 
-![img](./screenshots/cli-vtscan.png)    
-
-| command | description |
-|---------|-------------|
-| `scan <path>` | Upload a binary and start analysis |
-| `lookup <sha256>` | Fetch existing VT report by SHA256 |
-| `poll <analysis-id>` | Poll a pending analysis |
+- `--json` is intended for automation and works on the data-oriented commands.
+- Malpedia search prefers local caches first, then falls back to the API when needed.
+- The CLI renders color by default, including when output is recorded or piped. Use explicit `--no-color` for clean logs or limited terminals.
+- For stable alignment, use a regular monospace terminal font such as `DejaVu Sans Mono`, `Liberation Mono`, `Ubuntu Mono`, `Cascadia Mono`, or `Courier New`. The CLI avoids wide emoji in aligned output so it behaves well in tmux, SSH, and common Linux terminals.
 
 ---
 
