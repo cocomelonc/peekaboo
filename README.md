@@ -104,17 +104,27 @@ Heavy LLM **generation** runs once, offline, on a GPU machine via `worker.py` - 
 The one exception is **live semantic search**, which embeds the user's query at request time. That is a single lightweight vector, cached in `query_embeddings` (so repeated searches cost nothing), and it degrades gracefully: if Ollama is offline the dashboard keeps serving everything else and flags semantic search as paused rather than crashing. Run `python worker.py status` (GPU) or `peekaboo status` (CPU) for a readiness verdict.
 
 ```bash
-GPU machine                         CPU machine (dashboard)
------------------------------       ----------------------------------
+GPU machine (offline, LLM)          CPU machine (dashboard, DB reads)
+-----------------------------       -------------------------------------
 python worker.py embed              cosine similarity search
-python worker.py tag         ---->  badge rendering
+python worker.py tag         ---->  ATT&CK badge rendering
 python worker.py ttp         rsync  extracted TTP table
-python worker.py summarize          AI assistant typing animation
-python worker.py sigma              artifact map detection briefs
+python worker.py summarize          post + AI assistant summaries
+python worker.py sigma              artifact map + detection briefs
 python worker.py apt                campaign brief per session
 python worker.py actor              actor threat profile briefs
 python worker.py family             malware family behavioral briefs
+                            (CPU)   pipeline detection overlay
+                                      Sigma / EventID coverage per TTP,
+                                      derived live from the Sigma artifact map
 ```
+
+**The only runtime LLM call is the search query embed**, and it is cached in the
+`query_embeddings` table - so a repeated Malpedia / semantic search costs zero
+Ollama round-trips, and with a warm cache the dashboard is effectively zero-LLM.
+If Ollama is offline the dashboard keeps serving every precomputed result and
+flags semantic search as paused rather than crashing. Check readiness any time
+with `python worker.py status` (GPU) or `peekaboo status` (CPU).
 
 All `worker.py` subcommands are **resumable** - they use `NOT IN` SQL patterns to skip already-processed rows. Interrupt and re-run at any time.
 
@@ -166,7 +176,7 @@ python worker.py <subcommand> [options]
 | `actor` | GPU/LLM | Precompute threat profile brief per Malpedia actor |
 | `family` | GPU/LLM | Precompute behavioral brief per Malpedia malware family |
 | `refresh` | all | One-shot incremental update: scan -> init -> embed -> tag -> (ttp?) -> (summarize?) |
-| `status` | CPU | Show row counts, pending counts, and stale counts for all tables |
+| `status` | CPU | Row/pending/stale counts for all tables, plus a **readiness verdict** (is the DB ready to serve, is runtime Ollama needed) |
 
 ### scan
 
@@ -409,19 +419,31 @@ One-shot incremental pipeline: runs scan (optional) -> init -> embed -> tag -> t
 python worker.py status
 ```
 
-Shows row counts and pending/stale counts for all enrichment tables:
+Shows row counts and pending/stale counts for all enrichment tables, followed by
+a **readiness verdict** - a one-glance answer to "is this DB ready to serve a CPU
+dashboard, and is Ollama needed at runtime?":
 
 ```
-kb_docs        : 206
-kb_embeddings  : 206  (nomic-embed-text)  pending: 0
-kb_tags        : 205  (qwen3:1.7b)        pending: 1, stale: 0
-ttp_extracted  : 197  (qwen3:14b)         pending: 9, stale: 0
-kb_summaries   : 205  (qwen3:14b)         pending: 1, stale: 0
-artifact_summ  : 412  (qwen3:14b)         pending: 0
-session_summ   : 8    (qwen3:14b)         pending: 0
-actor_summ     : 1420 (qwen3:14b)
-family_summ    : 2300 (qwen3:14b)
+kb_docs        : 309
+kb_embeddings  : 309  (nomic-embed-text)  pending: 0
+kb_tags        : 309  (qwen3:14b)         pending: 0, stale: 0
+ttp_extracted  : 276  (qwen3:14b)         pending: 0, stale: 0
+kb_summaries   : 309  (qwen3:14b)         pending: 0, stale: 0
+artifact_summ  : 410  (qwen3:14b)         pending: 0
+actor_summ     : 979  (qwen3:14b)
+family_summ    : 3704 (qwen3:14b)
+
+readiness
+  ✔ docs indexed         309
+  ✔ embeddings ready     309/309
+  ✔ summaries ready      309/309
+  ✔ artifact briefs      410/410
+  ✔ actor briefs         979
+  ✔ family briefs        3704
+  runtime Ollama needed for LIVE semantic search (query embedding); precomputed briefs need none.
 ```
+
+The same verdict is available on the CPU box after copying the DB with `peekaboo status`.
 
 ---
 
@@ -635,7 +657,9 @@ Recommended and tested: `qwen25-coder-offensive:v1-q8`
 
 ## CLI (`peekaboo_cli.py`)
 
-`peekaboo_cli.py` is a command-first Rich CLI for threat research, detection engineering, and local lab workflows. Running it without arguments shows a compact home screen with the main areas and quick examples. Commands print data first, then suggest the next useful action. Section headers use simple `#` ASCII rules, tables use ASCII grids, and syntax output keeps Rich/Pygments highlighting.
+`peekaboo_cli.py` is a command-first Rich CLI for threat research, detection engineering, and local lab workflows. Running it without arguments shows a compact home screen with the main areas and quick examples. Commands print data first, then suggest the next useful action.
+
+The interface is **frameless and always in color** - no boxes or grids. Section headers are filled color bars, lists are aligned columns, and semantic values are colored consistently across every screen (and matched to the dashboard): identifiers in bright cyan, ATT&CK tactics each in their own tactic color, counts and EventIDs bright, and low-cardinality signals rendered as filled "chips" - Sigma severity (` critical ` / ` high ` / ` medium ` / ` low `) and build status (` success ` / ` failed `). Everything uses plain ASCII characters plus color attributes, so it renders correctly in any monospace terminal font; `library show` source keeps Rich/Pygments syntax highlighting.
 
 ```bash
 python3 peekaboo_cli.py
@@ -651,20 +675,22 @@ python3 peekaboo_cli.py examples
 
 ![peekaboo CLI examples](./screenshots/cli-examples.png)
 
-Global flags:
+Global flags (color is always on - there are no `--plain` / `--no-color` toggles):
 
 ```bash
 python3 peekaboo_cli.py --help
 python3 peekaboo_cli.py --version
-python3 peekaboo_cli.py --force-color
-python3 peekaboo_cli.py --plain
-python3 peekaboo_cli.py --no-color
-python3 peekaboo_cli.py --json artifacts stats
+python3 peekaboo_cli.py --json artifacts stats   # machine-readable output
 ```
 
 Quick workflows:
 
 ```bash
+# Readiness + campaign detection overlay
+python3 peekaboo_cli.py status                    # is the DB ready, is Ollama needed?
+python3 peekaboo_cli.py pipeline list             # campaigns + coverage bar + blind spots
+python3 peekaboo_cli.py pipeline show <session>   # per-stage purple-team hunt sheet
+
 # Malpedia threat intelligence
 python3 peekaboo_cli.py malpedia search lazarus
 python3 peekaboo_cli.py malpedia actor lazarus_group
@@ -719,6 +745,8 @@ Command groups:
 | command | description |
 |---------|-------------|
 | `examples` | Show common workflows |
+| `status` | Readiness verdict: indexed data + whether runtime Ollama is needed |
+| `pipeline` | List APT campaigns and show the per-session detection overlay (hunt sheet) |
 | `library` | Browse/search research modules and source code |
 | `malpedia` | Threat actors, malware families, reports, and Malpedia YARA |
 | `ttp` | MITRE ATT&CK techniques mapped to local implementations |
@@ -732,8 +760,8 @@ Notes:
 
 - `--json` is intended for automation and works on the data-oriented commands.
 - Malpedia search prefers local caches first, then falls back to the API when needed.
-- The CLI renders color by default, including when output is recorded or piped. Use explicit `--no-color` for clean logs or limited terminals.
-- For stable alignment, use a regular monospace terminal font such as `DejaVu Sans Mono`, `Liberation Mono`, `Ubuntu Mono`, `Cascadia Mono`, or `Courier New`. The CLI avoids wide emoji in aligned output so it behaves well in tmux, SSH, and common Linux terminals.
+- The CLI is always in color (truecolor forced, including when output is recorded or piped) - there is no disable switch. Pipe through `sed 's/\x1b\[[0-9;]*m//g'` if you need clean logs.
+- For stable alignment, use any regular monospace terminal font such as `DejaVu Sans Mono`, `Liberation Mono`, `Ubuntu Mono`, `Cascadia Mono`, or `Courier New`. Output is pure ASCII plus color attributes (no box-drawing, no emoji), so alignment holds in tmux, SSH, and common Linux terminals regardless of font.
 
 ---
 
