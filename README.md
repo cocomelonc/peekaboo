@@ -612,7 +612,7 @@ Recommended and tested: `qwen25-coder-offensive:v1-q8`
 python3 peekaboo_cli.py
 ```
 
-![Peekaboo CLI home](./screenshots/cli-home.png)
+![peekaboo CLI home](./screenshots/cli-home.png)
 
 Use `examples` for the common workflows:
 
@@ -620,7 +620,7 @@ Use `examples` for the common workflows:
 python3 peekaboo_cli.py examples
 ```
 
-![Peekaboo CLI examples](./screenshots/cli-examples.png)
+![peekaboo CLI examples](./screenshots/cli-examples.png)
 
 Global flags:
 
@@ -663,25 +663,27 @@ python3 peekaboo_cli.py vtscan lookup <sha256>
 
 Malpedia search returns matching actors/families and gives direct next steps:
 
-![Peekaboo Malpedia search](./screenshots/cli-malpedia-search.png)
+![peekaboo Malpedia search](./screenshots/cli-malpedia-search.png)
 
 ATT&CK TTP detail links techniques back to local buildable research modules:
 
-![Peekaboo ATT&CK TTP show](./screenshots/cli-ttp-show.png)
+![peekaboo ATT&CK TTP show](./screenshots/cli-ttp-show.png)
 
 Detection artifacts expose ATT&CK-to-Sigma coverage and severity filtering:
 
-![Peekaboo detection artifact rules](./screenshots/cli-artifacts-rules.png)
+![peekaboo detection artifact rules](./screenshots/cli-artifacts-rules.png)
 
 The research library remains browsable from the terminal:
 
-![Peekaboo library list](./screenshots/cli-library-list.png)
+![peekaboo library list](./screenshots/cli-library-list.png)
 
 `library show` renders full source code with Rich/Pygments syntax highlighting,
 line numbers, indentation guides, and language detection for C/C++, Rust,
 Python, Assembly, Nim, Go, shell, YARA, and other Pygments-supported languages.
 
-![Peekaboo library source highlighting](./screenshots/cli-library-show-source.png)
+![peekaboo library source highlighting](./screenshots/cli-library-show-source.png)
+
+![peekaboo library source highlighting](./screenshots/cli-library-show-source-1.png)
 
 Command groups:
 
