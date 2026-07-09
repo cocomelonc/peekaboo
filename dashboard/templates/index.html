@@ -1836,10 +1836,12 @@ code{border-radius:6px;background:rgba(49,45,82,.65)}
       <div class="drawer-tabs">
         <div class="dtab active" id="dtab-reports" onclick="switchDrawerTab('reports')">Reports</div>
         <div class="dtab" id="dtab-ttps" onclick="switchDrawerTab('ttps')">TTPs</div>
+        <div class="dtab" id="dtab-detection" onclick="switchDrawerTab('detection')">Detection</div>
         <div class="dtab" id="dtab-binary" onclick="switchDrawerTab('binary')">Binary</div>
       </div>
       <div id="drawer-tab-reports"></div>
       <div id="drawer-tab-ttps" style="display:none"></div>
+      <div id="drawer-tab-detection" style="display:none"></div>
       <div id="drawer-tab-binary" style="display:none"></div>
     </div>
   </div>
@@ -3030,7 +3032,7 @@ let _drawerTab = 'reports';
 
 function switchDrawerTab(tab) {
   _drawerTab = tab;
-  ['reports','ttps','binary'].forEach(t => {
+  ['reports','ttps','detection','binary'].forEach(t => {
     document.getElementById('dtab-'+t).classList.toggle('active', t === tab);
     document.getElementById('drawer-tab-'+t).style.display = t === tab ? '' : 'none';
   });
@@ -3048,7 +3050,7 @@ async function openSessionDrawer(sessionId) {
   document.getElementById('drawer-title').textContent = `Session ${sessionId}`;
   document.getElementById('drawer-subtitle').textContent = 'loading…';
   document.getElementById('drawer-status-badge').textContent = '';
-  ['reports','ttps','binary'].forEach(t => {
+  ['reports','ttps','detection','binary'].forEach(t => {
     document.getElementById('drawer-tab-'+t).innerHTML =
       '<div class="loading-full" style="padding:30px"><div class="spinner"></div></div>';
   });
@@ -3153,6 +3155,50 @@ async function openSessionDrawer(sessionId) {
         <div class="text-xs text-dim" style="margin-bottom:8px">Selected modules (${(params.selected_modules||[]).length})</div>
         ${mods}
       </div>` : ''}`;
+  }
+
+  // ---- Detection tab (purple-team hunt sheet) ----
+  const det    = params.detection || {};
+  const stages = params.stages || [];
+  const detEl  = document.getElementById('drawer-tab-detection');
+  if (!det.stages_total) {
+    detEl.innerHTML =
+      '<div class="empty" style="padding:40px"><div class="empty-icon">🛡</div><div>No detection overlay for this session<br><span class="text-xs text-dim">re-run the pipeline to generate one</span></div></div>';
+  } else {
+    const pct    = det.coverage_pct || 0;
+    const barCol = pct >= 80 ? 'var(--green)' : pct >= 50 ? '#e5c07b' : 'var(--red)';
+    const stageRows = stages.map(s => {
+      const dd  = s.detection || {};
+      const col = TACTIC_COLORS[s.tactic] || TACTIC_COLORS.unknown;
+      const head = `<span class="badge badge-red text-xs" style="font-family:var(--mono)">${escHtml(s.ttp_id||'')}</span>
+        <span class="badge text-xs" style="background:${col}22;color:${col}">${escHtml(s.tactic||'')}</span>
+        <span class="text-sm" style="flex:1;min-width:120px">${escHtml(s.ttp_name||s.ttp_id||'')}</span>`;
+      if (dd.covered) {
+        const eids = (dd.event_ids||[]).slice(0,8).join(', ');
+        return `<div class="apt-mod-row" style="flex-wrap:wrap;gap:8px">${head}
+          <span class="badge badge-green text-xs">${dd.sigma_count||0} sigma</span>
+          ${eids ? `<span class="text-xs text-dim mono" style="width:100%">EventID ${escHtml(eids)}</span>` : ''}
+        </div>`;
+      }
+      const yara = dd.yara_file
+        ? `<a href="/api/samples/${sessionId}/download/${encodeURIComponent(dd.yara_file)}" class="btn btn-green btn-sm ms-auto">⬇ ${escHtml(dd.yara_file)}</a>`
+        : `<span class="text-xs text-dim ms-auto">${escHtml(dd.yara_hint||'')}</span>`;
+      return `<div class="apt-mod-row" style="flex-wrap:wrap;gap:8px">${head}
+        <span class="badge badge-red text-xs">NO SIGMA</span>${yara}
+      </div>`;
+    }).join('');
+    detEl.innerHTML = `
+      <div class="card card-sm" style="margin-bottom:14px">
+        <div class="apt-dl-row" style="gap:10px;flex-wrap:wrap">
+          <span class="text-xs text-dim">coverage</span>
+          <div style="flex:1;min-width:120px;max-width:220px;height:8px;background:var(--bg3);border-radius:4px;overflow:hidden">
+            <div style="width:${pct}%;height:100%;background:${barCol}"></div>
+          </div>
+          <span class="text-sm" style="color:${barCol}">${pct}%</span>
+          <span class="text-xs text-dim">${det.stages_covered||0}/${det.stages_total} stages · ${det.unique_sigma||0} sigma · ${(det.unique_event_ids||[]).length} EventIDs · ${(det.gaps||[]).length} blind spot(s)</span>
+        </div>
+      </div>
+      <div class="apt-inner-list">${stageRows}</div>`;
   }
 }
 
