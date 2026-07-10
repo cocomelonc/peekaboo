@@ -1205,9 +1205,7 @@ code{border-radius:6px;background:rgba(49,45,82,.65)}
       <div class="card-title">Past Sessions</div>
       <span class="text-xs text-dim">click a row to inspect</span>
       <button class="btn btn-ghost btn-sm ms-auto" onclick="loadPipelineSessions()">↻ Refresh</button>
-      <form id="apt-clear-form" action="/api/pipeline/clear" method="post" style="margin:0">
-        <button class="btn btn-del btn-sm" id="apt-clear-btn" type="submit">🗑 Clear all</button>
-      </form>
+      <button class="btn btn-del btn-sm" id="apt-clear-btn" type="button" onclick="clearPipelineSessions()">🗑 Clear all</button>
     </div>
     <div class="tbl-wrap">
       <table class="tbl">
@@ -3043,11 +3041,11 @@ async function loadPipelineSessions() {
   });
 }
 
-async function clearPipelineSessions(form) {
+async function clearPipelineSessions() {
   if (!confirm('Clear ALL APT pipeline sessions?\n\nThis deletes:\n• every samples/<session>/ folder (source files + binaries)\n• every reports DB row\n• every pipeline_sessions / samples DB row\n\nThis cannot be undone.')) {
     return;
   }
-  const btn = form ? form.querySelector('#apt-clear-btn') : document.getElementById('apt-clear-btn');
+  const btn = document.getElementById('apt-clear-btn');
   const oldText = btn ? btn.textContent : '';
   if (btn) {
     btn.disabled = true;
@@ -3060,22 +3058,24 @@ async function clearPipelineSessions(form) {
     });
     const d = await r.json().catch(() => ({}));
     if (!r.ok) throw new Error(d.error || `HTTP ${r.status}`);
-    if (d.ok || d.deleted_dirs >= 0) {
+    const dbc = d.db_cleared || {};
+    if (d.ok) {
       const msg = `cleared ${d.deleted_dirs} session folder(s) (${d.deleted_files} file(s)), ` +
-                 `${d.db_cleared.pipeline_sessions} pipeline row(s), ` +
-                 `${d.db_cleared.samples} sample row(s)`;
+                 `${dbc.pipeline_sessions || 0} pipeline row(s), ` +
+                 `${dbc.samples || 0} sample row(s)`;
       toast(msg, 'ok');
-      // also wipe the live results area so the user sees a clean slate
-      const resultsEl = document.getElementById('apt-results');
-      if (resultsEl) resultsEl.innerHTML = '';
-      const tbody = document.getElementById('sessions-tbody');
-      if (tbody) {
-        tbody.innerHTML = '<tr><td colspan="7" class="text-dim text-sm tbl-empty-cell">no sessions yet</td></tr>';
-      }
-      await loadPipelineSessions();
     } else {
-      toast('Clear failed: ' + ((d.errors || []).join('; ') || 'unknown error'), 'error');
+      toast('Clear finished with errors: ' + ((d.errors || []).join('; ') || 'unknown error'), 'error');
     }
+    // DB rows are cleared even on partial folder-delete errors, so always
+    // wipe the live results area and refresh the list to reflect the new state.
+    const resultsEl = document.getElementById('apt-results');
+    if (resultsEl) resultsEl.innerHTML = '';
+    const tbody = document.getElementById('sessions-tbody');
+    if (tbody) {
+      tbody.innerHTML = '<tr><td colspan="7" class="text-dim text-sm tbl-empty-cell">no sessions yet</td></tr>';
+    }
+    await loadPipelineSessions();
   } catch (e) {
     toast('Clear failed: ' + e.message, 'error');
   } finally {
@@ -3086,13 +3086,6 @@ async function clearPipelineSessions(form) {
   }
 }
 window.clearPipelineSessions = clearPipelineSessions;
-
-document.addEventListener('submit', (ev) => {
-  const form = ev.target && ev.target.id === 'apt-clear-form' ? ev.target : null;
-  if (!form) return;
-  ev.preventDefault();
-  clearPipelineSessions(form);
-});
 
 // -----------------------------------------------------------------
 // Session detail drawer
