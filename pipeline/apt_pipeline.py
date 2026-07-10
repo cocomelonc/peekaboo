@@ -256,6 +256,30 @@ def _precomputed_report_ttps(actor_data: dict) -> list[dict]:
     return ttps
 
 
+def _precomputed_report_sources(actor_data: dict) -> list[dict]:
+    subject_id = actor_data.get("id") or ""
+    if not subject_id:
+        return []
+    subject_type = "family" if ("/" in subject_id or "." in subject_id) else "actor"
+    try:
+        rows = _db.get_report_ttp_sources(subject_type, subject_id)
+    except Exception:
+        rows = []
+    if not rows:
+        try:
+            rows = _db.get_report_ttp_sources("actor", subject_id) + _db.get_report_ttp_sources("family", subject_id)
+        except Exception:
+            rows = []
+    return [{
+        "url": r.get("url", ""),
+        "title": r.get("title", ""),
+        "status": r.get("status", ""),
+        "content_type": r.get("content_type", ""),
+        "text_chars": r.get("text_chars", 0),
+        "model": r.get("model", ""),
+    } for r in rows if r.get("url")]
+
+
 def agent_extract_ttps(report_contents: list[str], actor_data: dict) -> list[dict]:
     """
     Local ATT&CK extraction across all report bodies (no LLM, no network):
@@ -822,12 +846,16 @@ def run_pipeline(actor_id: str) -> Generator[dict, None, None]:
                     if k not in ("snippet", "related_posts")}}
 
     precomputed_ttps = _precomputed_report_ttps(actor_data)
+    precomputed_sources: list[dict] = []
     if precomputed_ttps:
         actor_data["_precomputed_report_ttps"] = precomputed_ttps
+        precomputed_sources = _precomputed_report_sources(actor_data)
         report_contents: list[str] = []
         yield {"step": 2, "status": "done",
                "msg": f"using {len(precomputed_ttps)} precomputed report TTP(s) from local DB",
-               "data": {"count": 0, "source": "precomputed-reports"}}
+               "data": {"count": len(precomputed_sources),
+                        "source": "precomputed-reports",
+                        "report_sources": precomputed_sources}}
     else:
         # 2. Download reports (fallback only; demo path should be precomputed)
         yield {"step": 2, "status": "running", "msg": "downloading threat reports…"}
@@ -861,6 +889,8 @@ def run_pipeline(actor_id: str) -> Generator[dict, None, None]:
     # Mutates stages in place (adds per-stage `detection`) and returns a rollup.
     detection = agent_detection_overlay(stages)
     sel["detection"] = detection
+    if precomputed_sources:
+        sel["report_sources"] = precomputed_sources
 
     _db.update_pipeline_session(session_id, params=sel)
     yield {"step": 4, "status": "done",

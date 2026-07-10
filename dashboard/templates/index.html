@@ -409,6 +409,18 @@ code{font-family:var(--mono);font-size:12px;background:var(--bg4);padding:1px 5p
 .ms-auto{margin-left:auto}
 .ttp-row{display:flex;align-items:center;gap:8px;padding:8px 12px;border-bottom:1px solid rgba(61,56,96,.5)}
 .ttp-row:last-child{border-bottom:none}
+.detect-summary{display:flex;align-items:center;gap:10px;flex-wrap:wrap;padding:10px 14px;background:var(--bg3);border:1px solid var(--sep);border-radius:var(--rs);margin-bottom:14px}
+.detect-bar{flex:1;min-width:120px;max-width:240px;height:8px;background:var(--bg4);border-radius:999px;overflow:hidden}
+.detect-grid{display:flex;flex-direction:column;gap:6px}
+.detect-item{display:grid;grid-template-columns:auto auto minmax(160px,1fr) auto;align-items:center;gap:8px 10px;padding:8px 12px;background:var(--bg3);border:1px solid var(--sep);border-radius:var(--rs);font-size:12px}
+.detect-name{min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.detect-tail{justify-self:end;display:flex;align-items:center;gap:8px;min-width:0}
+.detect-events{grid-column:1/-1;color:var(--dim);font-family:var(--mono);font-size:11px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+@media(max-width:640px){
+  .detect-item{grid-template-columns:auto 1fr}
+  .detect-name,.detect-tail,.detect-events{grid-column:1/-1;justify-self:stretch}
+  .detect-tail{justify-content:flex-start;flex-wrap:wrap}
+}
 
 /* -- malpedia reports -- */
 .rep-row{display:grid;grid-template-columns:90px 1fr auto;gap:10px;align-items:start;padding:10px 12px;border-bottom:1px solid rgba(61,56,96,.5);transition:background .12s;text-decoration:none;color:inherit;display:grid}
@@ -1193,7 +1205,9 @@ code{border-radius:6px;background:rgba(49,45,82,.65)}
       <div class="card-title">Past Sessions</div>
       <span class="text-xs text-dim">click a row to inspect</span>
       <button class="btn btn-ghost btn-sm ms-auto" onclick="loadPipelineSessions()">↻ Refresh</button>
-      <button class="btn btn-del btn-sm" onclick="clearPipelineSessions()">🗑 Clear all</button>
+      <form id="apt-clear-form" action="/api/pipeline/clear" method="post" style="margin:0">
+        <button class="btn btn-del btn-sm" id="apt-clear-btn" type="submit">🗑 Clear all</button>
+      </form>
     </div>
     <div class="tbl-wrap">
       <table class="tbl">
@@ -2766,6 +2780,28 @@ async function runPipeline() {
           reportsList.appendChild(row);
         }
 
+        // step 2 done with precomputed reports -> show source links, not an empty reports tab
+        if (ev.step === 2 && ev.status === 'done' && ev.data?.source === 'precomputed-reports') {
+          const sources = ev.data.report_sources || [];
+          if (sources.length) {
+            const div = document.createElement('div');
+            div.className = 'card card-sm apt-result-card';
+            const rows = sources.slice(0, 12).map((r, i) => {
+              const chars = Number(r.text_chars || 0);
+              const status = r.status || 'ok';
+              return `<a class="report-link-row" href="${escAttr(r.url)}" target="_blank" rel="noopener noreferrer">
+                <span class="badge badge-dim apt-idx-badge">#${i+1}</span>
+                <span class="apt-rep-url">${escHtml(r.title || r.url)}</span>
+                <span class="badge badge-dim text-xs">${escHtml(status)}</span>
+                ${chars ? `<span class="apt-rep-chars">${chars.toLocaleString()} chars</span>` : ''}
+              </a>`;
+            }).join('');
+            div.innerHTML = `<div class="apt-sec-label">PRECOMPUTED REPORT SOURCES (${sources.length})</div>
+              <div style="background:var(--bg3);border:1px solid var(--sep);border-radius:var(--rs);overflow:hidden">${rows}</div>`;
+            resultsEl.appendChild(div);
+          }
+        }
+
         // step 3 done -> TTPs section
         if (ev.step === 3 && ev.status === 'done') {
           const ttps = ev.data || [];
@@ -2913,32 +2949,33 @@ async function runPipeline() {
                 const d   = s.detection || {};
                 const col = TACTIC_COLORS[s.tactic] || TACTIC_COLORS.unknown;
                 const head = `<span class="badge badge-red text-xs">${escHtml(s.ttp_id)}</span>
-                  <span class="badge text-xs" style="background:${col}22;color:${col}">${escHtml(s.tactic)}</span>`;
+                  <span class="badge text-xs" style="background:${col}22;color:${col}">${escHtml(s.tactic)}</span>
+                  <span class="detect-name">${escHtml(s.ttp_name || s.ttp_id || '')}</span>`;
                 if (d.covered) {
                   const eids = (d.event_ids || []).slice(0, 8).join(', ');
-                  return `<div class="apt-mod-row" style="gap:8px">${head}
-                    <span class="badge badge-green text-xs">${d.sigma_count} sigma</span>
-                    <span class="text-xs text-dim mono" style="flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${eids ? 'EventID ' + escHtml(eids) : ''}</span>
+                  return `<div class="detect-item">${head}
+                    <span class="detect-tail"><span class="badge badge-green text-xs">${d.sigma_count} sigma</span></span>
+                    ${eids ? `<span class="detect-events">EventID ${escHtml(eids)}</span>` : ''}
                   </div>`;
                 }
                 const yara = d.yara_file
-                  ? `<a href="/api/samples/${sid}/download/${encodeURIComponent(d.yara_file)}" class="btn btn-green btn-sm ms-auto">⬇ ${escHtml(d.yara_file)}</a>`
-                  : `<span class="text-xs text-dim ms-auto">${escHtml(d.yara_hint || '')}</span>`;
-                return `<div class="apt-mod-row" style="gap:8px">${head}
-                  <span class="badge badge-red text-xs">NO SIGMA</span>${yara}
+                  ? `<a href="/api/samples/${sid}/download/${encodeURIComponent(d.yara_file)}" class="btn btn-green btn-sm">⬇ ${escHtml(d.yara_file)}</a>`
+                  : `<span class="text-xs text-dim">${escHtml(d.yara_hint || '')}</span>`;
+                return `<div class="detect-item">${head}
+                  <span class="detect-tail"><span class="badge badge-red text-xs">NO SIGMA</span>${yara}</span>
                 </div>`;
               }).join('');
               html += `<div style="margin-top:16px">
                 <div class="apt-sec-label" style="margin-bottom:6px">🛡 DETECTION OVERLAY - BLUE TEAM</div>
-                <div class="apt-dl-row" style="margin-bottom:8px">
+                <div class="detect-summary">
                   <span class="text-xs text-dim">coverage</span>
-                  <div style="flex:1;max-width:220px;height:8px;background:var(--bg3);border-radius:4px;overflow:hidden">
+                  <div class="detect-bar">
                     <div style="width:${pct}%;height:100%;background:${barCol}"></div>
                   </div>
                   <span class="text-sm" style="color:${barCol}">${pct}%</span>
                   <span class="text-xs text-dim">${det.stages_covered}/${det.stages_total} stages · ${det.unique_sigma || 0} sigma · ${(det.unique_event_ids || []).length} EventIDs · ${(det.gaps || []).length} blind spot(s)</span>
                 </div>
-                <div class="apt-inner-list">${detRows}</div>
+                <div class="detect-grid">${detRows}</div>
               </div>`;
             }
 
@@ -2976,9 +3013,10 @@ async function runPipeline() {
 
 async function loadPipelineSessions() {
   const tbody = document.getElementById('sessions-tbody');
-  const sessions = await fetch('/api/pipeline/sessions').then(r=>r.json()).catch(()=>[]);
+  const sessions = await fetch('/api/pipeline/sessions')
+    .then(r=>r.json()).catch(()=>[]);
   if (!sessions.length) {
-    tbody.innerHTML = '<tr><td colspan="6" class="text-dim text-sm tbl-empty-cell">no sessions yet</td></tr>';
+    tbody.innerHTML = '<tr><td colspan="7" class="text-dim text-sm tbl-empty-cell">no sessions yet</td></tr>';
     return;
   }
   tbody.innerHTML = sessions.slice(0,20).map(s => {
@@ -3000,36 +3038,61 @@ async function loadPipelineSessions() {
     fetch(`/api/pipeline/session/${s.session_id}`)
       .then(r=>r.json()).then(d => {
         const el = document.getElementById(`rcount-${s.session_id}`);
-        if (el) el.textContent = (d.reports||[]).length;
+        if (el) el.textContent = (d.reports||[]).length || (d.report_sources||[]).length || 0;
       }).catch(()=>{});
   });
 }
 
-async function clearPipelineSessions() {
+async function clearPipelineSessions(form) {
   if (!confirm('Clear ALL APT pipeline sessions?\n\nThis deletes:\n• every samples/<session>/ folder (source files + binaries)\n• every reports DB row\n• every pipeline_sessions / samples DB row\n\nThis cannot be undone.')) {
     return;
   }
+  const btn = form ? form.querySelector('#apt-clear-btn') : document.getElementById('apt-clear-btn');
+  const oldText = btn ? btn.textContent : '';
+  if (btn) {
+    btn.disabled = true;
+    btn.textContent = 'clearing…';
+  }
   try {
-    const r = await fetch('/api/pipeline/clear', {method:'POST'});
-    const d = await r.json();
+    const r = await fetch('/api/pipeline/clear', {
+      method:'POST',
+      headers:{'X-Requested-With':'XMLHttpRequest'},
+    });
+    const d = await r.json().catch(() => ({}));
+    if (!r.ok) throw new Error(d.error || `HTTP ${r.status}`);
     if (d.ok || d.deleted_dirs >= 0) {
       const msg = `cleared ${d.deleted_dirs} session folder(s) (${d.deleted_files} file(s)), ` +
                  `${d.db_cleared.pipeline_sessions} pipeline row(s), ` +
                  `${d.db_cleared.samples} sample row(s)`;
-      // tiny toast - fall back to alert if no toast helper present
-      if (typeof showToast === 'function') showToast(msg, 'ok');
-      else console.log(msg);
+      toast(msg, 'ok');
       // also wipe the live results area so the user sees a clean slate
       const resultsEl = document.getElementById('apt-results');
       if (resultsEl) resultsEl.innerHTML = '';
-      loadPipelineSessions();
+      const tbody = document.getElementById('sessions-tbody');
+      if (tbody) {
+        tbody.innerHTML = '<tr><td colspan="7" class="text-dim text-sm tbl-empty-cell">no sessions yet</td></tr>';
+      }
+      await loadPipelineSessions();
     } else {
-      alert('Clear failed:\n' + (d.errors || []).join('\n'));
+      toast('Clear failed: ' + ((d.errors || []).join('; ') || 'unknown error'), 'error');
     }
   } catch (e) {
-    alert('Clear failed: ' + e.message);
+    toast('Clear failed: ' + e.message, 'error');
+  } finally {
+    if (btn) {
+      btn.disabled = false;
+      btn.textContent = oldText;
+    }
   }
 }
+window.clearPipelineSessions = clearPipelineSessions;
+
+document.addEventListener('submit', (ev) => {
+  const form = ev.target && ev.target.id === 'apt-clear-form' ? ev.target : null;
+  if (!form) return;
+  ev.preventDefault();
+  clearPipelineSessions(form);
+});
 
 // -----------------------------------------------------------------
 // Session detail drawer
@@ -3081,11 +3144,12 @@ async function openSessionDrawer(sessionId) {
 
   // ---- Reports tab ----
   const reports = d.reports || [];
+  const reportSources = d.report_sources || (sess.params || {}).report_sources || [];
 
-  if (!reports.length) {
+  if (!reports.length && !reportSources.length) {
     document.getElementById('drawer-tab-reports').innerHTML =
       '<div class="empty" style="padding:40px"><div class="empty-icon">📄</div><div>No reports in DB for this session</div></div>';
-  } else {
+  } else if (reports.length) {
     const rows = reports.map(r => {
       const chars = (r.content || '').length;
       return `<a class="report-link-row" href="${escAttr(r.url)}" target="_blank" rel="noopener noreferrer">
@@ -3097,6 +3161,22 @@ async function openSessionDrawer(sessionId) {
     }).join('');
     document.getElementById('drawer-tab-reports').innerHTML =
       `<div style="margin-bottom:10px" class="text-xs text-dim">${reports.length} report(s) downloaded</div>
+       <div style="background:var(--bg3);border:1px solid var(--sep);border-radius:var(--rs);overflow:hidden">${rows}</div>`;
+  } else {
+    const rows = reportSources.map((r, i) => {
+      const chars = Number(r.text_chars || 0);
+      const status = r.status || 'ok';
+      const title = r.title || r.url;
+      return `<a class="report-link-row" href="${escAttr(r.url)}" target="_blank" rel="noopener noreferrer">
+        <span class="badge badge-dim" style="font-size:9px;flex-shrink:0">#${i+1}</span>
+        <span class="mono text-xs" style="flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;color:var(--blue)"
+              title="${escAttr(r.url)}">${escHtml(title)}</span>
+        <span class="badge badge-dim text-xs" style="flex-shrink:0">${escHtml(status)}</span>
+        ${chars ? `<span class="text-xs text-dim" style="flex-shrink:0">${chars.toLocaleString()} chars</span>` : ''}
+      </a>`;
+    }).join('');
+    document.getElementById('drawer-tab-reports').innerHTML =
+      `<div style="margin-bottom:10px" class="text-xs text-dim">${reportSources.length} precomputed report source(s)</div>
        <div style="background:var(--bg3);border:1px solid var(--sep);border-radius:var(--rs);overflow:hidden">${rows}</div>`;
   }
 
@@ -3184,33 +3264,31 @@ async function openSessionDrawer(sessionId) {
       const col = TACTIC_COLORS[s.tactic] || TACTIC_COLORS.unknown;
       const head = `<span class="badge badge-red text-xs" style="font-family:var(--mono)">${escHtml(s.ttp_id||'')}</span>
         <span class="badge text-xs" style="background:${col}22;color:${col}">${escHtml(s.tactic||'')}</span>
-        <span class="text-sm" style="flex:1;min-width:120px">${escHtml(s.ttp_name||s.ttp_id||'')}</span>`;
+        <span class="detect-name">${escHtml(s.ttp_name||s.ttp_id||'')}</span>`;
       if (dd.covered) {
         const eids = (dd.event_ids||[]).slice(0,8).join(', ');
-        return `<div class="apt-mod-row" style="flex-wrap:wrap;gap:8px">${head}
-          <span class="badge badge-green text-xs">${dd.sigma_count||0} sigma</span>
-          ${eids ? `<span class="text-xs text-dim mono" style="width:100%">EventID ${escHtml(eids)}</span>` : ''}
+        return `<div class="detect-item">${head}
+          <span class="detect-tail"><span class="badge badge-green text-xs">${dd.sigma_count||0} sigma</span></span>
+          ${eids ? `<span class="detect-events">EventID ${escHtml(eids)}</span>` : ''}
         </div>`;
       }
       const yara = dd.yara_file
-        ? `<a href="/api/samples/${sessionId}/download/${encodeURIComponent(dd.yara_file)}" class="btn btn-green btn-sm ms-auto">⬇ ${escHtml(dd.yara_file)}</a>`
-        : `<span class="text-xs text-dim ms-auto">${escHtml(dd.yara_hint||'')}</span>`;
-      return `<div class="apt-mod-row" style="flex-wrap:wrap;gap:8px">${head}
-        <span class="badge badge-red text-xs">NO SIGMA</span>${yara}
+        ? `<a href="/api/samples/${sessionId}/download/${encodeURIComponent(dd.yara_file)}" class="btn btn-green btn-sm">⬇ ${escHtml(dd.yara_file)}</a>`
+        : `<span class="text-xs text-dim">${escHtml(dd.yara_hint||'')}</span>`;
+      return `<div class="detect-item">${head}
+        <span class="detect-tail"><span class="badge badge-red text-xs">NO SIGMA</span>${yara}</span>
       </div>`;
     }).join('');
     detEl.innerHTML = `
-      <div class="card card-sm" style="margin-bottom:14px">
-        <div class="apt-dl-row" style="gap:10px;flex-wrap:wrap">
-          <span class="text-xs text-dim">coverage</span>
-          <div style="flex:1;min-width:120px;max-width:220px;height:8px;background:var(--bg3);border-radius:4px;overflow:hidden">
-            <div style="width:${pct}%;height:100%;background:${barCol}"></div>
-          </div>
-          <span class="text-sm" style="color:${barCol}">${pct}%</span>
-          <span class="text-xs text-dim">${det.stages_covered||0}/${det.stages_total} stages · ${det.unique_sigma||0} sigma · ${(det.unique_event_ids||[]).length} EventIDs · ${(det.gaps||[]).length} blind spot(s)</span>
+      <div class="detect-summary">
+        <span class="text-xs text-dim">coverage</span>
+        <div class="detect-bar">
+          <div style="width:${pct}%;height:100%;background:${barCol}"></div>
         </div>
+        <span class="text-sm" style="color:${barCol}">${pct}%</span>
+        <span class="text-xs text-dim">${det.stages_covered||0}/${det.stages_total} stages · ${det.unique_sigma||0} sigma · ${(det.unique_event_ids||[]).length} EventIDs · ${(det.gaps||[]).length} blind spot(s)</span>
       </div>
-      <div class="apt-inner-list">${stageRows}</div>`;
+      <div class="detect-grid">${stageRows}</div>`;
   }
 }
 

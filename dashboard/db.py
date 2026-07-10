@@ -467,6 +467,29 @@ def get_reports(session_id: str) -> list[dict]:
     return [dict(r) for r in rows]
 
 
+def get_report_ttp_sources(subject_type: str, subject_id: str,
+                           model: str | None = None) -> list[dict]:
+    sql = """
+        SELECT subject_type, subject_id, url, model, title, status,
+               content_type, text_chars, error, processed_at
+        FROM report_ttp_sources
+        WHERE subject_type = ? AND subject_id = ?
+    """
+    args: list = [subject_type, subject_id]
+    if model:
+        sql += " AND model = ?"
+        args.append(model)
+    sql += """
+        ORDER BY
+          CASE status WHEN 'ok' THEN 0 WHEN 'no_ttps' THEN 1
+                      WHEN 'too_short' THEN 2 ELSE 3 END,
+          processed_at DESC, url
+    """
+    with _conn() as db:
+        rows = db.execute(sql, args).fetchall()
+    return [dict(r) for r in rows]
+
+
 # --------------------------------------------------------------------------- #
 #  Pipeline sessions - writes                                                   #
 # --------------------------------------------------------------------------- #

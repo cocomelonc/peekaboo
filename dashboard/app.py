@@ -19,7 +19,7 @@ from typing import Optional
 
 import sys
 
-from flask import Flask, Response, jsonify, render_template, request, send_file, stream_with_context
+from flask import Flask, Response, jsonify, redirect, render_template, request, send_file, stream_with_context, url_for
 
 try:
     import requests as _requests
@@ -1051,7 +1051,9 @@ def api_pipeline_run():
 
 @app.route("/api/pipeline/sessions")
 def api_pipeline_sessions():
-    return jsonify(_db.get_pipeline_sessions())
+    resp = jsonify(_db.get_pipeline_sessions())
+    resp.headers["Cache-Control"] = "no-store"
+    return resp
 
 
 @app.route("/api/pipeline/clear", methods=["POST"])
@@ -1096,13 +1098,18 @@ def api_pipeline_clear():
     except Exception as e:
         errors.append(f"db: {e}")
 
-    return jsonify({
+    payload = {
         "ok":             not errors,
         "deleted_dirs":   deleted_dirs,
         "deleted_files":  deleted_files,
         "db_cleared":     db_counts,
         "errors":         errors,
-    })
+    }
+    if request.headers.get("X-Requested-With") != "XMLHttpRequest":
+        return redirect(url_for("index"))
+    resp = jsonify(payload)
+    resp.headers["Cache-Control"] = "no-store"
+    return resp
 
 
 @app.route("/api/pipeline/session/<session_id>")
@@ -1113,6 +1120,19 @@ def api_pipeline_session(session_id: str):
     if not session:
         return jsonify({"error": "not found"}), 404
     reports = _db.get_reports(session_id)
+    params = session.get("params") or {}
+    report_sources = params.get("report_sources") or []
+    if not reports and not report_sources:
+        actor_id = session.get("actor_id", "")
+        if actor_id:
+            st = "family" if ("/" in actor_id or "." in actor_id) else "actor"
+            try:
+                report_sources = _db.get_report_ttp_sources(st, actor_id)
+                if not report_sources:
+                    report_sources = (_db.get_report_ttp_sources("actor", actor_id)
+                                      + _db.get_report_ttp_sources("family", actor_id))
+            except Exception:
+                report_sources = []
     sample  = next((s for s in _db.get_samples() if s["session_id"] == session_id), None)
     # filesystem fallback for samples compiled before DB migration
     if not sample:
@@ -1123,11 +1143,14 @@ def api_pipeline_session(session_id: str):
             if flist:
                 sample = {"session_id": session_id, "files": flist,
                           "total_size": sum(f["size"] for f in flist), "status": "built"}
-    return jsonify({
+    resp = jsonify({
         "session": session,
         "reports": reports,
+        "report_sources": report_sources,
         "sample":  sample,
     })
+    resp.headers["Cache-Control"] = "no-store"
+    return resp
 
 
 # -- Coverage map --------------------------------------------------------------
