@@ -154,6 +154,7 @@ _LIB_RULES: list[tuple[re.Pattern, str]] = [
     (re.compile(r"CryptProtect|CryptUnprotect|crypt32",    re.I),    "-lcrypt32"),
     (re.compile(r"WSAStartup|WSACleanup|ws2_32",           re.I),    "-lws2_32"),
     (re.compile(r"SHGetFolderPath|SHGetSpecialFolder|shlobj", re.I), "-lshell32"),
+    (re.compile(r"Internet(Open|OpenUrl|ReadFile|CloseHandle)|wininet", re.I), "-lwininet"),
 ]
 
 
@@ -217,8 +218,11 @@ class BuildResult:
 
 
 def _compile_cmd(compiler_path: str, kind: str, src: Path, out: Path,
-                 extra_libs: list[str], is_dll: bool) -> list[str]:
+                 extra_libs: list[str], is_dll: bool,
+                 include_dirs: list[Path] | None = None) -> list[str]:
     flags = list(MINGW_FLAGS if kind.startswith("mingw") else GCC_FLAGS)
+    for inc in include_dirs or []:
+        flags += ["-I", str(inc)]
     if is_dll:
         # -shared makes a DLL; --kill-at strips the @N suffix from exports.
         flags += ["-shared"]
@@ -285,8 +289,11 @@ def build(spec: BuildSpec) -> BuildResult:
                 if flag not in libs:
                     libs.append(flag)
 
+        include_dirs = [tmp]
+        if spec.src_path.parent not in include_dirs:
+            include_dirs.append(spec.src_path.parent)
         cmd = _compile_cmd(compiler_path, spec.compiler, primary_tmp,
-                           spec.out_path, libs, spec.is_dll)
+                           spec.out_path, libs, spec.is_dll, include_dirs)
         log.append(f"[compile] {' '.join(cmd)}")
 
         try:

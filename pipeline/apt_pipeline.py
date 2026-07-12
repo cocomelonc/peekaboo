@@ -413,6 +413,13 @@ _ADVANCED_MARKERS = (
 )
 
 
+_COMPILE_AVOID_MODULE_IDS = {
+    # Keep the post/source in the knowledge base, but avoid it for compiled
+    # campaign packs: its bundled ntddk.h conflicts with current MinGW headers.
+    "2022-01-24-malware-injection-15",
+}
+
+
 def _sophistication(mod: dict) -> float:
     """Heuristic 'coolness' derived from real metadata - no hardcoded list.
 
@@ -445,6 +452,8 @@ def _score_module(mod: dict, ttp: dict) -> float:
         score += 1
     if mod.get("has_post"):
         score += 1
+    if mod.get("id") in _COMPILE_AVOID_MODULE_IDS:
+        score -= 50
     score += _sophistication(mod)   # bias toward the interesting tricks
     return score
 
@@ -582,6 +591,42 @@ def _compile_one(stage: dict, out_dir: Path) -> tuple[Path | None, str, str]:
     """
     src      = Path(stage["src_path"])
     compiler = stage.get("compiler", "")
+    if compiler == "nasm":
+        nasm = shutil.which("nasm")
+        ld = shutil.which("ld")
+        if not nasm or not ld:
+            missing = "nasm" if not nasm else "ld"
+            return None, "", f"compiler not installed: {missing}"
+        out = out_dir / f"{Path(stage['_out_src']).stem}.exe"
+        obj = out.with_suffix(".o")
+        cmd1 = [nasm, "-f", "win32", "-o", str(obj), str(src)]
+        cmd2 = [ld, "-m", "i386pe", "-o", str(out), str(obj)]
+        try:
+            r1 = subprocess.run(cmd1, capture_output=True, text=True, timeout=30)
+            log = [f"[compile] {' '.join(cmd1)}"]
+            if r1.stdout:
+                log.append(r1.stdout.rstrip())
+            if r1.stderr:
+                log.append(r1.stderr.rstrip())
+            if r1.returncode != 0:
+                log.append(f"[fail] rc={r1.returncode}")
+                return None, "", "\n".join(log)
+            r2 = subprocess.run(cmd2, capture_output=True, text=True, timeout=30)
+            log.append(f"[link] {' '.join(cmd2)}")
+            if r2.stdout:
+                log.append(r2.stdout.rstrip())
+            if r2.stderr:
+                log.append(r2.stderr.rstrip())
+            if r2.returncode == 0 and out.exists():
+                log.append(f"[ok] {out.name} ({out.stat().st_size:,} bytes)")
+                return out, "exe", "\n".join(log)
+            log.append(f"[fail] rc={r2.returncode}")
+            return None, "", "\n".join(log)
+        except subprocess.TimeoutExpired:
+            return None, "", "nasm build timed out"
+        except Exception as e:
+            return None, "", f"nasm build failed: {e}"
+
     if compiler not in ("mingw-gcc", "mingw-gpp", "gcc", "gpp"):
         return None, "", f"unsupported compiler: {compiler}"
 
