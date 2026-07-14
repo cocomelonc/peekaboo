@@ -467,6 +467,32 @@ def _normalize_summary(raw: str) -> str:
     return s[:600]
 
 
+def _normalize_campaign_summary(raw: str) -> str:
+    """Enforce the campaign-card contract even when the model ignores its limit."""
+    summary = _normalize_summary(raw)
+    sentences = _re.split(r"(?<=[.!?])\s+", summary)
+    sentences = [sentence.strip() for sentence in sentences if sentence.strip()][:3]
+    if len(sentences) != 3:
+        return summary[:420].rstrip()
+    if len(summary) <= 420:
+        return summary
+
+    def clip(sentence: str, limit: int) -> str:
+        if len(sentence) <= limit:
+            return sentence
+        body = sentence.rstrip(".!?")
+        shortened = body[:limit - 1].rsplit(" ", 1)[0].rstrip(" ,;:-")
+        dangling = {"a", "an", "and", "as", "at", "by", "for", "from", "in",
+                    "including", "of", "on", "or", "the", "to", "with"}
+        while shortened and shortened.rsplit(" ", 1)[-1].lower() in dangling:
+            shortened = shortened.rsplit(" ", 1)[0].rstrip(" ,;:-")
+        return shortened + "."
+
+    # Includes punctuation; two joining spaces keep the total at <= 420.
+    limits = (130, 160, 128)
+    return " ".join(clip(sentence, limit) for sentence, limit in zip(sentences, limits))
+
+
 def _chat_text(prompt: str, model: str, base_url: str,
                timeout: int = 300, label: str = "worker") -> str:
     """Single-turn Ollama chat in plain-text mode. Returns the message content."""
@@ -1129,13 +1155,13 @@ def cmd_sigma(args: argparse.Namespace) -> None:
 
 
 def _build_apt_prompt(sess: dict) -> str:
-    actor   = sess.get("actor_id", "unknown")
+    subject = sess.get("actor_id", "unknown")
     ttps    = sess.get("ttps", [])
     params  = sess.get("params", {})
-    started = (sess.get("started") or "")[:10]
+    subject_kind = "Malware family" if ("." in subject or "/" in subject) else "Threat actor"
 
     tids    = [t.get("id") or t if isinstance(t, str) else "" for t in ttps][:15]
-    names   = [t.get("name", "") for t in ttps if isinstance(t, dict)][:10]
+    names   = [t.get("name", "") for t in ttps if isinstance(t, dict) and t.get("name")][:6]
     tactics = list({t.get("tactic", "") for t in ttps if isinstance(t, dict) and t.get("tactic")})[:6]
 
     mods  = [m.get("title", m.get("module_id", "")) for m in params.get("selected_modules", []) if m][:8]
@@ -1143,13 +1169,13 @@ def _build_apt_prompt(sess: dict) -> str:
     inj   = params.get("injection", "")
     mal   = params.get("malware", "")
 
-    parts = [f"APT Actor: {actor}", f"Campaign date: {started}"]
+    parts = [f"Campaign subject type: {subject_kind}", f"Campaign subject: {subject}"]
     if tids:
         parts.append("ATT&CK techniques: " + ", ".join(t for t in tids if t))
     if tactics:
         parts.append("Tactics covered: " + ", ".join(tactics))
     if names:
-        parts.append("Key technique names: " + "; ".join(n for n in names if n)[:200])
+        parts.append("Key technique names: " + "; ".join(names))
     if mods:
         parts.append("Implant modules: " + ", ".join(mods))
     if enc:
@@ -1163,9 +1189,11 @@ def _build_apt_prompt(sess: dict) -> str:
     return (
         "You are a threat intelligence analyst.\n"
         "Write exactly 3 plain sentences summarizing this APT simulation campaign.\n"
-        "Sentence 1: who the actor is and what they targeted.\n"
-        "Sentence 2: the key MITRE ATT&CK techniques and tactics used.\n"
+        "Sentence 1: identify the campaign subject and characterize only the simulated behavior shown below.\n"
+        "Sentence 2: name the key MITRE ATT&CK techniques and tactics represented.\n"
         "Sentence 3: the highest-priority detection recommendation for defenders.\n"
+        "Use only the supplied context. Do not invent targets, victims, sectors, dates, origins, or motives.\n"
+        "If the subject type is Malware family, do not call it an APT actor.\n"
         "No markdown, no lists, no headers. Hard limit: 420 characters total.\n\n"
         f"{context}"
     )
@@ -1205,7 +1233,7 @@ def cmd_apt(args: argparse.Namespace) -> None:
         raw    = _chat_text(prompt, model, base_url, timeout, label="apt")
         if raw is None:
             return False, f"[apt] {i}/{n} FAIL  {sid} ({actor})"
-        summary = _normalize_summary(raw)
+        summary = _normalize_campaign_summary(raw)
         db.upsert_session_summary(sid, model, summary, raw)
         return True, f"[apt] {i}/{n} ok    {sid}  ({actor})"
 

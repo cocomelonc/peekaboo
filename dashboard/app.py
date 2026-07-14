@@ -19,7 +19,7 @@ from typing import Optional
 
 import sys
 
-from flask import Flask, Response, jsonify, redirect, render_template, request, send_file, stream_with_context, url_for
+from flask import Flask, Response, jsonify, render_template, request, send_file, stream_with_context
 
 try:
     import requests as _requests
@@ -60,13 +60,38 @@ except ImportError:
     HAS_COMPILER = False
 
 app = Flask(__name__)
+app.config["MAX_CONTENT_LENGTH"] = 2 * 1024 * 1024
+
+
+@app.before_request
+def _protect_mutating_api():
+    if request.path.startswith("/api/") and request.method in {"POST", "PUT", "PATCH", "DELETE"}:
+        return _guards.protect_mutation()
+    return None
+
+
+@app.after_request
+def _security_headers(response):
+    response.headers.setdefault("X-Content-Type-Options", "nosniff")
+    response.headers.setdefault("X-Frame-Options", "DENY")
+    response.headers.setdefault("Referrer-Policy", "strict-origin-when-cross-origin")
+    response.headers.setdefault("Permissions-Policy", "camera=(), microphone=(), geolocation=()")
+    response.headers.setdefault(
+        "Content-Security-Policy",
+        "default-src 'self'; script-src 'self' 'unsafe-inline'; "
+        "style-src 'self' 'unsafe-inline'; img-src 'self' data:; "
+        "font-src 'self'; connect-src 'self'; object-src 'none'; "
+        "base-uri 'self'; frame-ancestors 'none'",
+    )
+    return response
 
 BASE_DIR     = Path(__file__).parent.parent
 CONFIG_DIR   = BASE_DIR / "config"
 MALWARE_DIR  = BASE_DIR / "malware"
 PAYLOADS_DIR = BASE_DIR / "payloads"
-SAMPLES_DIR  = BASE_DIR / "samples"
-PIPELINE_DIR = BASE_DIR / "pipeline" / "sessions"
+SAMPLES_DIR  = Path(os.getenv("PEEKABOO_SAMPLES_DIR", BASE_DIR / "samples"))
+PIPELINE_DIR = Path(os.getenv("PEEKABOO_PIPELINE_DIR", BASE_DIR / "pipeline" / "sessions"))
+BUILD_ARTIFACTS_DIR = Path(os.getenv("PEEKABOO_BUILD_ARTIFACTS_DIR", BASE_DIR / "builds"))
 _LEGACY_JSON = Path(__file__).parent / "builds.json"
 
 import db as _db
@@ -108,6 +133,7 @@ _build_mgr = BuildManager(
     base_dir    = BASE_DIR,
     malware_dir = MALWARE_DIR,
     peekaboo_py = BASE_DIR / "peekaboo.py",
+    artifacts_dir = BUILD_ARTIFACTS_DIR,
 )
 
 
@@ -134,6 +160,14 @@ import guards as _guards
 def _load_config(name: str) -> dict | None:
     """Read a legacy-named config dict from .env via cfg.py."""
     return _cfg.get(name)
+
+
+def _int_arg(name: str, default: int, minimum: int, maximum: int) -> int:
+    """Parse and clamp an integer query argument; malformed input uses the default."""
+    value = request.args.get(name, type=int)
+    if value is None:
+        value = default
+    return max(minimum, min(maximum, value))
 
 
 # _run_build / _save_build moved into BuildManager (build_manager.py).
@@ -243,7 +277,7 @@ def api_build_download(build_id: str, filename: str):
 @app.route("/api/logs")
 def api_logs():
     try:
-        limit = min(int(request.args.get("limit", 10)), 200)
+        limit = _int_arg("limit", 10, 1, 200)
         builds = _db.get_builds(limit)
         for b in builds:
             b["binary_files"] = _resolve_build_files(b)
@@ -255,6 +289,7 @@ def api_logs():
 @app.route("/api/logs", methods=["DELETE"])
 def api_logs_clear():
     try:
+        _build_mgr.clear_artifacts()
         _db.clear_builds()
         _db.clear_patch_history()
         return jsonify({"ok": True})
@@ -264,7 +299,7 @@ def api_logs_clear():
 
 @app.route("/api/builds/binaries", methods=["DELETE"])
 def api_builds_binaries_clear():
-    """Delete all compiled binaries (peekaboo.exe / persistence.exe) under malware/."""
+    """Delete shared and immutable Builder binaries."""
     try:
         deleted = []
         for pattern in ("peekaboo.exe", "persistence.exe"):
@@ -274,8 +309,9 @@ def api_builds_binaries_clear():
                     deleted.append(str(f.relative_to(BASE_DIR)))
                 except Exception:
                     pass
+        deleted_count = _build_mgr.clear_artifacts()
         _db.clear_patch_history()
-        return jsonify({"ok": True, "deleted": len(deleted), "files": deleted})
+        return jsonify({"ok": True, "deleted": len(deleted) + deleted_count, "files": deleted})
     except Exception as e:
         return jsonify({"ok": False, "error": str(e)}), 500
 
@@ -357,15 +393,29 @@ def api_chat():
         return jsonify({"error": "chatbot module not available"}), 503
 
     data = request.get_json(silent=True) or {}
-    messages  = data.get("messages", [])
-    provider  = data.get("provider", "claude")  # "claude" | "gemini" | "ollama"
-    if not messages:
+    messages = data.get("messages", [])
+    provider = data.get("provider", "ollama")
+    if not isinstance(messages, list) or not messages:
         return jsonify({"error": "no messages provided"}), 400
+    if len(messages) > 20:
+        return jsonify({"error": "too many messages"}), 400
+    clean_messages = []
+    total_chars = 0
+    for message in messages:
+        if not isinstance(message, dict) or message.get("role") not in {"user", "assistant"}:
+            return jsonify({"error": "invalid message"}), 400
+        content = message.get("content")
+        if not isinstance(content, str) or len(content) > 12_000:
+            return jsonify({"error": "invalid message content"}), 400
+        total_chars += len(content)
+        clean_messages.append({"role": message["role"], "content": content})
+    if total_chars > 50_000:
+        return jsonify({"error": "conversation too large"}), 400
 
     def generate():
         # Never yield in `finally` of an SSE generator (see api_pipeline_run).
         try:
-            for chunk in stream_chat(messages, provider=provider):
+            for chunk in stream_chat(clean_messages, provider=provider):
                 if isinstance(chunk, dict):
                     yield f"data: {json.dumps(chunk)}\n\n"
                 else:
@@ -432,8 +482,8 @@ def api_mitre_groups():
         return jsonify({"error": "STIX bundle not found"}), 503
 
     q     = request.args.get("q", "").lower().strip()
-    page  = max(0, int(request.args.get("page",  0)))
-    limit = max(1, int(request.args.get("limit", 10)))
+    page  = _int_arg("page", 0, 0, 100_000)
+    limit = _int_arg("limit", 10, 1, 100)
 
     groups = get_groups()
     if q:
@@ -473,8 +523,8 @@ def api_mitre_library():
 
     q        = request.args.get("q", "").strip()
     category = request.args.get("category", "")
-    page     = max(0, int(request.args.get("page",  0)))
-    limit    = max(1, int(request.args.get("limit", 10)))
+    page     = _int_arg("page", 0, 0, 100_000)
+    limit    = _int_arg("limit", 10, 1, 100)
     offset   = page * limit
 
     items = _db.get_mitre_entries_paged(q, category, offset, limit)
@@ -492,8 +542,8 @@ def api_mitre_ttp_implementations():
     q        = request.args.get("q",        "").strip()
     tactic   = request.args.get("tactic",   "").strip()
     platform = request.args.get("platform", "").strip()
-    page     = max(0, int(request.args.get("page",  0)))
-    limit    = max(1, int(request.args.get("limit", 10)))
+    page     = _int_arg("page", 0, 0, 100_000)
+    limit    = _int_arg("limit", 10, 1, 100)
 
     rows = _db.get_ttp_implementations(
         platform=platform or None,
@@ -521,8 +571,8 @@ def api_mitre_ttp_extracted():
     tactic     = request.args.get("tactic",     "").strip().lower()
     confidence = request.args.get("confidence", "").strip().lower()
     model      = request.args.get("model",      "").strip()
-    page       = max(0, int(request.args.get("page",  0)))
-    limit      = max(1, int(request.args.get("limit", 10)))
+    page       = _int_arg("page", 0, 0, 100_000)
+    limit      = _int_arg("limit", 10, 1, 100)
 
     rows = _db.get_ttp_extracted_all(model or None)
 
@@ -623,7 +673,7 @@ def api_kb_insights():
     })
 
 
-@app.route("/api/reindex")
+@app.route("/api/reindex", methods=["POST"])
 def api_reindex():
     """SSE stream: full reindex - library cache -> embeddings -> KB scrape."""
     def generate():
@@ -750,7 +800,7 @@ def api_malpedia_family(family_id: str):
 def api_malpedia_reports():
     if not HAS_MALPEDIA:
         return jsonify({"error": "unavailable"}), 503
-    limit = min(int(request.args.get("limit", 50)), 200)
+    limit = _int_arg("limit", 50, 1, 200)
     return jsonify(_malpedia.get_recent_reports(limit=limit))
 
 
@@ -993,9 +1043,21 @@ def api_sample_download(session_id: str, filename: str):
 @app.route("/api/pipeline/run", methods=["POST"])
 def api_pipeline_run():
     data     = request.get_json(silent=True) or {}
-    actor_id = data.get("actor_id", "").strip()
+    actor_raw = data.get("actor_id", "")
+    if not isinstance(actor_raw, str):
+        return jsonify({"error": "actor_id must be a string"}), 400
+    actor_id = actor_raw.strip()
     if not actor_id:
         return jsonify({"error": "actor_id required"}), 400
+    seed = data.get("seed")
+    if seed is None:
+        seed = int(hashlib.sha256(actor_id.lower().encode()).hexdigest()[:8], 16)
+    try:
+        seed = int(seed)
+    except (TypeError, ValueError):
+        return jsonify({"error": "seed must be an integer"}), 400
+    if not 0 <= seed <= 0xFFFFFFFF:
+        return jsonify({"error": "seed out of range"}), 400
 
     def generate():
         # NOTE: never yield inside `finally` of an SSE generator. When the client
@@ -1006,7 +1068,7 @@ def api_pipeline_run():
         try:
             sys.path.insert(0, str(BASE_DIR / "pipeline"))
             from apt_pipeline import run_pipeline
-            for event in run_pipeline(actor_id):
+            for event in run_pipeline(actor_id, seed=seed):
                 yield f"data: {json.dumps(event)}\n\n"
                 # persist completed pipeline sample to DB
                 if event.get("status") == "complete":
@@ -1051,7 +1113,7 @@ def api_pipeline_run():
 
 @app.route("/api/pipeline/sessions")
 def api_pipeline_sessions():
-    resp = jsonify(_db.get_pipeline_sessions())
+    resp = jsonify(_db.get_pipeline_session_summaries())
     resp.headers["Cache-Control"] = "no-store"
     return resp
 
@@ -1105,8 +1167,6 @@ def api_pipeline_clear():
         "db_cleared":     db_counts,
         "errors":         errors,
     }
-    if request.headers.get("X-Requested-With") != "XMLHttpRequest":
-        return redirect(url_for("index"))
     resp = jsonify(payload)
     resp.headers["Cache-Control"] = "no-store"
     return resp
@@ -1475,7 +1535,7 @@ def api_artifact_brief(tid: str):
     return jsonify({"tid": tid.upper(), "summary": summary})
 
 
-@app.route("/api/artifacts/rebuild")
+@app.route("/api/artifacts/rebuild", methods=["POST"])
 def api_artifacts_rebuild():
     """
     SSE stream that emits real progress updates while parsing the Sigma corpus.

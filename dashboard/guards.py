@@ -20,7 +20,9 @@ Three tiny helpers, zero dependencies beyond stdlib + flask:
 """
 from __future__ import annotations
 import os
+import hmac
 from pathlib import Path
+from urllib.parse import urlsplit
 
 from flask import jsonify, request
 
@@ -50,5 +52,32 @@ def require_token():
     if not token:
         return None
     if request.headers.get("X-Peekaboo-Token") != token:
+        return jsonify({"error": "unauthorized"}), 401
+    return None
+
+
+def protect_mutation():
+    """Reject cross-site browser writes and require the optional token for API clients."""
+    token = os.getenv("PEEKABOO_API_TOKEN", "")
+    supplied = request.headers.get("X-Peekaboo-Token", "")
+    if token and supplied and hmac.compare_digest(supplied, token):
+        return None
+
+    fetch_site = request.headers.get("Sec-Fetch-Site", "").lower()
+    if fetch_site == "cross-site":
+        return jsonify({"error": "cross-site request rejected"}), 403
+
+    origin = request.headers.get("Origin", "")
+    same_origin = fetch_site == "same-origin"
+    if origin:
+        actual = urlsplit(origin)
+        expected = urlsplit(request.host_url)
+        same_origin = (actual.scheme, actual.netloc) == (expected.scheme, expected.netloc)
+        if not same_origin:
+            return jsonify({"error": "origin rejected"}), 403
+
+    # Same-origin dashboard requests are allowed without exposing the API token
+    # to JavaScript. Non-browser API clients must send the token when configured.
+    if token and not same_origin:
         return jsonify({"error": "unauthorized"}), 401
     return None

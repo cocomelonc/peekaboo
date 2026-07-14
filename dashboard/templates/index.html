@@ -5,9 +5,10 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>peekaboo // simulation lab</title>
 <link rel="icon" type="image/x-icon" href="{{ url_for('static', filename='favicon.ico') }}">
-<script src="https://cdn.jsdelivr.net/npm/marked@9/marked.min.js"></script>
-<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/styles/atom-one-dark.min.css">
-<script src="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/highlight.min.js"></script>
+<script src="{{ url_for('static', filename='vendor/marked-9.1.6/marked.min.js') }}"></script>
+<script src="{{ url_for('static', filename='vendor/dompurify-3.4.12/purify.min.js') }}"></script>
+<link rel="stylesheet" href="{{ url_for('static', filename='vendor/highlightjs-11.9.0/atom-one-dark.min.css') }}">
+<script src="{{ url_for('static', filename='vendor/highlightjs-11.9.0/highlight.min.js') }}"></script>
 <style>
 :root {
   --bg:      #15121E;
@@ -820,13 +821,30 @@ code{border-radius:6px;background:rgba(49,45,82,.65)}
   .filter-bar{gap:6px}
   .stat-val{font-size:24px}
 }
+.mobile-nav-toggle{display:none;width:36px;height:36px;padding:0;align-items:center;justify-content:center;font-size:20px}
+.nav-backdrop{display:none}
+@media(max-width:760px){
+  .sidebar{width:min(84vw,280px);transform:translateX(-105%);transition:transform .2s ease;box-shadow:12px 0 32px rgba(0,0,0,.35);overflow-y:auto}
+  .sidebar.mobile-open{transform:translateX(0)}
+  .main{margin-left:0;min-width:0}
+  .mobile-nav-toggle{display:inline-flex;flex:0 0 36px}
+  .topbar>div:nth-child(2){min-width:0;flex:1}
+  .topbar-title,.topbar-sub{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+  .topbar-actions{flex:0 0 auto}
+  .topbar-actions .btn{width:36px;padding:0;font-size:0}
+  .topbar-actions .btn::before{content:'\21bb';font-size:18px}
+  .nav-backdrop{position:fixed;inset:0;background:rgba(0,0,0,.52);z-index:90}
+  .nav-backdrop.visible{display:block}
+  .brief-panel{left:0}
+  footer{left:0!important}
+}
 </style>
 </head>
 <body>
 <div class="layout">
 
 <!-- ═══════════════════ SIDEBAR ═══════════════════ -->
-<nav class="sidebar">
+<nav class="sidebar" id="primary-sidebar">
   <div class="sb-brand">
     <div class="cat">=[=^..^=]=</div>
     <div class="name">peekaboo</div>
@@ -886,10 +904,12 @@ code{border-radius:6px;background:rgba(49,45,82,.65)}
     <span id="sb-status">ready</span>
   </div>
 </nav>
+<div class="nav-backdrop" id="nav-backdrop" onclick="setMobileNav(false)"></div>
 
 <!-- ═══════════════════ MAIN ═══════════════════ -->
 <div class="main">
 <div class="topbar">
+  <button class="btn btn-ghost mobile-nav-toggle" type="button" onclick="toggleMobileNav()" aria-label="Open navigation" aria-controls="primary-sidebar" aria-expanded="false">☰</button>
   <div>
     <div class="topbar-title" id="topbar-title">Builder</div>
     <div class="topbar-sub" id="topbar-sub">compile malware for EDR benchmarking</div>
@@ -1941,6 +1961,7 @@ function showPanel(id) {
   document.getElementById('topbar-title').textContent = title;
   document.getElementById('topbar-sub').textContent = sub;
   currentPanel = id;
+  if (window.matchMedia('(max-width:760px)').matches) setMobileNav(false);
 
   if (id === 'library' && libModules.length === 0) loadLibrary();
   if (id === 'samples')   loadSamples();
@@ -1954,6 +1975,23 @@ function showPanel(id) {
 }
 
 function refreshCurrent() { showPanel(currentPanel); }
+
+function setMobileNav(open) {
+  const sidebar = document.querySelector('.sidebar');
+  const backdrop = document.getElementById('nav-backdrop');
+  const toggle = document.querySelector('.mobile-nav-toggle');
+  sidebar?.classList.toggle('mobile-open', open);
+  backdrop?.classList.toggle('visible', open);
+  toggle?.setAttribute('aria-expanded', String(open));
+}
+
+function toggleMobileNav() {
+  setMobileNav(!document.querySelector('.sidebar')?.classList.contains('mobile-open'));
+}
+
+document.addEventListener('keydown', event => {
+  if (event.key === 'Escape') setMobileNav(false);
+});
 
 // -----------------------------------------------------------------
 // Toast
@@ -2693,12 +2731,21 @@ function setPipeStep(step, status, msg) {
 
 const TACTIC_COLORS = {'reconnaissance':'#9CA3AF','resource-development':'#A78BFA','initial-access':'#F97316','execution':'#30D158','defense-evasion':'#FFD60A','persistence':'#0A84FF','command-and-control':'#FF453A','privilege-escalation':'#FF9F0A','credential-access':'#BF5AF2','discovery':'#64D2FF','lateral-movement':'#FF8FAD','collection':'#FFD60A','exfiltration':'#0A84FF','impact':'#FF375F','unknown':'#636366'};
 
+function appendPipelineError(resultsEl, message, step='network') {
+  const div = document.createElement('div');
+  div.className = 'card card-sm apt-result-card';
+  div.innerHTML = `<div class="badge badge-red apt-err-badge">Error (${escHtml(step)})</div>
+    <div class="terminal apt-err-terminal">${escHtml(message || 'unknown error')}</div>`;
+  resultsEl.appendChild(div);
+}
+
 async function runPipeline() {
   const actorId = document.getElementById('apt-actor').value.trim();
   if (!actorId) { toast('Enter an actor or family ID', 'err'); return; }
   document.getElementById('apt-suggestions').style.display = 'none';
   resetPipelineSteps();
-  document.getElementById('apt-run-btn').disabled = true;
+  const runBtn = document.getElementById('apt-run-btn');
+  runBtn.disabled = true;
 
   const resultsEl = document.getElementById('apt-results');
   resultsEl.innerHTML = '';
@@ -2708,18 +2755,42 @@ async function runPipeline() {
   let reportsHdr     = null;
   let reportCount    = 0;
 
-  const resp = await fetch('/api/pipeline/run', {
-    method: 'POST',
-    headers: {'Content-Type':'application/json'},
-    body: JSON.stringify({actor_id: actorId})
-  });
+  let resp;
+  try {
+    resp = await fetch('/api/pipeline/run', {
+      method: 'POST',
+      headers: {'Content-Type':'application/json'},
+      body: JSON.stringify({actor_id: actorId})
+    });
+  } catch (e) {
+    appendPipelineError(resultsEl, `Could not reach the pipeline: ${e.message}`);
+    toast('Pipeline connection failed', 'error');
+    runBtn.disabled = false;
+    return;
+  }
+
+  if (!resp.ok || !resp.body) {
+    const detail = await resp.text().catch(() => '');
+    appendPipelineError(resultsEl, detail || `Pipeline returned HTTP ${resp.status}`);
+    toast(`Pipeline failed (HTTP ${resp.status})`, 'error');
+    runBtn.disabled = false;
+    return;
+  }
 
   const reader = resp.body.getReader();
   const dec    = new TextDecoder();
   let buf = '';
 
   while (true) {
-    const {done, value} = await reader.read();
+    let chunk;
+    try {
+      chunk = await reader.read();
+    } catch (e) {
+      appendPipelineError(resultsEl, `Pipeline stream interrupted: ${e.message}`);
+      toast('Pipeline stream interrupted', 'error');
+      break;
+    }
+    const {done, value} = chunk;
     if (done) break;
     buf += dec.decode(value, {stream: true});
     const lines = buf.split('\n');
@@ -3005,40 +3076,39 @@ async function runPipeline() {
     }
   }
 
-  document.getElementById('apt-run-btn').disabled = false;
-  loadPipelineSessions();
+  runBtn.disabled = false;
+  await loadPipelineSessions();
 }
 
 async function loadPipelineSessions() {
   const tbody = document.getElementById('sessions-tbody');
-  const sessions = await fetch('/api/pipeline/sessions')
-    .then(r=>r.json()).catch(()=>[]);
+  let sessions = [];
+  try {
+    const response = await fetch('/api/pipeline/sessions');
+    if (!response.ok) throw new Error(`HTTP ${response.status}`);
+    sessions = await response.json();
+  } catch (e) {
+    tbody.innerHTML = `<tr><td colspan="7" class="text-red text-sm tbl-empty-cell">failed to load sessions: ${escHtml(e.message)}</td></tr>`;
+    return;
+  }
   if (!sessions.length) {
     tbody.innerHTML = '<tr><td colspan="7" class="text-dim text-sm tbl-empty-cell">no sessions yet</td></tr>';
     return;
   }
   tbody.innerHTML = sessions.slice(0,20).map(s => {
     const st  = s.status === 'success' ? 'badge-green' : (s.status === 'running' ? 'badge-yellow' : 'badge-red');
-    const nR  = s.report_count ?? (s.ttps?.length >= 0 ? '?' : '?');
-    const nT  = Array.isArray(s.ttps) ? s.ttps.length : (s.ttps || 0);
+    const nR  = s.report_count ?? 0;
+    const nT  = s.ttp_count ?? 0;
     return `<tr>
       <td class="mono text-xs" style="cursor:pointer" onclick="openSessionDrawer('${s.session_id}')">${s.session_id}</td>
       <td style="cursor:pointer" onclick="openSessionDrawer('${s.session_id}')">${escHtml(s.actor_id||'-')}</td>
-      <td class="text-dim text-xs" id="rcount-${s.session_id}">…</td>
+      <td class="text-dim text-xs">${nR}</td>
       <td style="cursor:pointer" onclick="openSessionDrawer('${s.session_id}')">${nT}</td>
       <td><span class="badge ${st}">${s.status}</span></td>
       <td class="text-xs text-dim">${(s.started||'').slice(0,16)}</td>
       <td><button class="btn-brief" onclick="showBrief('${escAttr(s.session_id)}','apt')" title="Campaign brief">brief</button></td>
     </tr>`;
   }).join('');
-  // backfill report counts async
-  sessions.slice(0,20).forEach(s => {
-    fetch(`/api/pipeline/session/${s.session_id}`)
-      .then(r=>r.json()).then(d => {
-        const el = document.getElementById(`rcount-${s.session_id}`);
-        if (el) el.textContent = (d.reports||[]).length || (d.report_sources||[]).length || 0;
-      }).catch(()=>{});
-  });
 }
 
 async function clearPipelineSessions() {
@@ -3188,7 +3258,9 @@ async function openSessionDrawer(sessionId) {
                 onclick="showBrief('${escAttr(t.id)}','art')" title="Detection brief">${escHtml(t.id)}</span>
           <span style="flex:1">${escHtml(t.name||t.id)}</span>
           <span class="badge" style="background:${col}22;color:${col};font-size:10px;white-space:nowrap">${escHtml(t.tactic)}</span>
-          ${t.source ? `<span class="text-xs text-dim">${escHtml(t.source)}</span>` : ''}
+          ${t.report_url
+            ? `<a class="text-xs" style="color:var(--blue)" href="${escAttr(t.report_url)}" target="_blank" rel="noopener noreferrer" title="${escAttr(t.report_title || t.report_url)}">report ↗</a>`
+            : (t.source ? `<span class="text-xs text-dim">${escHtml(t.source)}</span>` : '')}
         </div>`;
       }).join('')}</div>`;
   }
@@ -4722,6 +4794,7 @@ async function sendChat() {
         try {
           const ev = JSON.parse(raw);
           if (ev.status === 'canned')          { setChatStatus('instant', '⚡ instant'); }
+          else if (ev.status === 'rag')        { setChatStatus('rag', ev.msg || 'grounding...'); }
           else if (ev.status === 'generating') { setChatStatus('',        ev.msg || 'thinking...'); }
           else if (ev.text) {
             if (!full) {
@@ -4729,7 +4802,11 @@ async function sendChat() {
               aiDiv.classList.remove('pending');
             }
             full += ev.text;
-            aiDiv.innerHTML = marked.parse(full);
+            aiDiv.innerHTML = renderChatMarkdown(full);
+            aiDiv.querySelectorAll('a[href]').forEach(link => {
+              link.target = '_blank';
+              link.rel = 'noopener noreferrer';
+            });
             scrollChat();
           } else if (ev.error) {
             aiDiv.classList.remove('pending');
@@ -4760,6 +4837,18 @@ function appendChatMsg(role, text) {
   scrollChat();
   return d;
 }
+
+function renderChatMarkdown(text) {
+  if (typeof marked === 'undefined' || typeof DOMPurify === 'undefined') {
+    return escHtml(text).replace(/\n/g, '<br>');
+  }
+  return DOMPurify.sanitize(marked.parse(text), {
+    USE_PROFILES: {html: true},
+    FORBID_TAGS: ['style', 'iframe', 'object', 'embed', 'form'],
+    FORBID_ATTR: ['style'],
+    ALLOW_DATA_ATTR: false,
+  });
+}
 function scrollChat() {
   const el = document.getElementById('chat-msgs');
   el.scrollTop = el.scrollHeight;
@@ -4779,6 +4868,36 @@ function escHtml(s) {
 }
 function escAttr(s) {
   return String(s||'').replace(/"/g,'&quot;').replace(/'/g,'&#39;');
+}
+
+async function readSSE(response, onData) {
+  if (!response.ok || !response.body) {
+    const detail = await response.text().catch(() => '');
+    throw new Error(detail || `HTTP ${response.status}`);
+  }
+  const reader = response.body.getReader();
+  const decoder = new TextDecoder();
+  let buffer = '';
+  while (true) {
+    const {done, value} = await reader.read();
+    buffer += decoder.decode(value || new Uint8Array(), {stream: !done});
+    const lines = buffer.split('\n');
+    buffer = lines.pop() || '';
+    for (const line of lines) {
+      if (!line.startsWith('data:')) continue;
+      const raw = line.slice(5).trim();
+      if (!raw || raw === '[DONE]') continue;
+      let event;
+      try {
+        event = JSON.parse(raw);
+      } catch (e) {
+        console.warn('invalid SSE event', e);
+        continue;
+      }
+      onData(event);
+    }
+    if (done) break;
+  }
 }
 
 // -----------------------------------------------------------------
@@ -4840,7 +4959,7 @@ async function loadArtifacts() {
   }
 }
 
-function artRebuild() {
+async function artRebuild() {
   const rebuildRow = document.getElementById('art-rebuild-row');
   const fill       = document.getElementById('art-prog-fill');
   const msg        = document.getElementById('art-prog-msg');
@@ -4851,32 +4970,26 @@ function artRebuild() {
   fill.style.width = '0%';
   msg.textContent = 'Connecting…';
 
-  const es = new EventSource('/api/artifacts/rebuild');
-  es.onmessage = ev => {
-    if (ev.data === '[DONE]') { es.close(); return; }
-    let d;
-    try { d = JSON.parse(ev.data); } catch { return; }
-    if (d.status === 'running') {
-      msg.textContent = d.msg || 'Parsing…';
-      if (d.total > 0) fill.style.width = Math.round(d.current / d.total * 100) + '%';
-    } else if (d.status === 'done') {
-      fill.style.width = '100%';
-      msg.textContent = d.msg || 'Done';
-      es.close();
-      if (btn) btn.disabled = false;
-      setTimeout(() => { rebuildRow.style.display = 'none'; loadArtifacts(); }, 800);
-    } else if (d.status === 'error') {
-      msg.textContent = 'Error: ' + d.msg;
-      fill.style.background = 'var(--red)';
-      es.close();
-      if (btn) btn.disabled = false;
-    }
-  };
-  es.onerror = () => {
-    msg.textContent = 'Connection error - check console';
-    es.close();
+  try {
+    const response = await fetch('/api/artifacts/rebuild', {method: 'POST'});
+    await readSSE(response, d => {
+      if (d.status === 'running') {
+        msg.textContent = d.msg || 'Parsing…';
+        if (d.total > 0) fill.style.width = Math.round(d.current / d.total * 100) + '%';
+      } else if (d.status === 'done') {
+        fill.style.width = '100%';
+        msg.textContent = d.msg || 'Done';
+        setTimeout(() => { rebuildRow.style.display = 'none'; loadArtifacts(); }, 800);
+      } else if (d.status === 'error') {
+        throw new Error(d.msg || 'artifact rebuild failed');
+      }
+    });
+  } catch (e) {
+    msg.textContent = 'Error: ' + e.message;
+    fill.style.background = 'var(--red)';
+  } finally {
     if (btn) btn.disabled = false;
-  };
+  }
 }
 
 function _artRenderStats(s) {

@@ -13,6 +13,7 @@ from __future__ import annotations
 import hashlib
 import json
 import math
+import os
 import sys
 import time
 from pathlib import Path
@@ -20,10 +21,17 @@ from pathlib import Path
 _BASE          = Path(__file__).parent.parent
 _LIBRARY_CACHE = _BASE / "data" / "library_cache.json"
 _EMB_CACHE     = _BASE / "data" / "post_embeddings.json"  # legacy fallback
-_DB_PATH       = Path(__file__).parent / "peekaboo.db"
+_DB_PATH       = Path(os.getenv("PEEKABOO_DB_PATH", Path(__file__).parent / "peekaboo.db"))
 
-OLLAMA_URL  = "http://localhost:11434/api/embed"
-EMBED_MODEL = "nomic-embed-text"
+import cfg as _cfg
+
+_OLLAMA_CFG = _cfg.get("ollama_config") or {}
+_EMBED_BASE = (_OLLAMA_CFG.get("embedding_base_url")
+               or _OLLAMA_CFG.get("base_url")
+               or "http://localhost:11434").rstrip("/")
+OLLAMA_URL  = f"{_EMBED_BASE}/api/embed"
+EMBED_MODEL = _OLLAMA_CFG.get("embedding_model") or "nomic-embed-text"
+_BEARER_TOKEN = str(_OLLAMA_CFG.get("bearer_token") or "").strip()
 
 
 # --------------------------------------------------------------------------- #
@@ -34,10 +42,13 @@ def _embed(texts: list[str]) -> list[list[float]] | None:
     try:
         import urllib.request
         payload = json.dumps({"model": EMBED_MODEL, "input": texts}).encode()
+        headers = {"Content-Type": "application/json"}
+        if _BEARER_TOKEN:
+            headers["Authorization"] = f"Bearer {_BEARER_TOKEN}"
         req = urllib.request.Request(
             OLLAMA_URL,
             data=payload,
-            headers={"Content-Type": "application/json"},
+            headers=headers,
             method="POST",
         )
         with urllib.request.urlopen(req, timeout=60) as resp:
@@ -129,6 +140,7 @@ def _load_from_db() -> tuple[list[dict], dict[str, list[float]], dict[str, list[
             "category":    r.get("category", ""),
             "attack_ids":  r.get("attack_ids", []),
             "source_type": r.get("source_type", "blog"),
+            "src_path":    r.get("src_path", ""),
         })
     # build ttps index: slug -> {attack_ids, tactics, confidence, rationale}
     # for multi-model rows, high-confidence entry wins over low
@@ -325,6 +337,7 @@ def find_related_posts(query: str, max_results: int = 8,
             "category":    post.get("category", ""),
             "attack_ids":  post.get("attack_ids", []),
             "source_type": post.get("source_type", "blog"),
+            "src_path":    post.get("src_path", ""),
             "tags":        tags.get(slug, []),
             "ttps":        ttps.get(slug),
             "summary":     summaries.get(slug, ""),
@@ -354,8 +367,11 @@ def find_posts_by_ttp(attack_id: str) -> list[dict]:
             "blog_url":   p.get("blog_url", ""),
             "category":   p.get("category", ""),
             "attack_ids": p.get("attack_ids", []),
+            "src_path":   p.get("src_path", ""),
+            "source_type": p.get("source_type", "blog"),
             "tags":       tags.get(slug, []),
             "ttps":       t,
+            "summary":    _load_summaries().get(slug, ""),
         })
     results.sort(key=lambda x: _conf_rank.get(x["ttps"]["confidence"], 2))
     return results
@@ -439,9 +455,8 @@ def build_post_embeddings(force: bool = False) -> bool:
 def available() -> bool:
     try:
         import urllib.request
-        req = urllib.request.Request(
-            "http://localhost:11434/api/tags", method="GET"
-        )
+        headers = {"Authorization": f"Bearer {_BEARER_TOKEN}"} if _BEARER_TOKEN else {}
+        req = urllib.request.Request(f"{_EMBED_BASE}/api/tags", headers=headers, method="GET")
         with urllib.request.urlopen(req, timeout=3) as resp:
             data = json.loads(resp.read())
             names = [m["name"] for m in data.get("models", [])]

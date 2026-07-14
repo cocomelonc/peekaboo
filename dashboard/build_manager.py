@@ -19,7 +19,10 @@ read line-by-line off the subprocess pipe so subscribers see progress live.
 """
 from __future__ import annotations
 
+import os
 import queue
+import shutil
+import signal
 import subprocess
 import sys
 import threading
@@ -71,12 +74,20 @@ class _Live:
 class BuildManager:
     """Thread-safe registry of active builds + a clean Flask-facing API."""
 
-    def __init__(self, base_dir: Path, malware_dir: Path, peekaboo_py: Path):
-        self._base        = base_dir
-        self._malware_dir = malware_dir
-        self._peekaboo    = peekaboo_py
+    def __init__(self, base_dir: Path, malware_dir: Path, peekaboo_py: Path,
+                 artifacts_dir: Path | None = None, timeout: int = 180):
+        self._base        = base_dir.resolve()
+        self._malware_dir = malware_dir.resolve()
+        self._peekaboo    = peekaboo_py.resolve()
+        self._artifacts   = (artifacts_dir or (base_dir / "builds")).resolve()
+        if self._artifacts == self._base or self._artifacts.parent == self._artifacts:
+            raise ValueError("build artifact directory must be a dedicated subdirectory")
+        self._timeout     = timeout
         self._builds:     dict[str, _Live] = {}
         self._lock        = threading.Lock()
+        # peekaboo.py writes to module-local filenames, so concurrent builds
+        # must not share that workspace.
+        self._run_lock    = threading.Lock()
 
     # ------------------------------------------------------------------ submit
 
@@ -151,7 +162,7 @@ class BuildManager:
                 except queue.Empty:
                     # 30s of silence - peekaboo.py is doing heavy work.
                     # Send a heartbeat to keep the SSE connection alive and loop.
-                    yield {"type": EV_STATE, "status": "running", "heartbeat": True}
+                    yield {"type": EV_STATE, "status": live.status, "heartbeat": True}
                     continue
                 yield ev
                 if ev.get("type") == EV_END:
@@ -169,8 +180,11 @@ class BuildManager:
         stored = params.get("out_path", "")
         if stored:
             p = Path(stored) if Path(stored).is_absolute() else self._base / stored
-            if p.exists():
-                return p
+            resolved = p.resolve()
+            allowed = (resolved.is_relative_to(self._base)
+                       or resolved.is_relative_to(self._artifacts))
+            if allowed and resolved.is_file():
+                return resolved
         # Legacy fallback: derive from params for builds that pre-date out_path
         if params.get("malware") == "stealer":
             p = self._malware_dir / "stealer" / params.get("stealer", "telegram") / "peekaboo.exe"
@@ -195,6 +209,14 @@ class BuildManager:
                           "type": "persistence"})
         return files
 
+    def clear_artifacts(self) -> int:
+        """Delete immutable Builder outputs without touching pipeline samples."""
+        if not self._artifacts.exists():
+            return 0
+        files = sum(1 for path in self._artifacts.rglob("*") if path.is_file())
+        shutil.rmtree(self._artifacts)
+        return files
+
     # ------------------------------------------------------------- internals
 
     def _publish(self, live: _Live, ev: dict) -> None:
@@ -210,6 +232,12 @@ class BuildManager:
                 pass
 
     def _run(self, build_id: str) -> None:
+        # The generator writes into shared module directories. Keep that
+        # mutable phase serialized, then snapshot outputs per build.
+        with self._run_lock:
+            self._run_serial(build_id)
+
+    def _run_serial(self, build_id: str) -> None:
         with self._lock:
             live = self._builds.get(build_id)
         if not live:
@@ -221,7 +249,7 @@ class BuildManager:
 
         p = live.params
         cmd = [
-            "python3", str(self._peekaboo),
+            sys.executable, str(self._peekaboo),
             "-p", p.get("payload",     "meow"),
             "-e", p.get("encryption",  "speck"),
             "-m", p.get("malware",     "injection"),
@@ -230,12 +258,31 @@ class BuildManager:
             "-r", p.get("persistence", "none"),
         ]
 
+        if p.get("malware") == "stealer":
+            source_dir = self._malware_dir / "stealer" / p.get("stealer", "telegram")
+        else:
+            source_dir = self._malware_dir / "injection" / p.get("injection", "virtualallocex")
+        expected_main = source_dir / "peekaboo.exe"
+        expected_persistence = source_dir / "persistence.exe"
+
+        # A successful subprocess return is not enough: peekaboo.py handles
+        # compiler failures internally. Remove stale outputs so only files
+        # produced by this invocation can satisfy the postcondition.
+        for stale in (expected_main, expected_persistence):
+            try:
+                stale.unlink(missing_ok=True)
+            except OSError as exc:
+                self._finalize(live, status="error", returncode=-1,
+                               output=f"could not clear stale output {stale}: {exc}")
+                return
+
         # peekaboo.py runs from the project root so its relative paths resolve.
         try:
             proc = subprocess.Popen(
                 cmd, cwd=str(self._base),
                 stdout=subprocess.PIPE, stderr=subprocess.STDOUT,
                 text=True, bufsize=1,
+                start_new_session=True,
             )
         except Exception as exc:
             self._finalize(live, status="error", returncode=-1,
@@ -243,36 +290,92 @@ class BuildManager:
             return
 
         out_lines: list[str] = []
+        read_error: list[Exception] = []
+
+        def pump_output() -> None:
+            try:
+                assert proc.stdout is not None
+                for raw in proc.stdout:
+                    line = raw.rstrip("\n")
+                    out_lines.append(line)
+                    live.output = "\n".join(out_lines)
+                    self._publish(live, {"type": EV_LINE, "text": line})
+            except Exception as exc:
+                read_error.append(exc)
+
+        reader = threading.Thread(target=pump_output, daemon=True)
+        reader.start()
+
+        def close_output() -> None:
+            try:
+                if proc.stdout is not None:
+                    proc.stdout.close()
+            except OSError:
+                pass
+
         try:
-            # Hard wall-clock timeout: 180s for the full peekaboo build
-            for raw in iter(proc.stdout.readline, ""):  # type: ignore[union-attr]
-                line = raw.rstrip("\n")
-                out_lines.append(line)
-                live.output = "\n".join(out_lines)
-                self._publish(live, {"type": EV_LINE, "text": line})
-            proc.wait(timeout=180)
+            proc.wait(timeout=self._timeout)
         except subprocess.TimeoutExpired:
-            proc.kill()
+            try:
+                os.killpg(proc.pid, signal.SIGKILL)
+            except (OSError, ProcessLookupError):
+                proc.kill()
+            proc.wait()
+            reader.join(timeout=5)
+            close_output()
+            output = "\n".join([*out_lines, f"Build timed out after {self._timeout}s."])
             self._finalize(live, status="timeout", returncode=-1,
-                           output="Build timed out after 180s.")
+                           output=output)
             return
         except Exception as exc:
+            try:
+                os.killpg(proc.pid, signal.SIGKILL)
+            except (OSError, ProcessLookupError):
+                proc.kill()
+            proc.wait()
+            reader.join(timeout=5)
+            close_output()
             self._finalize(live, status="error", returncode=-1, output=str(exc))
+            return
+
+        reader.join(timeout=5)
+        if reader.is_alive():
+            close_output()
+            reader.join(timeout=1)
+        else:
+            close_output()
+        if read_error:
+            self._finalize(live, status="error", returncode=-1,
+                           output=f"output reader failed: {read_error[0]}")
             return
 
         rc = proc.returncode
         status = "success" if rc == 0 else "failed"
 
-        # Once successful, fix the out_path so download endpoints are stable
-        # even after the in-memory entry is evicted.
         if status == "success":
-            mal = p.get("malware", "injection")
-            if mal == "stealer":
-                bin_path = self._malware_dir / "stealer" / p.get("stealer", "telegram") / "peekaboo.exe"
+            if not expected_main.is_file() or expected_main.stat().st_size == 0:
+                status = "failed"
+                out_lines.append("Builder exited successfully but produced no peekaboo.exe.")
             else:
-                bin_path = self._malware_dir / "injection" / p.get("injection", "virtualallocex") / "peekaboo.exe"
-            with self._lock:
-                live.params = dict(p, out_path=str(bin_path.relative_to(self._base)))
+                try:
+                    build_dir = self._artifacts / build_id
+                    build_dir.mkdir(parents=True, exist_ok=False)
+                    bin_path = build_dir / "peekaboo.exe"
+                    shutil.copy2(expected_main, bin_path)
+                    if (p.get("persistence") != "none"
+                            and expected_persistence.is_file()
+                            and expected_persistence.stat().st_size > 0):
+                        shutil.copy2(expected_persistence, build_dir / "persistence.exe")
+                    with self._lock:
+                        try:
+                            stored_path = str(bin_path.relative_to(self._base))
+                        except ValueError:
+                            stored_path = str(bin_path)
+                        live.params = dict(p, out_path=stored_path)
+                except Exception as exc:
+                    status = "error"
+                    rc = -1
+                    out_lines.append(f"Could not preserve build artifacts: {exc}")
 
         self._finalize(live, status=status, returncode=rc, output="\n".join(out_lines))
 

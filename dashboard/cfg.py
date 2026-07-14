@@ -26,6 +26,8 @@ _SCHEMA: dict[str, dict[str, str]] = {
     "ollama_config": {
         "base_url":                "OLLAMA_BASE_URL",
         "model":                   "OLLAMA_MODEL",
+        "embedding_base_url":      "OLLAMA_EMBED_BASE_URL",
+        "embedding_model":         "OLLAMA_EMBED_MODEL",
         "bearer_token":            "OLLAMA_BEARER_TOKEN",
         "temperature":             "OLLAMA_TEMPERATURE",
         "top_p":                   "OLLAMA_TOP_P",
@@ -73,6 +75,7 @@ _SCHEMA: dict[str, dict[str, str]] = {
     },
     "apt_pipeline_config": {
         "compile_each":     "APT_PIPELINE_COMPILE_EACH",
+        "max_stages":       "APT_PIPELINE_MAX_STAGES",
         "ollama_narration": "APT_PIPELINE_OLLAMA_NARRATION",
         "ollama_base_url":  "APT_PIPELINE_OLLAMA_BASE_URL",
         "ollama_model":     "APT_PIPELINE_OLLAMA_MODEL",

@@ -4,22 +4,33 @@ single file: dashboard/peekaboo.db
 """
 from __future__ import annotations
 import json
+import os
 import sqlite3
+from contextlib import contextmanager
 from datetime import datetime
 from pathlib import Path
+from typing import Iterator
 
-DB_PATH = Path(__file__).parent / "peekaboo.db"
+DB_PATH = Path(os.getenv("PEEKABOO_DB_PATH", Path(__file__).parent / "peekaboo.db"))
 
 # --------------------------------------------------------------------------- #
 #  Connection                                                                   #
 # --------------------------------------------------------------------------- #
 
-def _conn() -> sqlite3.Connection:
+@contextmanager
+def _conn() -> Iterator[sqlite3.Connection]:
     c = sqlite3.connect(DB_PATH, check_same_thread=False)
     c.row_factory = sqlite3.Row
     c.execute("PRAGMA journal_mode=WAL")   # safe for concurrent Flask threads
     c.execute("PRAGMA foreign_keys=ON")
-    return c
+    try:
+        yield c
+        c.commit()
+    except Exception:
+        c.rollback()
+        raise
+    finally:
+        c.close()
 
 
 # --------------------------------------------------------------------------- #
@@ -558,6 +569,38 @@ def get_pipeline_sessions(limit: int = 100) -> list[dict]:
     return [_psession_row(r) for r in rows]
 
 
+def get_pipeline_session_summaries(limit: int = 100) -> list[dict]:
+    """Compact rows for APT history; full params/TTPs belong to the detail route."""
+    with _conn() as db:
+        rows = db.execute(
+            """
+            SELECT
+              p.session_id,
+              p.actor_id,
+              p.started,
+              p.finished,
+              p.status,
+              CASE WHEN json_valid(p.ttps)
+                   THEN COALESCE(json_array_length(p.ttps), 0) ELSE 0 END AS ttp_count,
+              CASE WHEN json_valid(p.params)
+                   THEN COALESCE(json_array_length(json_extract(p.params, '$.stages')), 0)
+                   ELSE 0 END AS stage_count,
+              CASE
+                WHEN EXISTS (SELECT 1 FROM reports r WHERE r.session_id = p.session_id)
+                  THEN (SELECT COUNT(*) FROM reports r WHERE r.session_id = p.session_id)
+                WHEN json_valid(p.params)
+                  THEN COALESCE(json_array_length(json_extract(p.params, '$.report_sources')), 0)
+                ELSE 0
+              END AS report_count
+            FROM pipeline_sessions p
+            ORDER BY p.started DESC
+            LIMIT ?
+            """,
+            (limit,),
+        ).fetchall()
+    return [dict(r) for r in rows]
+
+
 def get_pipeline_session(session_id: str) -> dict | None:
     with _conn() as db:
         row = db.execute(
@@ -582,7 +625,7 @@ def migrate_json(json_path: Path) -> int:
         for e in entries:
             if not e.get("id"):
                 continue
-            db.execute(
+            cur = db.execute(
                 """
                 INSERT OR IGNORE INTO builds
                   (id, params, status, output, returncode, created, start_time, end_time)
@@ -599,7 +642,7 @@ def migrate_json(json_path: Path) -> int:
                     e.get("end_time"),
                 ),
             )
-            imported += 1
+            imported += max(cur.rowcount, 0)
     return imported
 
 
@@ -631,7 +674,7 @@ def migrate_samples(samples_dir: Path, pipeline_dir: Path | None = None) -> int:
                     except Exception:
                         pass
             created = datetime.fromtimestamp(d.stat().st_mtime).isoformat()
-            db.execute(
+            cur = db.execute(
                 """
                 INSERT OR IGNORE INTO samples
                   (session_id, files, total_size, created, actor, ttps, status)
@@ -647,7 +690,7 @@ def migrate_samples(samples_dir: Path, pipeline_dir: Path | None = None) -> int:
                     meta.get("status", "built"),
                 ),
             )
-            imported += 1
+            imported += max(cur.rowcount, 0)
     return imported
 
 
@@ -1847,7 +1890,7 @@ def get_kb_embeddings_all(model: str = "nomic-embed-text") -> list[dict]:
         rows = db.execute(
             """
             SELECT d.slug, d.title, d.date, d.blog_url, d.category, d.attack_ids,
-                   d.source_type, e.vector
+                   d.src_path, d.source_type, e.vector
             FROM kb_embeddings e
             JOIN kb_docs d ON d.id = e.doc_id
             WHERE e.model = ?

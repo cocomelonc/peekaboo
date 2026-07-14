@@ -74,12 +74,17 @@ _TACTIC_MAP = {
 
 # Kill-chain ordering: stages render in this order in the manifest and UI.
 _KILL_CHAIN_ORDER = [
+    "reconnaissance",
+    "resource-development",
+    "initial-access",
     "discovery",
     "execution",
     "privilege-escalation",
     "defense-evasion",
     "credential-access",
     "persistence",
+    "lateral-movement",
+    "collection",
     "command-and-control",
     "exfiltration",
     "impact",
@@ -244,11 +249,15 @@ def _precomputed_report_ttps(actor_data: dict) -> list[dict]:
             "mentions": 0,
             "confidence": row.get("confidence", "low"),
             "source": "precomputed-reports",
+            "report_url": row.get("report_url", ""),
+            "report_title": row.get("report_title", ""),
         })
         cur["mentions"] += 1
         if conf_rank.get(row.get("confidence", "low"), 1) > conf_rank.get(cur.get("confidence", "low"), 1):
             cur["confidence"] = row.get("confidence", "low")
             cur["evidence"] = row.get("evidence", "")[:160]
+            cur["report_url"] = row.get("report_url", "")
+            cur["report_title"] = row.get("report_title", "")
 
     order_key = {t: i for i, t in enumerate(_KILL_CHAIN_ORDER)}
     ttps = list(by_tid.values())
@@ -473,7 +482,8 @@ def _recent_module_ids(limit: int = 10) -> set[str]:
 
 
 def _pick_module(candidates: list[dict], ttp: dict,
-                 used_srcs: set[str], recent_ids: set[str]) -> dict | None:
+                 used_srcs: set[str], recent_ids: set[str],
+                 rng: random.Random) -> dict | None:
     """
     Weighted random pick from the top-5 candidates.
 
@@ -499,7 +509,7 @@ def _pick_module(candidates: list[dict], ttp: dict,
             s -= 10
         if m.get("id") in recent_ids:
             s -= 3
-        s += random.uniform(0, 2.0)
+        s += rng.uniform(0, 2.0)
         scored.append((m, s))
 
     scored.sort(key=lambda x: x[1], reverse=True)
@@ -507,28 +517,66 @@ def _pick_module(candidates: list[dict], ttp: dict,
 
     min_s = top[-1][1]
     weights = [max(0.1, s - min_s + 1.0) for _, s in top]
-    return random.choices([m for m, _ in top], weights=weights, k=1)[0]
+    return rng.choices([m for m, _ in top], weights=weights, k=1)[0]
 
 
-def agent_select_modules(ttps: list[dict]) -> dict:
+def _prioritize_ttps(ttps: list[dict], limit: int) -> list[dict]:
+    """Select evidence-rich TTPs while retaining kill-chain tactic diversity."""
+    confidence = {"high": 3, "medium": 2, "low": 1}
+    buckets: dict[str, list[dict]] = {}
+    for ttp in ttps:
+        buckets.setdefault(ttp.get("tactic", "unknown"), []).append(ttp)
+    for bucket in buckets.values():
+        bucket.sort(key=lambda item: (
+            -confidence.get(item.get("confidence", "low"), 1),
+            -int(item.get("mentions", 1)),
+            item.get("id", ""),
+        ))
+
+    chosen: list[dict] = []
+    while len(chosen) < limit:
+        added = False
+        for tactic in _KILL_CHAIN_ORDER:
+            bucket = buckets.get(tactic, [])
+            if bucket:
+                chosen.append(bucket.pop(0))
+                added = True
+                if len(chosen) == limit:
+                    break
+        if not added:
+            break
+
+    order_key = {tactic: idx for idx, tactic in enumerate(_KILL_CHAIN_ORDER)}
+    chosen.sort(key=lambda item: (order_key.get(item.get("tactic", "unknown"), 99), item.get("id", "")))
+    return chosen
+
+
+def agent_select_modules(ttps: list[dict], *, rng: random.Random | None = None,
+                         max_stages: int = 12, use_recent: bool = True) -> dict:
     """
     For each TTP, pick a KB module and produce a kill-chain stage record.
-    Selection is randomized (weighted by score) so repeated runs of the same
-    actor produce different malware assemblies - better coverage for blue teams.
+    Selection is weighted by score. A supplied RNG makes demo runs reproducible;
+    callers without a seed retain varied assemblies for broader coverage.
     """
     registry, by_aid = _index_registry()
-    recent_ids  = _recent_module_ids()
+    rng = rng or random.Random()
+    recent_ids  = _recent_module_ids() if use_recent else set()
     used_srcs: set[str] = set()   # no duplicate source files within one session
     stages: list[dict] = []
 
-    for ttp in ttps:
+    # Drop TTPs that cannot map to a local module before applying the cap.
+    matchable = [
+        ttp for ttp in ttps
+        if by_aid.get(ttp["id"], []) or by_aid.get(ttp["id"].split(".")[0], [])
+    ]
+    for ttp in _prioritize_ttps(matchable, max_stages):
         aid  = ttp["id"]
         base = aid.split(".")[0]
         candidates = by_aid.get(aid, []) or by_aid.get(base, [])
         if not candidates:
             continue
 
-        best = _pick_module(candidates, ttp, used_srcs, recent_ids)
+        best = _pick_module(candidates, ttp, used_srcs, recent_ids, rng)
         if best is None:
             continue
 
@@ -541,6 +589,8 @@ def agent_select_modules(ttps: list[dict]) -> dict:
             "ttp_name":     ttp.get("name", aid),
             "tactic":       ttp.get("tactic", "unknown"),
             "evidence":     ttp.get("evidence", ""),
+            "report_url":   ttp.get("report_url", ""),
+            "report_title": ttp.get("report_title", ""),
             "mentions":     ttp.get("mentions", 1),
             "module_id":    best["id"],
             "module_slug":  best.get("slug", best["id"]),
@@ -665,7 +715,8 @@ def _compile_one(stage: dict, out_dir: Path) -> tuple[Path | None, str, str]:
 
 def agent_build_stages(stages: list[dict], session_id: str,
                        compile_each: bool = False,
-                       detection: dict | None = None) -> tuple[list[Path], dict]:
+                       detection: dict | None = None,
+                       seed: int | None = None) -> tuple[list[Path], dict]:
     """
     Copy each stage's source into samples/{sid}/ with a kill-chain prefix and
     write a manifest.json. Optionally invoke the matching compiler per stage.
@@ -748,6 +799,7 @@ def agent_build_stages(stages: list[dict], session_id: str,
         "built_at":    datetime.now().isoformat(),
         "kill_chain":  _KILL_CHAIN_ORDER,
         "compile_each": compile_each,
+        "seed":         seed,
         "detection":   detection or {},
         "stages":      stages,
         # quick rollups so the UI can render counts without re-scanning stages
@@ -860,7 +912,7 @@ def agent_detection_overlay(stages: list[dict]) -> dict:
 
 # --- Main pipeline -----------------------------------------------------------
 
-def run_pipeline(actor_id: str) -> Generator[dict, None, None]:
+def run_pipeline(actor_id: str, seed: int | None = None) -> Generator[dict, None, None]:
     session_id  = uuid.uuid4().hex[:8]
     session_dir = _SESSIONS / session_id
     session_dir.mkdir(parents=True, exist_ok=True)
@@ -876,6 +928,11 @@ def run_pipeline(actor_id: str) -> Generator[dict, None, None]:
     use_ollama   = _truthy(pipeline_cfg.get("ollama_narration", False))
     ollama_url   = pipeline_cfg.get("ollama_base_url") or "http://localhost:11434"
     ollama_model = pipeline_cfg.get("ollama_model")    or "qwen3:0.6b"
+    try:
+        max_stages = max(1, min(int(pipeline_cfg.get("max_stages") or 12), 30))
+    except (TypeError, ValueError):
+        max_stages = 12
+    rng = random.Random(seed)
 
     # 1. Fetch actor / family
     yield {"step": 1, "status": "running", "msg": f"fetching actor data: {actor_id}"}
@@ -927,7 +984,10 @@ def run_pipeline(actor_id: str) -> Generator[dict, None, None]:
 
     # 4. Select per-TTP modules
     yield {"step": 4, "status": "running", "msg": "mapping each TTP to a KB module…"}
-    sel = agent_select_modules(ttps)
+    sel = agent_select_modules(ttps, rng=rng, max_stages=max_stages,
+                               use_recent=seed is None)
+    sel["seed"] = seed
+    sel["max_stages"] = max_stages
     stages = sel["stages"]
 
     # Detection overlay: turn the attack chain into a blue-team hunt sheet.
@@ -966,7 +1026,8 @@ def run_pipeline(actor_id: str) -> Generator[dict, None, None]:
 
     files, manifest = agent_build_stages(stages, session_id,
                                          compile_each=compile_each,
-                                         detection=detection)
+                                         detection=detection,
+                                         seed=seed)
     finished = datetime.now().isoformat()
 
     if files:
