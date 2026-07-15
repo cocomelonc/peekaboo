@@ -28,7 +28,7 @@ peekaboo is a modular framework designed to safely emulate malware behavior. It 
 - **MITRE ATT&CK R&D** - browse 200+ blog post techniques mapped to ATT&CK IDs with inline source code, LLM-extracted TTPs, and per-post GPU-precomputed briefs.
 - **Malpedia integration** - threat actor and malware family lookup with semantic blog post matching via local LLM embeddings.
 - **AI assistant** - direct Ollama gateway; one canned answer for "what is Peekaboo?", everything else streamed live from Ollama; no RAG, no DB lookups at chat time.
-- **APT campaign pipeline** - the research-to-detection spine: Malpedia actor -> threat reports -> TTP extraction -> module selection -> binary compile -> **detection overlay** (per-TTP Sigma rules, EventIDs, and coverage gaps for defenders).
+- **APT campaign pipeline** - the research-to-detection spine: Malpedia actor -> threat reports -> TTP extraction -> module selection -> binary compile -> **detection overlay**, visualized as an interactive tactic-lane graph for campaign analysis, threat hunting, and evidence review.
 - **YARA rule generator** - auto-generate YARA rules from compiled binaries or uploaded samples.
 - **VirusTotal scanner** - submit binaries for AV detection scoring; lookup by SHA256; poll analysis results.
 - **Artifact Map** - 400+ ATT&CK techniques cross-referenced with 4,000+ Sigma rules; per-technique EventID coverage, registry keys, processes, command-line indicators; GPU-precomputed detection briefs per technique.
@@ -87,7 +87,7 @@ cd dashboard && python3 app.py
 | **Shellcode** | Parse, transform, encode, analyse and reformat shellcode in 11 output formats |
 | **Module Library** | Browse 190+ malware-research modules sourced from the meow knowledge base |
 | **Samples** | Upload and manage compiled samples organized by session |
-| **APT Campaign** | Research-to-detection pipeline: actor -> reports -> TTP extraction -> module selection -> binary compile -> detection overlay (Sigma/EventID coverage + blind spots) |
+| **APT Campaign** | Research-to-detection pipeline with an interactive Campaign/Hunt/Evidence graph, compiled implementations, report evidence, and Sigma/EventID coverage + blind spots |
 | **VirusTotal** | Submit binaries to VirusTotal for AV detection scoring; lookup by SHA256; poll analysis |
 | **YARA** | Auto-generate YARA rules from any binary (From Build, From Session, or Upload) |
 | **Artifact Map** | 400+ ATT&CK techniques cross-referenced with 4,000+ Sigma rules; per-technique event IDs, registry, process, and cmdline artifacts; GPU-precomputed detection briefs |
@@ -580,7 +580,21 @@ It does not stop at "here is the malware." Every session ends as a **purple-team
 
 ![img](./screenshots/apt-4.png)    
 
-All progress streams live to the UI. Every session is persisted to SQLite with Reports, TTPs, and Binary tabs.    
+All progress streams live to the UI. Every session is persisted to SQLite and can be inspected through Graph, Reports, TTPs, Detection, and Binary tabs.
+
+#### Interactive campaign graph
+
+The **Graph** tab is the default view for a completed session. It builds a deterministic threat path directly from the session data already stored in `peekaboo.db`; rendering requires no LLM call or network access. ATT&CK tactics are shown as lanes, stages are connected in execution order, and selecting a stage highlights the path leading to it while opening the related intelligence in a compact detail panel.
+
+| Mode | Focus |
+|------|-------|
+| **Campaign** | Actor-to-stage kill chain grouped by ATT&CK tactic |
+| **Hunt** | Purple-team overlay with per-stage Sigma counts, EventIDs, coverage, and blind spots |
+| **Evidence** | Report -> ATT&CK stage -> blog implementation / compiled source and binary relationships |
+
+The detail panel keeps the evidence quote, source report, matching blog implementation, compiler/platform metadata, downloadable artifacts, Sigma rules, and EventIDs together. The graph supports stage navigation, zoom/pan, fit-to-view, a short deterministic replay, reduced-motion preferences, responsive mobile layout, and fullscreen presentation mode. Cytoscape.js is vendored locally with the dashboard, so the visualization remains available during an offline demo.
+
+![img](./screenshots/apt-campaign-graph.png)    
 
 #### Detection overlay (purple-team hunt sheet)
 
