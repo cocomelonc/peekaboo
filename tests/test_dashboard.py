@@ -46,6 +46,62 @@ class DashboardTestCase(unittest.TestCase):
         self.assertNotIn("cdn.jsdelivr.net", html)
         self.assertNotIn("cdnjs.cloudflare.com", html)
 
+    def test_campaign_graph_is_local_and_demo_ready(self) -> None:
+        html = self.client.get("/").get_data(as_text=True)
+        graph_runtime = ROOT / "dashboard" / "static" / "vendor" / "cytoscape-3.34.0"
+
+        self.assertTrue((graph_runtime / "cytoscape.min.js").is_file())
+        self.assertTrue((graph_runtime / "LICENSE").is_file())
+        self.assertIn("vendor/cytoscape-3.34.0/cytoscape.min.js", html)
+        self.assertLess(html.index('id="dtab-graph"'), html.index('id="dtab-reports"'))
+        self.assertIn("function campaignGraphElements", html)
+        self.assertIn("setCampaignGraphMode('campaign')", html)
+        self.assertIn("setCampaignGraphMode('hunt')", html)
+        self.assertIn("setCampaignGraphMode('evidence')", html)
+        self.assertIn("prefers-reduced-motion: reduce", html)
+        self.assertIn("requestFullscreen", html)
+        self.assertNotIn("unpkg.com/cytoscape", html)
+
+    def test_campaign_graph_metadata_round_trips_through_session_api(self) -> None:
+        stage = {
+            "stage_num": 1,
+            "ttp_id": "T1055",
+            "ttp_name": "Process Injection",
+            "tactic": "defense-evasion",
+            "evidence": "The report describes process injection.",
+            "report_url": "https://example.test/report",
+            "blog_url": "https://example.test/implementation",
+            "module_slug": "malware-injection-21",
+            "_out_src": "stage.c",
+            "_out_bin": "stage.exe",
+            "detection": {
+                "covered": True,
+                "sigma_count": 3,
+                "event_ids": ["1", "10"],
+            },
+        }
+        self.db.save_pipeline_session({
+            "session_id": "feedcafe",
+            "actor_id": "apt-graph-test",
+            "started": "2026-07-15T12:00:00",
+            "status": "success",
+            "ttps": [{"id": "T1055", "name": "Process Injection"}],
+            "params": {
+                "stages": [stage],
+                "detection": {"coverage_pct": 100, "stages_total": 1},
+                "report_sources": [{"url": "https://example.test/report"}],
+            },
+        })
+
+        response = self.client.get("/api/pipeline/session/feedcafe")
+        self.assertEqual(response.status_code, 200)
+        payload = response.get_json()
+        stored = payload["session"]["params"]["stages"][0]
+        self.assertEqual(stored["ttp_id"], "T1055")
+        self.assertEqual(stored["detection"]["event_ids"], ["1", "10"])
+        self.assertEqual(stored["module_slug"], "malware-injection-21")
+        self.assertEqual(payload["report_sources"][0]["url"], "https://example.test/report")
+
     def test_mitre_briefs_use_one_race_safe_panel(self) -> None:
         html = self.client.get("/").get_data(as_text=True)
         self.assertEqual(html.count('id="mitre-brief-panel"'), 1)

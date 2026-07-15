@@ -9,6 +9,7 @@
 <script src="{{ url_for('static', filename='vendor/dompurify-3.4.12/purify.min.js') }}"></script>
 <link rel="stylesheet" href="{{ url_for('static', filename='vendor/highlightjs-11.9.0/atom-one-dark.min.css') }}">
 <script src="{{ url_for('static', filename='vendor/highlightjs-11.9.0/highlight.min.js') }}"></script>
+<script src="{{ url_for('static', filename='vendor/cytoscape-3.34.0/cytoscape.min.js') }}"></script>
 <style>
 :root {
   --bg:      #15121E;
@@ -226,6 +227,82 @@ code{font-family:var(--mono);font-size:12px;background:var(--bg4);padding:1px 5p
 .report-link-row:hover{background:rgba(181,123,255,.06)}
 .ttp-grid{display:flex;flex-direction:column;gap:6px}
 .ttp-item{display:flex;align-items:center;gap:10px;padding:8px 12px;background:var(--bg3);border:1px solid var(--sep);border-radius:var(--rs);font-size:12px}
+
+/* -- campaign graph -- */
+.drawer.graph-enabled{width:min(1240px,98vw)}
+.drawer-body.graph-active{overflow:hidden;display:flex;flex-direction:column}
+.drawer-body.graph-active .drawer-tabs{flex-shrink:0;margin-bottom:12px}
+#drawer-tab-graph{min-height:0;flex:1}
+.campaign-graph{height:100%;min-height:620px;display:flex;flex-direction:column;outline:none}
+.campaign-graph-head{display:flex;align-items:center;gap:14px;min-height:46px;padding:0 0 12px;border-bottom:1px solid var(--hair-soft)}
+.campaign-graph-title{min-width:150px}
+.campaign-graph-eyebrow{font-family:var(--mono);font-size:9px;font-weight:700;letter-spacing:.12em;color:var(--purple);text-transform:uppercase}
+.campaign-graph-name{margin-top:2px;font-size:13px;font-weight:700;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.campaign-graph-metrics{display:flex;align-items:center;gap:6px;flex-wrap:wrap;min-width:0}
+.campaign-graph-metric{padding:3px 7px;border:1px solid var(--hair-soft);border-radius:4px;background:rgba(39,36,64,.45);font-family:var(--mono);font-size:9px;color:var(--dim);white-space:nowrap}
+.campaign-graph-controls{margin-left:auto;display:flex;align-items:center;gap:8px}
+.campaign-graph-modes{display:flex;align-items:center;padding:2px;border:1px solid var(--hair);border-radius:6px;background:rgba(18,15,28,.55)}
+.campaign-graph-mode{height:28px;padding:0 10px;border:0;border-radius:4px;background:transparent;color:var(--dim);font-family:var(--font);font-size:11px;cursor:pointer;transition:background .15s,color .15s}
+.campaign-graph-mode:hover{color:var(--text)}
+.campaign-graph-mode.active{background:var(--bg4);color:var(--text);box-shadow:inset 0 0 0 1px rgba(181,123,255,.28)}
+.campaign-graph-tools{display:flex;gap:5px}
+.campaign-graph-icon{width:32px;height:32px;padding:0;display:inline-flex;align-items:center;justify-content:center;border:1px solid var(--hair);border-radius:6px;background:rgba(39,36,64,.48);color:var(--text2);font-size:16px;line-height:1;cursor:pointer;transition:border-color .15s,background .15s,color .15s}
+.campaign-graph-icon:hover{border-color:rgba(181,123,255,.5);background:var(--bg4);color:var(--text)}
+.campaign-graph-icon:focus-visible,.campaign-graph-mode:focus-visible{outline:2px solid var(--purple);outline-offset:2px}
+.campaign-graph-workspace{flex:1;min-height:0;display:grid;grid-template-columns:minmax(0,1fr) 280px;background:#13101c}
+.campaign-graph-canvas-wrap{position:relative;min-width:0;min-height:540px;overflow:hidden;border-right:1px solid var(--hair-soft)}
+.campaign-graph-canvas{position:absolute;inset:0}
+.campaign-graph-mode-label{position:absolute;left:12px;bottom:10px;z-index:2;padding:3px 7px;border:1px solid rgba(61,56,96,.55);border-radius:4px;background:rgba(13,11,20,.76);backdrop-filter:blur(8px);font-family:var(--mono);font-size:9px;letter-spacing:.08em;color:var(--dim);text-transform:uppercase;pointer-events:none}
+.campaign-graph-detail{min-width:0;overflow-y:auto;padding:16px;background:rgba(24,21,38,.72)}
+.campaign-detail-top{display:flex;align-items:center;gap:8px;margin-bottom:10px}
+.campaign-detail-step{font-family:var(--mono);font-size:9px;font-weight:700;letter-spacing:.1em;color:var(--dim);text-transform:uppercase}
+.campaign-detail-nav{margin-left:auto;display:flex;gap:4px}
+.campaign-detail-nav button{width:26px;height:26px;border:1px solid var(--hair);border-radius:5px;background:var(--bg3);color:var(--text2);cursor:pointer}
+.campaign-detail-nav button:hover:not(:disabled){border-color:var(--purple);color:var(--text)}
+.campaign-detail-nav button:disabled{opacity:.3;cursor:default}
+.campaign-detail-id{font-family:var(--mono);font-size:11px;color:var(--red)}
+.campaign-detail-title{margin-top:4px;font-size:15px;font-weight:700;line-height:1.35}
+.campaign-detail-tactic{display:inline-flex;margin-top:8px;padding:2px 7px;border-radius:4px;font-size:9px;font-weight:700}
+.campaign-detail-section{padding:14px 0;border-bottom:1px solid var(--hair-soft)}
+.campaign-detail-section:last-child{border-bottom:0}
+.campaign-detail-label{margin-bottom:6px;font-family:var(--mono);font-size:9px;font-weight:700;letter-spacing:.1em;color:var(--dim);text-transform:uppercase}
+.campaign-detail-evidence{font-size:12px;line-height:1.55;color:var(--text2);overflow-wrap:anywhere}
+.campaign-detail-link{display:flex;align-items:flex-start;gap:7px;margin-top:7px;color:var(--blue);font-size:11px;line-height:1.4;text-decoration:none;overflow-wrap:anywhere}
+.campaign-detail-link:hover{text-decoration:underline}
+.campaign-detail-facts{display:flex;gap:5px;flex-wrap:wrap}
+.campaign-detail-fact{padding:3px 6px;border-radius:4px;background:var(--bg3);font-family:var(--mono);font-size:9px;color:var(--text2)}
+.campaign-detail-rules{display:flex;flex-direction:column;gap:5px}
+.campaign-detail-rule{display:flex;gap:7px;align-items:flex-start;font-size:10px;color:var(--text2);line-height:1.35}
+.campaign-detail-rule-level{width:6px;height:6px;margin-top:4px;border-radius:50%;background:var(--dim);flex-shrink:0}
+.campaign-detail-rule-level.high,.campaign-detail-rule-level.critical{background:var(--red)}
+.campaign-detail-rule-level.medium{background:var(--yellow)}
+.campaign-graph-empty{height:100%;min-height:420px;display:flex;align-items:center;justify-content:center;color:var(--dim);font-size:12px}
+.campaign-graph:fullscreen,.campaign-graph.graph-presentation{position:fixed;inset:0;z-index:500;width:100vw;height:100vh;min-height:0;padding:16px 18px;background:var(--bg)}
+.campaign-graph:fullscreen .campaign-graph-workspace,.campaign-graph.graph-presentation .campaign-graph-workspace{grid-template-columns:minmax(0,1fr) 320px}
+.campaign-graph:fullscreen .campaign-graph-canvas-wrap,.campaign-graph.graph-presentation .campaign-graph-canvas-wrap{min-height:0}
+@media(max-width:760px){
+  .drawer.graph-enabled{width:100vw}
+  .drawer-header{padding:13px 12px 11px}
+  .drawer-body{padding:12px}
+  .drawer-tabs{overflow-x:auto;scrollbar-width:none}
+  .drawer-tabs::-webkit-scrollbar{display:none}
+  .dtab{flex-shrink:0;padding:8px 12px}
+  .drawer-body.graph-active{display:block;overflow-y:auto}
+  .campaign-graph{min-height:760px}
+  .campaign-graph-head{align-items:flex-start;flex-wrap:wrap}
+  .campaign-graph-title{flex:1}
+  .campaign-graph-metrics{order:3;width:100%}
+  .campaign-graph-controls{margin-left:0}
+  .campaign-graph-tools{display:none}
+  .campaign-graph-workspace{grid-template-columns:1fr;grid-template-rows:450px auto}
+  .campaign-graph-canvas-wrap{min-height:450px;border-right:0;border-bottom:1px solid var(--hair-soft)}
+  .campaign-graph-detail{overflow:visible;padding:14px 4px 4px}
+  .campaign-graph:fullscreen,.campaign-graph.graph-presentation{padding:10px}
+  .campaign-graph:fullscreen .campaign-graph-workspace,.campaign-graph.graph-presentation .campaign-graph-workspace{grid-template-columns:1fr;grid-template-rows:minmax(0,58vh) auto;overflow-y:auto}
+}
+@media(prefers-reduced-motion:reduce){
+  .campaign-graph-mode,.campaign-graph-icon{transition:none}
+}
 
 /* -- VirusTotal scanner -- */
 .vt-engine-card{background:var(--bg2);border:1px solid var(--sep);border-left:3px solid var(--sep);border-radius:6px;padding:12px;transition:box-shadow .15s}
@@ -1871,12 +1948,14 @@ code{border-radius:6px;background:rgba(49,45,82,.65)}
     </div>
     <div class="drawer-body">
       <div class="drawer-tabs">
-        <div class="dtab active" id="dtab-reports" onclick="switchDrawerTab('reports')">Reports</div>
+        <div class="dtab active" id="dtab-graph" onclick="switchDrawerTab('graph')">Graph</div>
+        <div class="dtab" id="dtab-reports" onclick="switchDrawerTab('reports')">Reports</div>
         <div class="dtab" id="dtab-ttps" onclick="switchDrawerTab('ttps')">TTPs</div>
         <div class="dtab" id="dtab-detection" onclick="switchDrawerTab('detection')">Detection</div>
         <div class="dtab" id="dtab-binary" onclick="switchDrawerTab('binary')">Binary</div>
       </div>
-      <div id="drawer-tab-reports"></div>
+      <div id="drawer-tab-graph"></div>
+      <div id="drawer-tab-reports" style="display:none"></div>
       <div id="drawer-tab-ttps" style="display:none"></div>
       <div id="drawer-tab-detection" style="display:none"></div>
       <div id="drawer-tab-binary" style="display:none"></div>
@@ -3166,42 +3245,565 @@ window.clearPipelineSessions = clearPipelineSessions;
 // -----------------------------------------------------------------
 // Session detail drawer
 // -----------------------------------------------------------------
-let _drawerTab = 'reports';
+let _drawerTab = 'graph';
+let _drawerRequestId = 0;
+let _campaignGraphState = null;
+let _campaignGraphTimers = [];
+
+const CAMPAIGN_GRAPH_TACTICS = [
+  'reconnaissance','resource-development','initial-access','execution',
+  'persistence','privilege-escalation','defense-evasion','credential-access',
+  'discovery','lateral-movement','collection','command-and-control',
+  'exfiltration','impact','unknown',
+];
 
 function switchDrawerTab(tab) {
   _drawerTab = tab;
-  ['reports','ttps','detection','binary'].forEach(t => {
+  ['graph','reports','ttps','detection','binary'].forEach(t => {
     document.getElementById('dtab-'+t).classList.toggle('active', t === tab);
     document.getElementById('drawer-tab-'+t).style.display = t === tab ? '' : 'none';
   });
+  const body = document.querySelector('#session-drawer .drawer-body');
+  body.classList.toggle('graph-active', tab === 'graph');
+  if (tab === 'graph' && _campaignGraphState?.cy) {
+    requestAnimationFrame(() => {
+      _campaignGraphState.cy.resize();
+      fitCampaignGraph();
+    });
+  }
 }
 
 function closeSessionDrawer(e) {
   if (e && e.target !== document.getElementById('session-drawer-overlay')) return;
+  _drawerRequestId += 1;
   document.getElementById('session-drawer-overlay').classList.remove('open');
+  document.getElementById('session-drawer').classList.remove('graph-enabled');
+  destroyCampaignGraph();
 }
+
+function destroyCampaignGraph() {
+  _campaignGraphTimers.forEach(clearTimeout);
+  _campaignGraphTimers = [];
+  if (_campaignGraphState?.cy) _campaignGraphState.cy.destroy();
+  const shell = document.getElementById('campaign-graph-shell');
+  if (shell) shell.classList.remove('graph-presentation');
+  _campaignGraphState = null;
+}
+
+function campaignGraphShort(value, maxLength) {
+  const text = String(value || '').replace(/\s+/g, ' ').trim();
+  return text.length > maxLength ? `${text.slice(0, maxLength - 1)}…` : text;
+}
+
+function campaignGraphTacticLabel(tactic) {
+  if (tactic === 'command-and-control') return 'Command & Control';
+  return String(tactic || 'unknown').split('-')
+    .map(word => word ? word[0].toUpperCase() + word.slice(1) : '')
+    .join(' ');
+}
+
+function campaignGraphHttpUrl(value) {
+  try {
+    const url = new URL(String(value || ''));
+    return url.protocol === 'http:' || url.protocol === 'https:' ? url.href : '';
+  } catch (e) {
+    return '';
+  }
+}
+
+function campaignGraphDomain(value) {
+  try {
+    return new URL(String(value || '')).hostname.replace(/^www\./, '');
+  } catch (e) {
+    return '';
+  }
+}
+
+function campaignGraphElements(state) {
+  const {stages, mode} = state;
+  const presentTactics = [...new Set(stages.map(stage => stage.tactic || 'unknown'))]
+    .sort((a, b) => {
+      const ai = CAMPAIGN_GRAPH_TACTICS.indexOf(a);
+      const bi = CAMPAIGN_GRAPH_TACTICS.indexOf(b);
+      return (ai < 0 ? 999 : ai) - (bi < 0 ? 999 : bi) || a.localeCompare(b);
+    });
+  const rowCounts = {};
+  stages.forEach(stage => {
+    const tactic = stage.tactic || 'unknown';
+    rowCounts[tactic] = (rowCounts[tactic] || 0) + 1;
+  });
+  const maxRows = Math.max(1, ...Object.values(rowCounts));
+  const rowGap = mode === 'evidence' ? 132 : mode === 'hunt' ? 108 : 82;
+  const laneWidth = mode === 'campaign' ? 188 : 236;
+  const laneGap = mode === 'campaign' ? 208 : 252;
+  const laneHeight = Math.max(470, 126 + (maxRows - 1) * rowGap + 108);
+  const firstLaneX = 286;
+  const laneX = Object.fromEntries(presentTactics.map((tactic, idx) => [tactic, firstLaneX + idx * laneGap]));
+  const laneRows = {};
+  const elements = [];
+
+  presentTactics.forEach(tactic => {
+    const color = TACTIC_COLORS[tactic] || TACTIC_COLORS.unknown;
+    elements.push({
+      group: 'nodes',
+      data: {
+        id: `lane-${tactic}`,
+        label: campaignGraphTacticLabel(tactic),
+        width: laneWidth,
+        height: laneHeight,
+        color,
+      },
+      position: {x: laneX[tactic], y: laneHeight / 2 + 18},
+      classes: 'lane',
+    });
+  });
+
+  elements.push({
+    group: 'nodes',
+    data: {id: 'campaign-actor', label: campaignGraphShort(state.session.actor_id || 'campaign', 20)},
+    position: {x: 74, y: laneHeight / 2 + 18},
+    classes: 'actor',
+  });
+
+  stages.forEach((stage, index) => {
+    const tactic = stage.tactic || 'unknown';
+    const row = laneRows[tactic] || 0;
+    laneRows[tactic] = row + 1;
+    const position = {x: laneX[tactic], y: 96 + row * rowGap};
+    const color = mode === 'hunt'
+      ? (stage.detection?.covered ? '#56D98A' : '#FF7875')
+      : (TACTIC_COLORS[tactic] || TACTIC_COLORS.unknown);
+    elements.push({
+      group: 'nodes',
+      data: {
+        id: `campaign-stage-${index}`,
+        label: `${stage.stage_num || index + 1}. ${stage.ttp_id || 'TTP'}\n${campaignGraphShort(stage.ttp_name || stage.module_title || '', 28)}`,
+        stageIndex: index,
+        color,
+      },
+      position,
+      classes: `stage ${stage.detection?.covered ? 'covered' : 'blind'}`,
+    });
+    const source = index ? `campaign-stage-${index - 1}` : 'campaign-actor';
+    elements.push({
+      group: 'edges',
+      data: {id: `campaign-path-${index}`, source, target: `campaign-stage-${index}`, targetIndex: index},
+      classes: 'campaign-edge',
+    });
+
+    if (mode === 'hunt') {
+      const detection = stage.detection || {};
+      const sigmaCount = Number(detection.sigma_count || 0);
+      const eventCount = (detection.event_ids || []).length;
+      elements.push({
+        group: 'nodes',
+        data: {
+          id: `campaign-detection-${index}`,
+          label: detection.covered ? `${sigmaCount} SIGMA · ${eventCount} EVENTS` : 'BLIND SPOT',
+          ownerIndex: index,
+        },
+        position: {x: position.x, y: position.y + 47},
+        classes: `aux detection ${detection.covered ? 'covered' : 'blind'}`,
+      });
+      elements.push({
+        group: 'edges',
+        data: {id: `campaign-detection-edge-${index}`, source: `campaign-stage-${index}`, target: `campaign-detection-${index}`, ownerIndex: index},
+        classes: `aux-edge detection-edge ${detection.covered ? 'covered' : 'blind'}`,
+      });
+    } else if (mode === 'evidence') {
+      const reportLabel = campaignGraphShort(stage.report_title || campaignGraphDomain(stage.report_url) || 'report evidence', 20);
+      const implementationLabel = campaignGraphShort(stage.module_slug || stage.module_title || stage._out_bin || 'implementation', 20);
+      elements.push({
+        group: 'nodes',
+        data: {id: `campaign-report-${index}`, label: `REPORT\n${reportLabel}`, ownerIndex: index},
+        position: {x: position.x - 48, y: position.y - 43},
+        classes: 'aux report',
+      });
+      elements.push({
+        group: 'nodes',
+        data: {id: `campaign-artifact-${index}`, label: `IMPLEMENTATION\n${implementationLabel}`, ownerIndex: index},
+        position: {x: position.x + 48, y: position.y + 43},
+        classes: 'aux artifact',
+      });
+      elements.push({
+        group: 'edges',
+        data: {id: `campaign-report-edge-${index}`, source: `campaign-report-${index}`, target: `campaign-stage-${index}`, ownerIndex: index},
+        classes: 'aux-edge report-edge',
+      });
+      elements.push({
+        group: 'edges',
+        data: {id: `campaign-artifact-edge-${index}`, source: `campaign-stage-${index}`, target: `campaign-artifact-${index}`, ownerIndex: index},
+        classes: 'aux-edge artifact-edge',
+      });
+    }
+  });
+  return elements;
+}
+
+function campaignGraphStyles() {
+  return [
+    {selector:'node',style:{'font-family':'SF Mono, Fira Code, Courier New, monospace','text-wrap':'wrap','text-events':'yes'}},
+    {selector:'node.lane',style:{
+      'width':'data(width)','height':'data(height)','shape':'round-rectangle',
+      'background-color':'#1B1828','background-opacity':.72,'border-width':1,
+      'border-color':'data(color)','border-opacity':.22,'label':'data(label)',
+      'color':'data(color)','font-size':10,'font-weight':700,'text-valign':'top',
+      'text-margin-y':16,'events':'no','z-index':0,
+    }},
+    {selector:'node.actor',style:{
+      'width':132,'height':54,'shape':'round-rectangle','background-color':'#2B2440',
+      'border-width':2,'border-color':'#B57BFF','label':'data(label)','color':'#EAE6FF',
+      'font-size':11,'font-weight':700,'text-max-width':112,'text-valign':'center','text-halign':'center','z-index':20,
+    }},
+    {selector:'node.stage',style:{
+      'width':154,'height':52,'shape':'round-rectangle','background-color':'#272440',
+      'border-width':2,'border-color':'data(color)','label':'data(label)','color':'#EAE6FF',
+      'font-size':10,'font-weight':600,'line-height':1.35,'text-max-width':136,
+      'text-valign':'center','text-halign':'center','overlay-opacity':0,'z-index':30,
+      'transition-property':'opacity, border-width, background-color, border-color',
+      'transition-duration':'160ms',
+    }},
+    {selector:'node.stage:selected, node.stage.selected',style:{
+      'border-width':4,'background-color':'#312D52',
+    }},
+    {selector:'node.aux',style:{
+      'height':25,'shape':'round-rectangle','background-color':'#1E1B2E','border-width':1,
+      'label':'data(label)','color':'#8A85A8','font-size':7,'font-weight':700,
+      'text-max-width':100,'text-valign':'center','text-halign':'center','z-index':24,'overlay-opacity':0,
+      'transition-property':'opacity, border-color, color','transition-duration':'160ms',
+    }},
+    {selector:'node.detection',style:{'width':118,'border-color':'#56D98A','color':'#56D98A'}},
+    {selector:'node.detection.blind',style:{'border-color':'#FF7875','color':'#FF7875'}},
+    {selector:'node.report',style:{'width':112,'border-color':'#78B4FF','color':'#78B4FF'}},
+    {selector:'node.artifact',style:{'width':112,'border-color':'#B57BFF','color':'#B57BFF'}},
+    {selector:'edge',style:{
+      'width':2,'curve-style':'bezier','line-color':'#514B72','target-arrow-color':'#514B72',
+      'target-arrow-shape':'triangle','arrow-scale':.75,'opacity':.72,'z-index':10,
+      'transition-property':'opacity, width, line-color, target-arrow-color','transition-duration':'160ms',
+    }},
+    {selector:'edge.aux-edge',style:{'width':1,'line-style':'dashed','opacity':.48,'arrow-scale':.6}},
+    {selector:'edge.report-edge',style:{'line-color':'#78B4FF','target-arrow-color':'#78B4FF'}},
+    {selector:'edge.artifact-edge',style:{'line-color':'#B57BFF','target-arrow-color':'#B57BFF'}},
+    {selector:'edge.detection-edge.covered',style:{'line-color':'#56D98A','target-arrow-color':'#56D98A'}},
+    {selector:'edge.detection-edge.blind',style:{'line-color':'#FF7875','target-arrow-color':'#FF7875'}},
+    {selector:'.muted',style:{'opacity':.13}},
+    {selector:'node.related',style:{'opacity':.72,'border-width':3}},
+    {selector:'node.route',style:{'opacity':1}},
+    {selector:'edge.route',style:{'opacity':1,'width':3,'line-color':'#B57BFF','target-arrow-color':'#B57BFF'}},
+    {selector:'.cg-hidden',style:{'opacity':0}},
+  ];
+}
+
+function renderCampaignGraph(payload, sessionId) {
+  const container = document.getElementById('drawer-tab-graph');
+  const stages = Array.isArray(payload.stages)
+    ? [...payload.stages].sort((a, b) => Number(a.stage_num || 0) - Number(b.stage_num || 0))
+    : [];
+  if (!stages.length) {
+    container.innerHTML = '<div class="campaign-graph-empty">No simulated campaign stages in this session</div>';
+    return;
+  }
+  const detection = payload.params.detection || {};
+  const tacticCount = new Set(stages.map(stage => stage.tactic || 'unknown')).size;
+  const buildCount = stages.filter(stage => stage._out_bin).length;
+  const coverage = Number(detection.coverage_pct || 0);
+  container.innerHTML = `
+    <section class="campaign-graph" id="campaign-graph-shell" tabindex="0" role="region"
+             aria-label="${escAttr(payload.session.actor_id || 'Campaign')} threat path"
+             onkeydown="campaignGraphKey(event)">
+      <div class="campaign-graph-head">
+        <div class="campaign-graph-title">
+          <div class="campaign-graph-eyebrow">threat path</div>
+          <div class="campaign-graph-name">${escHtml(payload.session.actor_id || 'campaign')}</div>
+        </div>
+        <div class="campaign-graph-metrics">
+          <span class="campaign-graph-metric">${stages.length} stages</span>
+          <span class="campaign-graph-metric">${tacticCount} tactics</span>
+          <span class="campaign-graph-metric">${coverage}% coverage</span>
+          <span class="campaign-graph-metric">${buildCount}/${stages.length} builds</span>
+        </div>
+        <div class="campaign-graph-controls">
+          <div class="campaign-graph-modes" role="group" aria-label="Graph mode">
+            <button type="button" class="campaign-graph-mode active" data-graph-mode="campaign" aria-pressed="true" onclick="setCampaignGraphMode('campaign')">Campaign</button>
+            <button type="button" class="campaign-graph-mode" data-graph-mode="hunt" aria-pressed="false" onclick="setCampaignGraphMode('hunt')">Hunt</button>
+            <button type="button" class="campaign-graph-mode" data-graph-mode="evidence" aria-pressed="false" onclick="setCampaignGraphMode('evidence')">Evidence</button>
+          </div>
+          <div class="campaign-graph-tools">
+            <button type="button" class="campaign-graph-icon" onclick="replayCampaignGraph()" title="Replay campaign" aria-label="Replay campaign">↻</button>
+            <button type="button" class="campaign-graph-icon" onclick="fitCampaignGraph()" title="Fit graph" aria-label="Fit graph">⌂</button>
+            <button type="button" class="campaign-graph-icon" id="campaign-graph-presentation" onclick="toggleCampaignGraphPresentation()" title="Presentation mode" aria-label="Presentation mode">⛶</button>
+          </div>
+        </div>
+      </div>
+      <div class="campaign-graph-workspace">
+        <div class="campaign-graph-canvas-wrap">
+          <div class="campaign-graph-canvas" id="campaign-graph-canvas" aria-hidden="true"></div>
+          <div class="campaign-graph-mode-label" id="campaign-graph-mode-label">campaign path</div>
+        </div>
+        <aside class="campaign-graph-detail" id="campaign-graph-detail" aria-live="polite"></aside>
+      </div>
+    </section>`;
+  _campaignGraphState = {
+    cy: null,
+    sessionId,
+    session: payload.session,
+    sample: payload.sample,
+    reportSources: payload.reportSources,
+    params: payload.params,
+    stages,
+    mode: 'campaign',
+    selectedStage: stages.length - 1,
+    focused: false,
+  };
+  document.getElementById('session-drawer').classList.add('graph-enabled');
+  buildCampaignGraph(true);
+}
+
+function buildCampaignGraph(animate) {
+  const state = _campaignGraphState;
+  const container = document.getElementById('campaign-graph-canvas');
+  if (!state || !container) return;
+  if (state.cy) state.cy.destroy();
+  if (typeof cytoscape !== 'function') {
+    container.innerHTML = '<div class="campaign-graph-empty">Graph runtime unavailable</div>';
+    return;
+  }
+  state.cy = cytoscape({
+    container,
+    elements: campaignGraphElements(state),
+    style: campaignGraphStyles(),
+    layout: {name:'preset', fit:true, padding:28, animate:false},
+    minZoom:.24,
+    maxZoom:2.2,
+    boxSelectionEnabled:false,
+    autoungrabify:true,
+  });
+  state.cy.on('tap', 'node.stage, node.aux', event => {
+    const index = Number(event.target.data('stageIndex') ?? event.target.data('ownerIndex'));
+    if (Number.isInteger(index)) selectCampaignGraphStage(index, true);
+  });
+  state.cy.on('tap', 'node.actor', () => selectCampaignGraphStage(0, true));
+  state.cy.on('tap', event => {
+    if (event.target !== state.cy) return;
+    state.focused = false;
+    selectCampaignGraphStage(state.selectedStage, false, false);
+  });
+  requestAnimationFrame(() => {
+    if (!_campaignGraphState?.cy) return;
+    fitCampaignGraph();
+    selectCampaignGraphStage(state.selectedStage, false, state.focused);
+    if (animate) replayCampaignGraph();
+  });
+}
+
+function selectCampaignGraphStage(index, center, focus = true) {
+  const state = _campaignGraphState;
+  if (!state?.cy || !state.stages.length) return;
+  const nextIndex = Math.max(0, Math.min(state.stages.length - 1, Number(index) || 0));
+  state.selectedStage = nextIndex;
+  state.focused = focus;
+  const cy = state.cy;
+  cy.elements().removeClass('selected route related muted');
+  cy.$('#campaign-actor').addClass('route');
+  if (focus) {
+    cy.$('node.stage, node.aux, edge').addClass('muted');
+    for (let i = 0; i <= nextIndex; i += 1) {
+      cy.$(`#campaign-stage-${i}, #campaign-path-${i}`).removeClass('muted').addClass('route');
+    }
+    [nextIndex - 1, nextIndex + 1].forEach(i => {
+      if (i >= 0 && i < state.stages.length) cy.$(`#campaign-stage-${i}`).removeClass('muted').addClass('related');
+    });
+    cy.$(`[ownerIndex = ${nextIndex}]`).removeClass('muted').addClass('related');
+  } else {
+    cy.$('edge.campaign-edge, node.stage').addClass('route');
+  }
+  cy.$(`#campaign-stage-${nextIndex}`).removeClass('related muted').addClass('selected');
+  renderCampaignGraphDetail(nextIndex);
+  if (center) cy.animate({center:{eles:cy.$(`#campaign-stage-${nextIndex}`)}, duration:220});
+}
+
+function renderCampaignGraphDetail(index) {
+  const state = _campaignGraphState;
+  const detail = document.getElementById('campaign-graph-detail');
+  const stage = state?.stages[index];
+  if (!detail || !stage) return;
+  const detection = stage.detection || {};
+  const tacticColor = TACTIC_COLORS[stage.tactic] || TACTIC_COLORS.unknown;
+  const reportUrl = campaignGraphHttpUrl(stage.report_url);
+  const blogUrl = campaignGraphHttpUrl(stage.blog_url);
+  const reportTitle = stage.report_title || campaignGraphDomain(stage.report_url) || 'Source report';
+  const eventIds = (detection.event_ids || []).slice(0, 12);
+  const rules = (detection.sigma_rules || []).slice(0, 5);
+  const downloadBase = `/api/samples/${encodeURIComponent(state.sessionId)}/download/`;
+  const buildLinks = [
+    stage._out_src ? `<a class="campaign-detail-link" href="${downloadBase}${encodeURIComponent(stage._out_src)}">Source · ${escHtml(stage._out_src)}</a>` : '',
+    stage._out_bin ? `<a class="campaign-detail-link" href="${downloadBase}${encodeURIComponent(stage._out_bin)}">Binary · ${escHtml(stage._out_bin)}</a>` : '',
+  ].filter(Boolean).join('');
+  const ruleRows = rules.map(rule => {
+    const level = String(rule.level || '').toLowerCase();
+    return `<div class="campaign-detail-rule"><span class="campaign-detail-rule-level ${escAttr(level)}"></span><span>${escHtml(rule.title || 'Sigma rule')}</span></div>`;
+  }).join('');
+  detail.innerHTML = `
+    <div class="campaign-detail-top">
+      <span class="campaign-detail-step">stage ${index + 1} / ${state.stages.length}</span>
+      <div class="campaign-detail-nav">
+        <button type="button" onclick="campaignGraphNavigate(-1)" title="Previous stage" aria-label="Previous stage" ${index === 0 ? 'disabled' : ''}>←</button>
+        <button type="button" onclick="campaignGraphNavigate(1)" title="Next stage" aria-label="Next stage" ${index === state.stages.length - 1 ? 'disabled' : ''}>→</button>
+      </div>
+    </div>
+    <div class="campaign-detail-id">${escHtml(stage.ttp_id || '')}</div>
+    <div class="campaign-detail-title">${escHtml(stage.ttp_name || stage.module_title || 'Campaign stage')}</div>
+    <span class="campaign-detail-tactic" style="color:${tacticColor};background:${tacticColor}18">${escHtml(campaignGraphTacticLabel(stage.tactic))}</span>
+    <div class="campaign-detail-section">
+      <div class="campaign-detail-label">report evidence</div>
+      <div class="campaign-detail-evidence">${escHtml(stage.evidence || 'No evidence quote stored for this stage.')}</div>
+      ${reportUrl ? `<a class="campaign-detail-link" href="${escAttr(reportUrl)}" target="_blank" rel="noopener noreferrer">${escHtml(reportTitle)} ↗</a>` : ''}
+    </div>
+    <div class="campaign-detail-section">
+      <div class="campaign-detail-label">implementation</div>
+      <div class="campaign-detail-evidence">${escHtml(stage.module_title || stage.module_slug || 'No implementation linked')}</div>
+      <div class="campaign-detail-facts" style="margin-top:8px">
+        ${stage.platform ? `<span class="campaign-detail-fact">${escHtml(stage.platform)}</span>` : ''}
+        ${stage.compiler ? `<span class="campaign-detail-fact">${escHtml(stage.compiler)}</span>` : ''}
+        ${stage.src_name ? `<span class="campaign-detail-fact">${escHtml(stage.src_name)}</span>` : ''}
+      </div>
+      ${blogUrl ? `<a class="campaign-detail-link" href="${escAttr(blogUrl)}" target="_blank" rel="noopener noreferrer">Blog implementation ↗</a>` : ''}
+      ${buildLinks}
+    </div>
+    <div class="campaign-detail-section">
+      <div class="campaign-detail-label">detection</div>
+      <div class="campaign-detail-facts">
+        <span class="campaign-detail-fact" style="color:${detection.covered ? 'var(--green)' : 'var(--red)'}">${detection.covered ? 'covered' : 'blind spot'}</span>
+        <span class="campaign-detail-fact">${Number(detection.sigma_count || 0)} sigma</span>
+        <span class="campaign-detail-fact">${(detection.event_ids || []).length} EventIDs</span>
+      </div>
+      ${eventIds.length ? `<div class="campaign-detail-evidence" style="margin-top:8px;font-family:var(--mono);font-size:10px">EventID ${escHtml(eventIds.join(', '))}</div>` : ''}
+      ${ruleRows ? `<div class="campaign-detail-rules" style="margin-top:9px">${ruleRows}</div>` : ''}
+    </div>`;
+}
+
+function setCampaignGraphMode(mode) {
+  const state = _campaignGraphState;
+  if (!state || !['campaign','hunt','evidence'].includes(mode) || state.mode === mode) return;
+  state.mode = mode;
+  document.querySelectorAll('[data-graph-mode]').forEach(button => {
+    const active = button.dataset.graphMode === mode;
+    button.classList.toggle('active', active);
+    button.setAttribute('aria-pressed', String(active));
+  });
+  const labels = {campaign:'campaign path',hunt:'purple-team overlay',evidence:'evidence chain'};
+  document.getElementById('campaign-graph-mode-label').textContent = labels[mode];
+  buildCampaignGraph(false);
+}
+
+function replayCampaignGraph() {
+  const state = _campaignGraphState;
+  if (!state?.cy) return;
+  _campaignGraphTimers.forEach(clearTimeout);
+  _campaignGraphTimers = [];
+  const cy = state.cy;
+  const reducedMotion = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+  cy.elements().removeClass('cg-hidden');
+  if (reducedMotion) {
+    selectCampaignGraphStage(state.selectedStage, false, state.focused);
+    return;
+  }
+  cy.$('node.stage, node.aux, edge').addClass('cg-hidden');
+  const stepDuration = Math.max(42, Math.min(170, Math.floor(1650 / state.stages.length)));
+  state.stages.forEach((stage, index) => {
+    const timer = setTimeout(() => {
+      if (!_campaignGraphState?.cy) return;
+      cy.$(`#campaign-stage-${index}, #campaign-path-${index}`).removeClass('cg-hidden');
+      cy.$(`[ownerIndex = ${index}]`).removeClass('cg-hidden');
+      if (index === state.stages.length - 1) selectCampaignGraphStage(state.selectedStage, false, state.focused);
+    }, 80 + index * stepDuration);
+    _campaignGraphTimers.push(timer);
+  });
+}
+
+function fitCampaignGraph() {
+  const state = _campaignGraphState;
+  if (!state?.cy) return;
+  const cy = state.cy;
+  cy.resize();
+  cy.fit(cy.elements(), 28);
+  const readableZoom = window.innerWidth <= 760 ? .3 : .5;
+  if (cy.zoom() < readableZoom) {
+    cy.zoom(readableZoom);
+    cy.center(cy.$(`#campaign-stage-${state.selectedStage}`));
+  }
+}
+
+function campaignGraphNavigate(delta) {
+  if (!_campaignGraphState) return;
+  selectCampaignGraphStage(_campaignGraphState.selectedStage + delta, true);
+}
+
+function campaignGraphKey(event) {
+  if (event.key !== 'ArrowLeft' && event.key !== 'ArrowRight') return;
+  event.preventDefault();
+  campaignGraphNavigate(event.key === 'ArrowLeft' ? -1 : 1);
+}
+
+async function toggleCampaignGraphPresentation() {
+  const shell = document.getElementById('campaign-graph-shell');
+  if (!shell) return;
+  try {
+    if (document.fullscreenElement === shell) {
+      await document.exitFullscreen();
+    } else if (shell.requestFullscreen) {
+      await shell.requestFullscreen();
+    } else {
+      shell.classList.toggle('graph-presentation');
+      syncCampaignGraphPresentation();
+    }
+  } catch (e) {
+    shell.classList.toggle('graph-presentation');
+    syncCampaignGraphPresentation();
+  }
+}
+
+function syncCampaignGraphPresentation() {
+  const shell = document.getElementById('campaign-graph-shell');
+  const button = document.getElementById('campaign-graph-presentation');
+  if (!shell) return;
+  const active = document.fullscreenElement === shell || shell.classList.contains('graph-presentation');
+  if (button) button.setAttribute('aria-pressed', String(active));
+  requestAnimationFrame(() => {
+    if (!_campaignGraphState?.cy) return;
+    _campaignGraphState.cy.resize();
+    fitCampaignGraph();
+  });
+}
+document.addEventListener('fullscreenchange', syncCampaignGraphPresentation);
 
 
 async function openSessionDrawer(sessionId) {
+  destroyCampaignGraph();
+  const requestId = ++_drawerRequestId;
   const overlay = document.getElementById('session-drawer-overlay');
   overlay.classList.add('open');
   document.getElementById('drawer-title').textContent = `Session ${sessionId}`;
   document.getElementById('drawer-subtitle').textContent = 'loading…';
   document.getElementById('drawer-status-badge').textContent = '';
-  ['reports','ttps','detection','binary'].forEach(t => {
+  ['graph','reports','ttps','detection','binary'].forEach(t => {
     document.getElementById('drawer-tab-'+t).innerHTML =
       '<div class="loading-full" style="padding:30px"><div class="spinner"></div></div>';
   });
-  switchDrawerTab('reports');
+  switchDrawerTab('graph');
 
   let d;
   try {
-    d = await fetch(`/api/pipeline/session/${sessionId}`).then(r=>r.json());
+    const response = await fetch(`/api/pipeline/session/${encodeURIComponent(sessionId)}`);
+    if (!response.ok) throw new Error(`HTTP ${response.status}`);
+    d = await response.json();
   } catch(e) {
-    document.getElementById('drawer-tab-reports').innerHTML =
+    if (requestId !== _drawerRequestId) return;
+    document.getElementById('drawer-tab-graph').innerHTML =
       '<div class="text-dim" style="padding:20px">failed to load</div>';
     return;
   }
+  if (requestId !== _drawerRequestId) return;
 
   const sess = d.session || {};
   document.getElementById('drawer-subtitle').textContent =
@@ -3361,6 +3963,14 @@ async function openSessionDrawer(sessionId) {
       </div>
       <div class="detect-grid">${stageRows}</div>`;
   }
+
+  renderCampaignGraph({
+    session: sess,
+    sample: d.sample,
+    reportSources,
+    params,
+    stages,
+  }, sessionId);
 }
 
 // -----------------------------------------------------------------
