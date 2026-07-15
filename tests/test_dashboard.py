@@ -41,8 +41,16 @@ class DashboardTestCase(unittest.TestCase):
         self.assertEqual(response.headers["X-Frame-Options"], "DENY")
         html = response.get_data(as_text=True)
         self.assertIn("DOMPurify.sanitize", html)
+        self.assertIn("if (id !== currentPanel) closeBriefPanel();", html)
         self.assertNotIn("cdn.jsdelivr.net", html)
         self.assertNotIn("cdnjs.cloudflare.com", html)
+
+    def test_mitre_briefs_use_one_race_safe_panel(self) -> None:
+        html = self.client.get("/").get_data(as_text=True)
+        self.assertEqual(html.count('id="mitre-brief-panel"'), 1)
+        self.assertNotIn('id="ml-brief-inline"', html)
+        self.assertNotIn('id="ml-detail-brief"', html)
+        self.assertIn("if (requestId !== _briefRequestId) return;", html)
 
     def test_cross_origin_mutation_is_rejected(self) -> None:
         response = self.client.post(

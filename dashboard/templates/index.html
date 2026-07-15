@@ -542,6 +542,10 @@ code{font-family:var(--mono);font-size:12px;background:var(--bg4);padding:1px 5p
 .mitre-tab:hover{color:var(--text)}
 .mitre-tab.active{color:var(--purple);border-bottom-color:var(--purple)}
 .mitre-section{animation:fadeIn .15s ease}
+.mitre-brief-panel{margin:0 0 16px;padding:12px 14px;border:1px solid rgba(181,123,255,.3);border-left:2px solid var(--purple);border-radius:0 10px 10px 0;background:rgba(24,21,38,.72)}
+.mitre-brief-panel[hidden]{display:none}
+.mitre-brief-head{display:flex;align-items:center;gap:10px;margin-bottom:6px}
+.mitre-brief-text{font-size:13px;line-height:1.55;color:var(--text);max-width:900px}
 .mitre-detail-card{margin-top:12px}
 .mitre-code-wrap{margin:0;overflow:auto;max-height:420px;border-radius:6px}
 .ml-brief{margin:14px 0 12px;padding:12px 14px;border-left:2px solid var(--purple);background:var(--bg2);border-radius:0 6px 6px 0}
@@ -1579,6 +1583,15 @@ code{border-radius:6px;background:rgba(49,45,82,.65)}
     <div class="mitre-tab"        id="mtab-extract"  onclick="switchMitreTab('extract')">Extracted TTPs</div>
   </div>
 
+  <div id="mitre-brief-panel" class="mitre-brief-panel" hidden aria-live="polite">
+    <div class="mitre-brief-head">
+      <span class="brief-panel-label" id="mbp-label">BRIEF</span>
+      <span class="brief-panel-slug" id="mbp-slug"></span>
+      <button class="brief-panel-close" onclick="closeMitreBrief()" title="Close brief">✕</button>
+    </div>
+    <div class="mitre-brief-text" id="mbp-text"></div>
+  </div>
+
   <!-- ===== GROUPS ===== -->
   <div id="mitre-section-groups" class="mitre-section">
     <div class="card">
@@ -1622,13 +1635,6 @@ code{border-radius:6px;background:rgba(49,45,82,.65)}
         <div class="empty"><div>Enter a search term or click Search to browse the library</div></div>
       </div>
       <div id="ml-pages" class="page-bar"></div>
-      <div id="ml-brief-inline" class="ml-brief" style="display:none;margin:10px 0 2px">
-        <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:5px">
-          <div class="ml-brief-label" id="ml-brief-inline-slug" style="margin-bottom:0"></div>
-          <button onclick="document.getElementById('ml-brief-inline').style.display='none'" style="background:none;border:none;color:var(--dim);cursor:pointer;font-size:12px;padding:0 2px">✕</button>
-        </div>
-        <div class="ml-brief-text" id="ml-brief-inline-text"></div>
-      </div>
     </div>
     <div id="ml-detail" class="card mitre-detail-card" style="display:none">
       <div class="card-header">
@@ -1643,7 +1649,6 @@ code{border-radius:6px;background:rgba(49,45,82,.65)}
                   onclick="document.getElementById('ml-detail').style.display='none'">Close</button>
         </div>
       </div>
-      <div id="ml-detail-brief" class="ml-brief" style="display:none"></div>
       <pre class="mitre-code-wrap"><code id="ml-detail-code" class="language-c mitre-code"></code></pre>
     </div>
   </div>
@@ -1953,6 +1958,7 @@ const PANEL_META = {
 // Panel routing
 // -----------------------------------------------------------------
 function showPanel(id) {
+  if (id !== currentPanel) closeBriefPanel();
   document.querySelectorAll('.panel').forEach(p => p.classList.remove('active'));
   document.querySelectorAll('.nav-item').forEach(n => n.classList.remove('active'));
   document.getElementById('panel-' + id).classList.add('active');
@@ -4105,6 +4111,7 @@ async function _loadMitreStats() {
 
 function switchMitreTab(tab, force) {
   if (tab === _mitreActiveTab && !force) return;
+  if (tab !== _mitreActiveTab) closeMitreBrief();
   _mitreActiveTab = tab;
   ['groups','library','impl','extract'].forEach(t => {
     document.getElementById('mtab-' + t)?.classList.toggle('active', t === tab);
@@ -4209,7 +4216,9 @@ async function loadGroupTechniques(stixId, name) {
           `<span class="badge badge-dim" style="font-size:9px">${tc.replace(/-/g,' ')}</span>`).join(' ');
         const c = MITRE_CAT_COLORS[t.category] || MITRE_CAT_COLORS.other;
         return `<tr>
-          <td><span class="badge badge-red" style="font-family:var(--mono);font-size:10px">${escHtml(t.attack_id)}</span></td>
+          <td><span class="badge badge-red" style="font-family:var(--mono);font-size:10px;cursor:pointer"
+                    title="Detection brief"
+                    onclick="showBrief('${escAttr(t.attack_id)}','art')">${escHtml(t.attack_id)}</span></td>
           <td style="font-weight:500">${escHtml(t.name)}</td>
           <td>${tactic}</td>
           <td><span class="badge" style="background:${c}22;color:${c};font-size:9px">${escHtml(t.category)}</span></td>
@@ -4277,7 +4286,7 @@ function _renderLibRows(entries) {
           <td><span class="badge" style="background:${c}22;color:${c};font-size:9px">${escHtml(e.category)}</span></td>
           <td class="text-dim text-xs" style="white-space:nowrap">${escHtml(e.date||'')}</td>
           <td>${e.src_path ? '<span class="badge badge-dim" style="font-size:9px">src</span>' : '<span class="text-dim text-xs">-</span>'}</td>
-          <td><button class="btn-brief" onclick="event.stopPropagation();showLibBrief('${escAttr(e.slug)}')">brief</button></td>
+          <td><button class="btn-brief" onclick="event.stopPropagation();showBrief('${escAttr(e.slug)}','kb')">brief</button></td>
         </tr>`;
       }).join('')}
       </tbody>
@@ -4310,15 +4319,6 @@ async function openLibDetail(slug) {
   const blogLink = document.getElementById('ml-detail-blog');
   if (d.blog_url) { blogLink.href = d.blog_url; blogLink.style.display = ''; }
 
-  const brief = document.getElementById('ml-detail-brief');
-  if (d.summary) {
-    brief.innerHTML = `<div class="ml-brief-label">BRIEF</div><div class="ml-brief-text">${escHtml(d.summary)}</div>`;
-    brief.style.display = '';
-  } else {
-    brief.style.display = 'none';
-    brief.innerHTML = '';
-  }
-
   const src = d.full_source || d.snippet || '(no source available)';
   const ext = (d.src_path||'').split('.').pop().toLowerCase();
   const langMap = {c:'language-c', cpp:'language-cpp', nim:'language-nim', asm:'language-x86asm', s:'language-x86asm'};
@@ -4336,28 +4336,6 @@ async function rebuildLibCache() {
   _mitreStatsLoaded = false;
   _initLibTab();
   _loadMitreStats();
-}
-
-async function showLibBrief(slug) {
-  const panel = document.getElementById('ml-brief-inline');
-  const slugEl = document.getElementById('ml-brief-inline-slug');
-  const txtEl  = document.getElementById('ml-brief-inline-text');
-  panel.style.display = '';
-  slugEl.textContent = 'BRIEF - ' + slug;
-  txtEl.textContent = '…';
-  panel.scrollIntoView({behavior:'smooth', block:'nearest'});
-
-  const r = await fetch(`/api/kb/brief/${encodeURIComponent(slug)}`).then(r=>r.json()).catch(()=>null);
-  if (!r || r.error) {
-    txtEl.textContent = 'No brief available. Run: python worker.py summarize';
-    return;
-  }
-  txtEl.textContent = '';
-  let i = 0;
-  const iv = setInterval(() => {
-    if (i >= r.summary.length) { clearInterval(iv); return; }
-    txtEl.textContent += r.summary[i++];
-  }, 14);
 }
 
 async function fetchQuickBrief() {
@@ -4401,20 +4379,30 @@ async function fetchQuickBrief() {
 // ===== SHARED BRIEF PANEL =====
 
 let _briefIv = null;
+let _briefRequestId = 0;
+
+function closeMitreBrief() {
+  document.getElementById('mitre-brief-panel').hidden = true;
+  _briefRequestId++;
+  if (_briefIv) { clearInterval(_briefIv); _briefIv = null; }
+}
 
 function closeBriefPanel() {
   document.getElementById('brief-panel').classList.remove('open');
-  if (_briefIv) { clearInterval(_briefIv); _briefIv = null; }
+  closeMitreBrief();
 }
 
 async function showBrief(id, type) {
   // type: 'kb'='kb_summaries', 'art'='artifact_summaries',
   //       'apt'='session_summaries', 'actor'='actor_summaries', 'family'='family_summaries'
-  const panel  = document.getElementById('brief-panel');
-  const label  = document.getElementById('bp-label');
-  const slugEl = document.getElementById('bp-slug');
-  const txtEl  = document.getElementById('bp-text');
+  const inMitre = currentPanel === 'mitre';
+  const panel  = document.getElementById(inMitre ? 'mitre-brief-panel' : 'brief-panel');
+  const label  = document.getElementById(inMitre ? 'mbp-label' : 'bp-label');
+  const slugEl = document.getElementById(inMitre ? 'mbp-slug' : 'bp-slug');
+  const txtEl  = document.getElementById(inMitre ? 'mbp-text' : 'bp-text');
   if (_briefIv) { clearInterval(_briefIv); _briefIv = null; }
+  if (!inMitre) closeMitreBrief();
+  const requestId = ++_briefRequestId;
 
   const labelMap = {
     art:    'DETECTION BRIEF',
@@ -4425,7 +4413,13 @@ async function showBrief(id, type) {
   label.textContent = labelMap[type] || 'BRIEF';
   slugEl.textContent = id;
   txtEl.textContent = '…';
-  panel.classList.add('open');
+  if (inMitre) {
+    document.getElementById('brief-panel').classList.remove('open');
+    panel.hidden = false;
+    panel.scrollIntoView({behavior:'smooth', block:'nearest'});
+  } else {
+    panel.classList.add('open');
+  }
 
   const urlMap = {
     art:    `/api/artifacts/brief/${encodeURIComponent(id)}`,
@@ -4441,6 +4435,7 @@ async function showBrief(id, type) {
   };
   const url = urlMap[type] || `/api/kb/brief/${encodeURIComponent(id)}`;
   const r = await fetch(url).then(x => x.json()).catch(() => null);
+  if (requestId !== _briefRequestId) return;
   if (!r || r.error) {
     const cmd = workerMap[type] || 'python worker.py summarize';
     txtEl.textContent = `No brief for "${id}". Run: ${cmd}`;
