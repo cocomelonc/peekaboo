@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import json
 import os
 import sys
 import tempfile
@@ -51,6 +52,16 @@ class DashboardTestCase(unittest.TestCase):
         self.assertNotIn('id="ml-brief-inline"', html)
         self.assertNotIn('id="ml-detail-brief"', html)
         self.assertIn("if (requestId !== _briefRequestId) return;", html)
+
+    def test_curated_ttp_implementations_reference_real_blog_slugs(self) -> None:
+        import mitre
+
+        library = json.loads((ROOT / "data" / "library_cache.json").read_text())
+        known_slugs = {entry["slug"] for entry in library}
+        implementation_slugs = {entry[1] for entry in mitre.TTP_IMPLEMENTATIONS}
+        implementation_keys = [(entry[0], entry[1]) for entry in mitre.TTP_IMPLEMENTATIONS]
+        self.assertEqual(sorted(implementation_slugs - known_slugs), [])
+        self.assertEqual(len(implementation_keys), len(set(implementation_keys)))
 
     def test_cross_origin_mutation_is_rejected(self) -> None:
         response = self.client.post(
