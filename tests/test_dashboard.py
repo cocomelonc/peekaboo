@@ -20,9 +20,12 @@ os.environ["PEEKABOO_SAMPLES_DIR"] = str(TEST_RUNTIME_PATH / "samples")
 os.environ["PEEKABOO_PIPELINE_DIR"] = str(TEST_RUNTIME_PATH / "sessions")
 os.environ["PEEKABOO_BUILD_ARTIFACTS_DIR"] = str(TEST_RUNTIME_PATH / "builds")
 os.environ.pop("PEEKABOO_API_TOKEN", None)
-unittest.addModuleCleanup(TEST_RUNTIME.cleanup)
 sys.path.insert(0, str(DASHBOARD))
 sys.path.insert(0, str(PIPELINE))
+
+
+def tearDownModule() -> None:
+    TEST_RUNTIME.cleanup()
 
 
 class DashboardTestCase(unittest.TestCase):

@@ -1,0 +1,22 @@
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "peekaboo-cli"
+version = "2026.7"
+description = "Command-line interface for the Peekaboo threat research lab"
+readme = "README.md"
+requires-python = ">=3.10"
+dependencies = [
+    "Pygments>=2.14",
+    "python-dotenv>=1.0",
+    "rich>=13.7,<16",
+    "textual>=8.2,<9",
+]
+
+[project.scripts]
+peekaboo = "peekaboo_cli:main"
+
+[tool.setuptools]
+py-modules = ["peekaboo_cli", "peekaboo_tui"]

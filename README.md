@@ -700,12 +700,60 @@ Recommended and tested: `qwen25-coder-offensive:v1-q8`
 
 ## CLI (`peekaboo_cli.py`)
 
-`peekaboo_cli.py` is a command-first Rich CLI for threat research, detection engineering, and local lab workflows. Running it without arguments shows a compact home screen with the main areas and quick examples. Commands print data first, then suggest the next useful action.
+Peekaboo has two terminal interfaces backed by the same SQLite data and dashboard modules:
 
-The interface is **frameless and always in color** - no boxes or grids. Section headers are filled color bars, lists are aligned columns, and semantic values are colored consistently across every screen (and matched to the dashboard): identifiers in bright cyan, ATT&CK tactics each in their own tactic color, counts and EventIDs bright, and low-cardinality signals rendered as filled "chips" - Sigma severity (` critical ` / ` high ` / ` medium ` / ` low `) and build status (` success ` / ` failed `). Everything uses plain ASCII characters plus color attributes, so it renders correctly in any monospace terminal font; `library show` source keeps Rich/Pygments syntax highlighting.
+- **TUI mode:** running `peekaboo` in an interactive terminal opens the full-screen application.
+- **Classic mode:** subcommands keep stable, pipe-friendly output for scripts and automation.
+
+The TUI provides nine navigable workspaces: Overview, APT Campaigns, Research Library, MITRE ATT&CK, Detection, Threat Intel, Build History, Samples, and Toolkit. It uses the dashboard's purple palette and includes live AND-search, compact and wide layouts, record drill-down, a full-screen Monokai source viewer, the AI assistant, confirmed local module builds, and YARA generation from build history.
+
+![peekaboo terminal application](./screenshots/cli-tui.png)
+
+Install the `peekaboo` entry point in an isolated environment:
 
 ```bash
-python3 peekaboo_cli.py
+python3 -m venv .venv
+.venv/bin/python -m pip install -e .
+.venv/bin/peekaboo
+```
+
+Launch a specific workspace directly:
+
+```bash
+.venv/bin/peekaboo tui --view campaigns
+.venv/bin/peekaboo tui --view detection
+```
+
+TUI navigation follows the keyboard-first model used by focused terminal tools:
+
+| key | action |
+|-----|--------|
+| `1`...`9` | Switch workspace |
+| `[` / `]` | Previous / next workspace |
+| `/` | Live search in the current workspace |
+| arrows or `j` / `k` | Move through records |
+| `enter` | Open full record detail |
+| `g` / `G` | First / last record |
+| `s` | Open source for a Research Library or ATT&CK implementation |
+| `a` | Open the AI assistant |
+| `b` | Build the selected Research Library module after confirmation |
+| `y` | Generate YARA for the selected build |
+| `o` | Open the selected public report or blog URL |
+| `r` | Reload local data |
+| `?` | Keyboard reference |
+| `q` | Quit |
+
+The source viewer reads the complete local file when available, falls back to the
+cached snippet, and uses Monokai highlighting with line numbers and two-axis
+keyboard scrolling.
+
+![peekaboo TUI Monokai source viewer](./screenshots/cli-tui-source.png)
+
+Direct classic execution remains supported. When stdout is redirected or captured, a bare invocation prints the classic home instead of trying to open a TUI:
+
+```bash
+python3 peekaboo_cli.py examples
+python3 peekaboo_cli.py pipeline list
 ```
 
 ![peekaboo CLI home](./screenshots/cli-home.png)
@@ -718,45 +766,57 @@ python3 peekaboo_cli.py examples
 
 ![peekaboo CLI examples](./screenshots/cli-examples.png)
 
-Global flags (color is always on - there are no `--plain` / `--no-color` toggles):
+Global flags work before or after a command:
 
 ```bash
 python3 peekaboo_cli.py --help
 python3 peekaboo_cli.py --version
-python3 peekaboo_cli.py --json artifacts stats   # machine-readable output
+peekaboo artifacts stats --json          # raw JSON, no Rich formatting
+peekaboo --color never pipeline list     # auto, always, or never
+peekaboo --offline search injection      # hard network-disable switch
+peekaboo --db /path/to/peekaboo.db doctor
 ```
 
 Quick workflows:
 
 ```bash
-# Readiness + campaign detection overlay
-python3 peekaboo_cli.py status                    # is the DB ready, is Ollama needed?
-python3 peekaboo_cli.py pipeline list             # campaigns + coverage bar + blind spots
-python3 peekaboo_cli.py pipeline show <session>   # per-stage purple-team hunt sheet
+# Local readiness and cross-domain search
+peekaboo doctor --demo
+peekaboo search "process injection"
+
+# Campaign intelligence
+peekaboo pipeline list
+peekaboo pipeline show <session> --view campaign
+peekaboo pipeline show <session> --view hunt
+peekaboo pipeline show <session> --view evidence
+peekaboo pipeline diff <session-a> <session-b>
+peekaboo pipeline export <session> --format navigator -o campaign.json
+peekaboo pipeline export <session> --format markdown -o campaign.md
 
 # Malpedia threat intelligence
-python3 peekaboo_cli.py malpedia search lazarus
-python3 peekaboo_cli.py malpedia actor lazarus_group
-python3 peekaboo_cli.py malpedia reports --limit 10
+peekaboo malpedia search lazarus
+peekaboo malpedia actor lazarus_group
+peekaboo malpedia reports --limit 10
 
 # ATT&CK implementations and detection coverage
-python3 peekaboo_cli.py ttp search "process injection"
-python3 peekaboo_cli.py ttp show T1055
-python3 peekaboo_cli.py artifacts show T1055
-python3 peekaboo_cli.py artifacts rules T1059.001 --level high
+peekaboo ttp search "process injection"
+peekaboo ttp show T1055
+peekaboo artifacts show T1055
+peekaboo artifacts rules T1059.001 --level high
 
 # Research library
-python3 peekaboo_cli.py library list
-python3 peekaboo_cli.py library list --category injection
-python3 peekaboo_cli.py library search APC
-python3 peekaboo_cli.py library show malware-injection-17
+peekaboo library list --category injection
+peekaboo library show malware-injection-17
 
-# Build, YARA, and VT workflows
-python3 peekaboo_cli.py builder list --platform windows
-python3 peekaboo_cli.py builder build malware-injection-17
-python3 peekaboo_cli.py yara gen-build <build-id> --save /tmp/rule.yar
-python3 peekaboo_cli.py vtscan scan <build-id>
-python3 peekaboo_cli.py vtscan lookup <sha256>
+# Local shellcode and build workflows
+peekaboo shellcode analyse payload.bin
+peekaboo shellcode convert payload.bin --to python --transform xor_key --xor-key 0x41
+peekaboo builder build malware-injection-17
+peekaboo yara gen-build <build-id> --save /tmp/rule.yar
+
+# Upload is explicit; non-interactive VT uploads require --yes
+peekaboo vtscan scan <build-id> --yes
+peekaboo vtscan lookup <sha256>
 ```
 
 Malpedia search returns matching actors/families and gives direct next steps:
@@ -789,7 +849,10 @@ Command groups:
 |---------|-------------|
 | `examples` | Show common workflows |
 | `status` | Readiness verdict: indexed data + whether runtime Ollama is needed |
-| `pipeline` | List APT campaigns and show the per-session detection overlay (hunt sheet) |
+| `tui` | Launch the full-screen terminal application, optionally at a named workspace |
+| `doctor` | Read-only SQLite, demo filesystem, report/blog linkage, and toolchain verification |
+| `search` | Unified local search across techniques, modules, artifacts, campaigns, actors, and families |
+| `pipeline` | Campaign/Hunt/Evidence views, session diff, and Navigator/Markdown export |
 | `library` | Browse/search research modules and source code |
 | `malpedia` | Threat actors, malware families, reports, and Malpedia YARA |
 | `ttp` | MITRE ATT&CK techniques mapped to local implementations |
@@ -797,14 +860,16 @@ Command groups:
 | `builder` | List/build compilable research modules and inspect build history |
 | `yara` | Generate YARA rules from files or build outputs |
 | `vtscan` | Upload binaries, poll analyses, and lookup VirusTotal reports |
-| `shellcode` | Shellcode documentation and local binary analysis help |
+| `shellcode` | Analyse binary/text payloads and convert them through 11 formats and 7 transforms |
 
 Notes:
 
-- `--json` is intended for automation and works on the data-oriented commands.
-- Malpedia search prefers local caches first, then falls back to the API when needed.
-- The CLI is always in color (truecolor forced, including when output is recorded or piped) - there is no disable switch. Pipe through `sed 's/\x1b\[[0-9;]*m//g'` if you need clean logs.
-- For stable alignment, use any regular monospace terminal font such as `DejaVu Sans Mono`, `Liberation Mono`, `Ubuntu Mono`, `Cascadia Mono`, or `Courier New`. Output is pure ASCII plus color attributes (no box-drawing, no emoji), so alignment holds in tmux, SSH, and common Linux terminals regardless of font.
+- `--json` writes machine-readable JSON directly to stdout; errors use stderr.
+- `--offline` blocks Malpedia detail/report downloads and all VirusTotal operations. Cached Malpedia IDs, briefs, database search, campaign views, builds, YARA, and shellcode remain local.
+- TUI browsing is local and database-driven. In `--offline` mode, the AI assistant allows its built-in Peekaboo answer but blocks live Ollama requests.
+- `--color auto` is the default and respects non-TTY output and `NO_COLOR`; use `always` only when recording ANSI intentionally.
+- Session IDs accept an unambiguous prefix. Export writes atomically when `--output` is used.
+- VirusTotal uploads ask for confirmation and require `--yes` in scripts.
 
 ---
 
