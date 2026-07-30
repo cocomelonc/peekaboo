@@ -6,7 +6,9 @@ import sys
 import tempfile
 import time
 import unittest
+from argparse import Namespace
 from pathlib import Path
+from unittest.mock import patch
 
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -122,6 +124,21 @@ class DashboardTestCase(unittest.TestCase):
         self.assertEqual(sorted(implementation_slugs - known_slugs), [])
         self.assertEqual(len(implementation_keys), len(set(implementation_keys)))
 
+        t1055 = self.db.get_ttp_implementations(attack_id="T1055")
+        t1546 = self.db.get_ttp_implementations(attack_id="T1546")
+        self.assertTrue(any(
+            row["blog_slug"] == "malware-tricks-61"
+            and row["tactic"] == "defense-evasion"
+            and row["tech_name"] == "Process Injection"
+            for row in t1055
+        ))
+        self.assertTrue(any(
+            row["blog_slug"] == "mac-malware-persistence-12"
+            and row["tactic"] == "persistence"
+            and row["tech_name"] == "Event Triggered Execution"
+            for row in t1546
+        ))
+
     def test_cross_origin_mutation_is_rejected(self) -> None:
         response = self.client.post(
             "/api/chat",
@@ -193,6 +210,150 @@ class DashboardTestCase(unittest.TestCase):
         self.assertEqual(row["report_count"], 1)
         self.assertNotIn("params", row)
         self.assertLess(len(response.data), 2000)
+
+
+class MitreSourceDiscoveryTestCase(unittest.TestCase):
+    def test_python_source_is_discovered_after_native_sources(self) -> None:
+        import mitre
+
+        with tempfile.TemporaryDirectory() as temp:
+            previous_root = mitre._MEOW
+            try:
+                mitre._MEOW = Path(temp)
+                article = Path(temp) / "2026-07-25-malware-analysis-11"
+                article.mkdir()
+                python_source = article / "bin_gpt.py"
+                python_source.write_text("print('test')\n", encoding="utf-8")
+                self.assertEqual(mitre._find_meow_source("2026-07-25"), str(python_source))
+
+                c_source = article / "hack.c"
+                c_source.write_text("int main(void) { return 0; }\n", encoding="utf-8")
+                self.assertEqual(mitre._find_meow_source("2026-07-25"), str(c_source))
+            finally:
+                mitre._MEOW = previous_root
+
+    def test_external_blog_source_override_is_discovered(self) -> None:
+        import mitre
+
+        with tempfile.TemporaryDirectory() as temp:
+            previous_root = mitre._RESEARCH_ROOT
+            try:
+                mitre._RESEARCH_ROOT = Path(temp)
+                project = Path(temp) / "tiny-shamir"
+                project.mkdir()
+                source = project / "tiny_shamir.c"
+                source.write_text("int main(void) { return 0; }\n", encoding="utf-8")
+                self.assertEqual(
+                    mitre._find_meow_source("2026-07-02", "malware-cryptography-45"),
+                    str(source),
+                )
+            finally:
+                mitre._RESEARCH_ROOT = previous_root
+
+    def test_editorial_attack_overrides_replace_incidental_links(self) -> None:
+        import mitre
+
+        self.assertEqual(mitre.BLOG_ATTACK_OVERRIDES["malware-tricks-59"], ("T1055",))
+        self.assertEqual(mitre.BLOG_ATTACK_OVERRIDES["malware-tricks-60"], ("T1055",))
+        self.assertEqual(mitre.BLOG_ATTACK_OVERRIDES["malware-tricks-61"], ("T1055",))
+        self.assertEqual(mitre.BLOG_ATTACK_OVERRIDES["mac-malware-persistence-12"], ("T1546",))
+        self.assertEqual(mitre.BLOG_ATTACK_OVERRIDES["malware-cryptography-45"], ("T1027.013",))
+        self.assertEqual(mitre.category_for_attack_ids(["T1055"], "tricks"), "injection")
+        self.assertEqual(set(mitre.BLOG_SUMMARY_OVERRIDES), {
+            "malware-analysis-9",
+            "mac-malware-persistence-12",
+            "ddos-wavelet-detection-1",
+            "ddos-wavelet-detection-2",
+            "malware-tricks-59",
+            "malware-analysis-10",
+            "ddos-syn-flood-detection-1",
+            "malware-cryptography-45",
+            "malware-tricks-60",
+            "malware-analysis-11",
+            "malware-tricks-61",
+        })
+        for summary in mitre.BLOG_SUMMARY_OVERRIDES.values():
+            self.assertLessEqual(len(summary), 420)
+            self.assertEqual(len(summary.split(". ")), 3)
+
+    def test_portable_source_uses_declared_blog_platform(self) -> None:
+        import discovery
+
+        self.assertEqual(discovery._declared_platform(["malware", "linux", "c"]), "linux")
+        self.assertEqual(discovery._declared_platform(["macos", "malware"]), "macos")
+        self.assertFalse(discovery._has_windows_markers("#include <stdio.h>"))
+        self.assertTrue(discovery._has_windows_markers("#include <windows.h>"))
+
+    def test_ttp_seed_uses_artifact_fallback_without_stix_dependency(self) -> None:
+        import db
+        import mitre
+
+        artifacts = [
+            {"tid": "T1055", "name": "Process Injection", "tactic": "execution,defense-evasion"},
+            {"tid": "T1546", "name": "Event Triggered Execution", "tactic": "privilege-escalation"},
+        ]
+        with (
+            patch.object(mitre, "_build_tech_lookup", return_value={}),
+            patch.object(db, "get_artifact_entries", return_value=artifacts),
+            patch.object(db, "get_mitre_entries", return_value=[]),
+            patch.object(db, "upsert_ttp_implementations", return_value=145) as upsert,
+        ):
+            self.assertEqual(mitre.seed_ttp_implementations(), 145)
+
+        entries = upsert.call_args.args[0]
+        process_injection = next(
+            row for row in entries
+            if row["attack_id"] == "T1055" and row["blog_slug"] == "malware-tricks-61"
+        )
+        folder_actions = next(
+            row for row in entries
+            if row["attack_id"] == "T1546"
+            and row["blog_slug"] == "mac-malware-persistence-12"
+        )
+        self.assertEqual(process_injection["tech_name"], "Process Injection")
+        self.assertEqual(process_injection["tactic"], "defense-evasion")
+        self.assertEqual(folder_actions["tech_name"], "Event Triggered Execution")
+        self.assertEqual(folder_actions["tactic"], "persistence")
+
+
+class WorkerInitTestCase(unittest.TestCase):
+    def test_init_updates_library_and_enrichment_docs_from_one_cache(self) -> None:
+        import worker
+
+        entries = [
+            {
+                "slug": "new-research",
+                "title": "New research",
+                "date": "2026-07-29",
+                "category": "tricks",
+                "attack_ids": [],
+                "src_path": "/tmp/hack.c",
+            }
+        ]
+        with tempfile.TemporaryDirectory() as temp:
+            cache = Path(temp) / "library_cache.json"
+            cache.write_text(json.dumps(entries), encoding="utf-8")
+            with (
+                patch.object(worker, "_LIB_CACHE", cache),
+                patch.object(worker.db, "init"),
+                patch.object(worker.db, "save_mitre_entries") as save_library,
+                patch.object(worker.db, "upsert_kb_doc") as upsert_doc,
+                patch.object(worker.db, "kb_stats", return_value={"docs": 1}),
+            ):
+                worker.cmd_init(Namespace())
+
+        save_library.assert_called_once_with(entries)
+        self.assertEqual(upsert_doc.call_count, 1)
+
+
+class CompilerDependencyTestCase(unittest.TestCase):
+    def test_math_library_is_inferred_for_portable_c(self) -> None:
+        import compiler
+        import discovery
+
+        source = "#include <math.h>\ndouble score(double x) { return log1p(x); }\n"
+        self.assertIn("-lm", compiler._extra_libs(source))
+        self.assertIn("-lm", discovery._detect_extra_libs(source))
 
 
 class BuildManagerTestCase(unittest.TestCase):
@@ -323,6 +484,78 @@ class PipelineSelectionTestCase(unittest.TestCase):
 
         short = "One concise sentence. Another concise sentence. Final concise sentence."
         self.assertEqual(worker._normalize_campaign_summary(short), short)
+
+    def test_kb_summary_contract_strips_markdown_and_limits_length(self) -> None:
+        import worker
+
+        raw = (
+            "### Purpose\n"
+            "1. A defensive detector evaluates traffic anomalies without claiming attacker behavior. "
+            "2. Haar wavelets and threshold scoring identify short bursts in time-series data. "
+            "3. CSV scores and plotted peaks provide grounded evaluation output for review."
+        )
+        summary = worker._normalize_campaign_summary(raw)
+        self.assertLessEqual(len(summary), 420)
+        self.assertNotIn("#", summary)
+        self.assertNotRegex(summary, r"\b[123]\.\s")
+
+    def test_ttp_normalizer_drops_unknown_attack_ids(self) -> None:
+        import worker
+
+        ids, tactics, confidence, rationale = worker._normalize_ttps(
+            {
+                "attack_ids": ["T1055", "T1999", "T1055.999"],
+                "tactics": ["defense-evasion"],
+                "confidence": "high",
+                "rationale": "test",
+            },
+            {"T1055"},
+        )
+        self.assertEqual(ids, ["T1055"])
+        self.assertEqual(tactics, ["defense-evasion"])
+        self.assertEqual(confidence, "high")
+        self.assertEqual(rationale, "test")
+        self.assertEqual(
+            worker._curated_attack_ids("malware-cryptography-45"),
+            ["T1027.013"],
+        )
+
+    def test_defensive_docs_do_not_request_offensive_mapping(self) -> None:
+        import worker
+
+        self.assertTrue(worker._is_defensive_doc({
+            "slug": "ddos-wavelet-detection-1",
+            "title": "Anti-DDoS research",
+            "category": "analysis",
+        }))
+        self.assertIn("analysis/detection goal", worker._build_summary_prompt(
+            {"slug": "malware-analysis-11", "title": "Binary analysis", "category": "analysis"},
+            "Evaluate a model.",
+            "print('benchmark')",
+        ))
+
+    def test_document_tag_constraints_remove_semantic_noise(self) -> None:
+        import worker
+
+        defensive = worker._normalize_tags_for_doc(
+            {
+                "slug": "ddos-wavelet-detection-1",
+                "title": "Anti-DDoS detection",
+                "category": "analysis",
+            },
+            ["crypto", "windows", "linux", "macos", "c"],
+        )
+        self.assertEqual(defensive, ["analysis", "detection", "cross-platform", "c"])
+
+        curated = worker._normalize_tags_for_doc(
+            {
+                "slug": "malware-tricks-61",
+                "title": "Module stomping",
+                "category": "injection",
+            },
+            ["injection", "process-hollowing", "windows", "c"],
+        )
+        self.assertEqual(curated, ["injection", "windows", "c"])
 
 
 if __name__ == "__main__":

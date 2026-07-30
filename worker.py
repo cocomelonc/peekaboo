@@ -163,6 +163,7 @@ def cmd_init(args: argparse.Namespace) -> None:
 
     library: list[dict] = json.loads(_LIB_CACHE.read_text())
     print(f"[init] loading {len(library)} docs from library_cache.json …", flush=True)
+    db.save_mitre_entries(library)
 
     inserted = 0
     try:
@@ -256,6 +257,7 @@ _TECHNIQUE_TAGS = [
     "amsi-bypass", "etw-bypass", "syscalls", "api-hashing",
     "dll-hijacking", "process-hollowing", "reflective-loading",
     "lateral-movement", "privilege-escalation", "exfiltration",
+    "analysis", "detection",
 ]
 _PLATFORM_TAGS = ["windows", "linux", "macos", "cross-platform"]
 _LANG_TAGS     = ["c", "cpp", "nim", "rust", "go", "python", "asm", "powershell", "csharp"]
@@ -271,7 +273,7 @@ def _build_tag_prompt(doc: dict, code: str) -> str:
     aids_s = ", ".join(aids) if aids else "(none)"
     code_block = code.strip()[:6000] if code else "(no source code)"
 
-    return f"""You are a malware research classifier. Read this offensive-security blog post and output ONLY a JSON object with three string-array fields: "techniques", "platform", "lang".
+    return f"""You are a malware research classifier. Read this security research post and output ONLY a JSON object with three string-array fields: "techniques", "platform", "lang".
 
 Only pick values from these allowed lists. Pick all that apply; pick none if uncertain.
 
@@ -337,6 +339,41 @@ def _normalize_tags(parsed: dict) -> list[str]:
                 if t in allow and t not in out:
                     out.append(t)
     return out
+
+
+def _curated_attack_ids(slug: str) -> list[str]:
+    try:
+        import mitre
+        return list(mitre.BLOG_ATTACK_OVERRIDES.get(slug, ()))
+    except Exception:
+        return []
+
+
+def _normalize_tags_for_doc(doc: dict, tags: list[str]) -> list[str]:
+    """Apply document-level constraints after the model's allow-list filter."""
+    technique_tags = [tag for tag in tags if tag in _TECHNIQUE_TAGS]
+    platform_tags = [tag for tag in tags if tag in _PLATFORM_TAGS]
+    lang_tags = [tag for tag in tags if tag in _LANG_TAGS]
+
+    if _is_defensive_doc(doc):
+        technique_tags = ["analysis"]
+        text = f"{doc.get('slug', '')} {doc.get('title', '')}".lower()
+        if "detection" in text or "anti-ddos" in text:
+            technique_tags.append("detection")
+    else:
+        curated = _curated_attack_ids(doc.get("slug", ""))
+        bases = {tid.split(".")[0] for tid in curated}
+        if "T1055" in bases:
+            technique_tags = ["injection"]
+        elif "T1546" in bases:
+            technique_tags = ["persistence"]
+        elif "T1027" in bases:
+            technique_tags = ["crypto", "evasion"]
+
+    if "cross-platform" in platform_tags or len(platform_tags) > 1:
+        platform_tags = ["cross-platform"]
+
+    return list(dict.fromkeys(technique_tags + platform_tags + lang_tags))
 
 
 def _resolve_src(src_path: str, meow_root: str | None) -> Path | None:
@@ -416,6 +453,14 @@ def _read_blog_markdown(slug: str, date: str) -> str:
     return body.strip()
 
 
+def _is_defensive_doc(doc: dict) -> bool:
+    text = " ".join(str(doc.get(key, "")) for key in ("slug", "title", "category")).lower()
+    return (
+        doc.get("category") == "analysis"
+        or any(token in text for token in ("analysis", "detection", "forensic", "anti-ddos"))
+    )
+
+
 def _build_summary_prompt(doc: dict, post_body: str, code: str) -> str:
     aids = doc.get("attack_ids") or []
     if isinstance(aids, str):
@@ -425,14 +470,26 @@ def _build_summary_prompt(doc: dict, post_body: str, code: str) -> str:
     post_block = (post_body or "").strip()[:5000] or "(no blog body)"
     code_block = (code or "").strip()[:3000] or "(no source code)"
 
-    return f"""You are writing one short reference card for a malware research blog post. Read BOTH the blog body and the source snippet, then summarize the technique. Output PLAIN TEXT only - no markdown headings, no code fences, no lists, no bullets.
+    perspective = (
+        "This is defensive or analytical research. Describe the analysis/detection goal, "
+        "its concrete method, and a grounded validation signal. Do not invent attacker "
+        "intent or telemetry."
+        if _is_defensive_doc(doc)
+        else
+        "This is an offensive technique. Describe its mechanism, implementation primitives, "
+        "and one grounded detection signal."
+    )
+
+    return f"""You are writing one short reference card for a security research blog post. Read BOTH the blog body and the source snippet, then summarize the technique. Output PLAIN TEXT only - no markdown headings, no code fences, no lists, no bullets.
 
 Write exactly 3 sentences, separated by single spaces:
-1. What the technique does and why an attacker uses it (offensive mechanism + intent).
-2. The key API calls, syscalls, or primitives implementing it (cite real names from the code or post).
-3. One detection / telemetry signal (Sysmon event ID, ETW provider, registry key, or process artifact).
+1. The concrete purpose or capability.
+2. The key APIs, algorithms, syscalls, or primitives implementing it.
+3. One detection, observable, or evaluation signal supported by the material.
 
-Hard limit: 420 characters total. No preamble. No 'In this post' or 'This post explains'. Start with the verb or noun directly. Ground every claim in the post or code below; do not invent facts.
+{perspective}
+
+Hard limit: 420 characters total. No preamble. No 'In this post' or 'This post explains'. Start with the verb or noun directly. Ground every claim in the post or code below; do not invent facts, event IDs, APIs, or platform details. Never mention Sysmon for non-Windows material.
 
 Post:
 - Title: {doc.get("title", "")}
@@ -462,13 +519,18 @@ def _normalize_summary(raw: str) -> str:
             pass
     # drop think blocks if any slipped through
     s = _re.sub(r"<think>.*?</think>", "", s, flags=_re.S).strip()
+    s = _re.sub(r"```(?:\w+)?\s*", "", s)
+    s = s.replace("```", "")
+    s = _re.sub(r"(?m)^\s*#{1,6}\s+.*(?:\n|$)", "", s)
+    s = _re.sub(r"(?m)^\s*(?:[-*+]\s+|\d+[.)]\s+)", "", s)
     # collapse whitespace, keep single spaces
     s = _re.sub(r"\s+", " ", s)
+    s = _re.sub(r"(^|[.!?]\s+)\d+[.)]\s+", r"\1", s)
     return s[:600]
 
 
 def _normalize_campaign_summary(raw: str) -> str:
-    """Enforce the campaign-card contract even when the model ignores its limit."""
+    """Enforce the shared three-sentence card contract and 420-char limit."""
     summary = _normalize_summary(raw)
     sentences = _re.split(r"(?<=[.!?])\s+", summary)
     sentences = [sentence.strip() for sentence in sentences if sentence.strip()][:3]
@@ -564,9 +626,19 @@ def cmd_summarize(args: argparse.Namespace) -> None:
     def _process(doc: dict) -> tuple[bool, str]:
         code      = _read_code(doc.get("src_path", ""), max_lines, meow_root)
         post_body = _read_blog_markdown(doc.get("slug", ""), doc.get("date", ""))
-        prompt    = _build_summary_prompt(doc, post_body, code)
-        raw       = _chat_text(prompt, model, base_url, timeout=timeout, label="sum")
-        summary   = _normalize_summary(raw)
+        try:
+            import mitre
+            curated_summary = mitre.BLOG_SUMMARY_OVERRIDES.get(doc.get("slug", ""), "")
+        except Exception:
+            curated_summary = ""
+
+        if curated_summary:
+            summary = _normalize_campaign_summary(curated_summary)
+            raw = json.dumps({"source": "editorial-summary"})
+        else:
+            prompt = _build_summary_prompt(doc, post_body, code)
+            raw = _chat_text(prompt, model, base_url, timeout=timeout, label="sum")
+            summary = _normalize_campaign_summary(raw)
         db.upsert_kb_summary(doc["id"], model, summary, raw)
         srcs  = "+".join(s for s in (["blog"] if post_body else []) + (["code"] if code else []))
         label = f"{doc['slug'][:28]:28s} [{srcs or '-'}] -> {len(summary)}ch"
@@ -592,7 +664,8 @@ _ATTACK_TACTICS = [
 _ATTACK_ID_RE = _re.compile(r'^T\d{4}(\.\d{3})?$')
 
 
-def _normalize_ttps(parsed: dict) -> tuple[list[str], list[str], str, str]:
+def _normalize_ttps(parsed: dict, valid_ids: set[str] | None = None
+                    ) -> tuple[list[str], list[str], str, str]:
     """Validate and sanitize LLM JSON output.
     Returns (attack_ids, tactics, confidence, rationale)."""
     raw_ids = parsed.get("attack_ids", [])
@@ -602,7 +675,11 @@ def _normalize_ttps(parsed: dict) -> tuple[list[str], list[str], str, str]:
     for t in raw_ids[:5]:
         if isinstance(t, str):
             t = t.strip().upper()
-            if _ATTACK_ID_RE.match(t) and t not in attack_ids:
+            if (
+                _ATTACK_ID_RE.match(t)
+                and (not valid_ids or t in valid_ids)
+                and t not in attack_ids
+            ):
                 attack_ids.append(t)
 
     raw_tactics = parsed.get("tactics", [])
@@ -695,22 +772,47 @@ def cmd_ttp(args: argparse.Namespace) -> None:
     _require_model("ttp", model, base_url)
     _maybe_rebuild("ttp", model, args, db.delete_ttp_extracted,
                    stale_fn=lambda: _stale_ttp_doc_ids(model, meow_root), noun="ttp rows")
+    valid_ids = {
+        str(entry.get("tid", "")).upper()
+        for entry in db.get_artifact_entries()
+        if _ATTACK_ID_RE.match(str(entry.get("tid", "")).upper())
+    }
 
     def _process(doc: dict) -> tuple[bool, str]:
-        code   = _read_code(doc.get("src_path", ""), max_lines, meow_root)
-        prompt = _build_ttp_prompt(doc, code)
-        parsed, raw = _chat_json(prompt, model, base_url, timeout=timeout, label="ttp")
+        curated_ids = _curated_attack_ids(doc.get("slug", ""))
 
-        if parsed is None:
-            attack_ids, tactics, confidence, rationale = [], [], "low", ""
+        if curated_ids:
+            # Editorial overrides are code-reviewed canonical IDs and may cover
+            # sub-techniques not represented in the Sigma-derived artifact map.
+            attack_ids = curated_ids
+            tactics = list(dict.fromkeys(_primary_tactic(tid) for tid in attack_ids))
+            confidence = "high"
+            rationale = "Curated mapping from the published implementation."
+            raw = json.dumps({"source": "curated-metadata", "attack_ids": attack_ids})
+            parsed_ok = True
+        elif _is_defensive_doc(doc):
+            attack_ids, tactics, confidence = [], [], "low"
+            rationale = "Defensive research; no offensive ATT&CK behavior mapped."
+            raw = json.dumps({"source": "defensive-content", "attack_ids": []})
+            parsed_ok = True
         else:
-            attack_ids, tactics, confidence, rationale = _normalize_ttps(parsed)
+            code   = _read_code(doc.get("src_path", ""), max_lines, meow_root)
+            prompt = _build_ttp_prompt(doc, code)
+            parsed, raw = _chat_json(prompt, model, base_url, timeout=timeout, label="ttp")
+
+            if parsed is None:
+                attack_ids, tactics, confidence, rationale = [], [], "low", ""
+                parsed_ok = False
+            else:
+                attack_ids, _, confidence, rationale = _normalize_ttps(parsed, valid_ids)
+                tactics = list(dict.fromkeys(_primary_tactic(tid) for tid in attack_ids))
+                parsed_ok = True
 
         db.upsert_ttp_extracted(doc["id"], model, attack_ids, tactics,
                                  confidence, rationale, raw)
         ids_str = ",".join(attack_ids[:3]) or "(none)"
         label   = f"{doc['slug'][:28]:28s} -> {ids_str} [{confidence}]"
-        return parsed is not None, label
+        return parsed_ok, label
 
     _run_llm_doc_pipeline("ttp", model, lambda: db.get_kb_docs_without_ttps(model),
                           _process, "ttp", watch=args.watch,
@@ -1023,7 +1125,8 @@ def cmd_tag(args: argparse.Namespace) -> None:
         code   = _read_code(doc.get("src_path", ""), max_lines, meow_root)
         prompt = _build_tag_prompt(doc, code)
         parsed, raw = _chat_json(prompt, model, base_url, timeout=timeout, label="tag")
-        tags = [] if parsed is None else _normalize_tags(parsed)
+        model_tags = [] if parsed is None else _normalize_tags(parsed)
+        tags = _normalize_tags_for_doc(doc, model_tags)
         db.upsert_kb_tag(doc["id"], model, tags, raw)
         label = f"{doc['slug'][:30]:30s} -> {','.join(tags[:4]) or '(none)'}"
         return parsed is not None, label

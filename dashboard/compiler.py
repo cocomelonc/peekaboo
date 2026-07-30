@@ -149,6 +149,7 @@ def _apply_credential_subs(src: str) -> str:
 # -----------------------------------------------------------------------------
 
 _LIB_RULES: list[tuple[re.Pattern, str]] = [
+    (re.compile(r'#include\s*[<"]math\.h[">]|\b(?:sin|cos|log1p|sqrt|pow|exp)\s*\('), "-lm"),
     (re.compile(r"WinHttp|winhttp"),                                  "-lwinhttp"),
     (re.compile(r"GetAdaptersInfo|GetIpAddrTable|iphlpapi", re.I),    "-liphlpapi"),
     (re.compile(r"CryptProtect|CryptUnprotect|crypt32",    re.I),    "-lcrypt32"),

@@ -186,7 +186,7 @@ python worker.py scan
 python worker.py scan --posts ~/hacking/meow/_posts
 ```
 
-Walks markdown files, extracts frontmatter (title, date, category, ATT&CK IDs), finds associated source files (`.c`, `.cpp`, `.nim`, `.asm`, `.s`), and writes `data/library_cache.json`. Note: results are built in memory and written atomically at the end - if interrupted, no data is saved and re-running restarts the scan from scratch (fast, CPU-only).
+Walks markdown files, extracts frontmatter (title, date, category, ATT&CK IDs), finds associated source files (`.c`, `.cpp`, `.nim`, `.asm`, `.s`, `.py`), and writes `data/library_cache.json`. Note: results are built in memory and written atomically at the end - if interrupted, no data is saved and re-running restarts the scan from scratch (fast, CPU-only).
 
 > **Ctrl+C safe** - prints a clean message on interrupt. Re-run to redo the scan.
 

@@ -14,9 +14,84 @@ _BASE          = Path(__file__).parent.parent
 _MEOW          = Path(os.environ.get("MEOW_ROOT") or "/home/cocomelonc/hacking/meow").expanduser()
 _POSTS         = Path(os.environ.get("BLOG_POSTS_ROOT") or
                       "/home/cocomelonc/hacking/cocomelonc.github.io/_posts").expanduser()
+_RESEARCH_ROOT = Path(os.environ.get("RESEARCH_ROOT") or "/home/cocomelonc/hacking").expanduser()
 STIX_PATH      = str(_BASE / "data" / "enterprise-attack.json")
 _GROUPS_CACHE  = _BASE / "data" / "mitre_groups_cache.json"
 _LIBRARY_CACHE = _BASE / "data" / "library_cache.json"
+
+# Editorial ATT&CK mappings for posts where the article body either has no
+# technique ID or links to a different technique as background material.
+BLOG_ATTACK_OVERRIDES: dict[str, tuple[str, ...]] = {
+    "mac-malware-persistence-12": ("T1546",),
+    "malware-cryptography-45": ("T1027.013",),
+    "malware-tricks-59": ("T1055",),
+    "malware-tricks-60": ("T1055",),
+    "malware-tricks-61": ("T1055",),
+}
+
+BLOG_SOURCE_OVERRIDES: dict[str, tuple[str, ...]] = {
+    "malware-cryptography-45": ("tiny-shamir", "tiny_shamir.c"),
+}
+
+# Demo-facing cards are editorial data: keeping these deterministic prevents a
+# model refresh from changing the meaning of newly published research.
+BLOG_SUMMARY_OVERRIDES: dict[str, str] = {
+    "malware-analysis-9": (
+        "Recovers readable logic from control-flow-flattened C by identifying the dispatcher state and rebuilding the original branches. "
+        "The workflow compares switch-driven state transitions with a cleaned loop and uses an LLM only as an analysis aid. "
+        "Repeated state assignments and dispatcher cases are the observable signs of flattening."
+    ),
+    "mac-malware-persistence-12": (
+        "Uses macOS Folder Actions to run AppleScript when items enter a watched directory, providing event-triggered persistence. "
+        "The adding folder items to handler launches the C payload and records output in a file. "
+        "Hunt for unexpected Folder Actions configuration, AppleScript child processes, and writes created immediately after folder events."
+    ),
+    "ddos-wavelet-detection-1": (
+        "Detects short traffic anomalies that rolling averages can hide. "
+        "The C implementation computes Haar detail coefficients, then scores them with the median and median absolute deviation. "
+        "Review coefficient spikes, robust z-scores, and the generated CSV or plot against known traffic bursts."
+    ),
+    "ddos-wavelet-detection-2": (
+        "Detects DDoS-like traffic changes with a Daubechies D4 wavelet. "
+        "The C implementation applies the D4 detail filter and scores window energy with median absolute deviation. "
+        "Validate detections by comparing high energy z-scores and generated result rows with labeled attack intervals."
+    ),
+    "malware-tricks-59": (
+        "Overwrites an existing function in the current process so its address executes a payload instead of the original code. "
+        "LoadLibraryA and GetProcAddress locate IECreateFile, while VirtualProtect and memcpy replace its bytes before invocation. "
+        "Hunt for private modifications to executable image pages and code that differs from the DLL on disk."
+    ),
+    "malware-analysis-10": (
+        "Parses Portable Executable files to expose headers, sections, imports, exports, resources, and suspicious structure for malware analysis. "
+        "The Python examples use pefile plus direct struct parsing to verify offsets and fields. "
+        "Compare parser output, entropy, section permissions, and import anomalies with the original PE bytes."
+    ),
+    "ddos-syn-flood-detection-1": (
+        "Detects SYN floods by measuring asymmetry between forward and backward TCP handshake traffic. "
+        "The workflow aggregates flow counts and packet ratios, then computes per-second asymmetry scores from CICDDoS2019 data. "
+        "Validate peaks against labeled attack seconds and inspect the generated CSV and threshold plots."
+    ),
+    "malware-cryptography-45": (
+        "Splits a file into Shamir shares so no single fragment contains the complete secret and any threshold subset can recover it. "
+        "The C implementation uses GF(2^8) arithmetic, random polynomials, and Lagrange interpolation at zero. "
+        "Verify recovery hashes for valid share sets and confirm that fewer than the threshold cannot reconstruct the input."
+    ),
+    "malware-tricks-60": (
+        "Overwrites a function inside a remote process so a legitimate executable page runs injected payload bytes. "
+        "OpenProcess, GetModuleHandleExA, VirtualProtectEx, WriteProcessMemory, and CreateRemoteThread perform the replacement and execution. "
+        "Hunt for cross-process writes followed by executable-page protection changes and a thread starting inside a modified DLL function."
+    ),
+    "malware-analysis-11": (
+        "Finds packed or encrypted binary regions by training a small byte-level transformer on normal code and measuring prediction surprise. "
+        "The PyTorch implementation tokenizes bytes, applies causal self-attention, and reports loss, perplexity, and ROC metrics. "
+        "Validate suspicious regions with sustained perplexity peaks and benchmark precision, recall, and AUC."
+    ),
+    "malware-tricks-61": (
+        "Maps a legitimate DLL, overwrites its entry point with payload bytes, and starts execution from the modified image. "
+        "NtCreateSection, NtMapViewOfSection, WriteProcessMemory, and NtCreateThreadEx implement the module-stomping flow. "
+        "Hunt for mapped image pages whose entry-point bytes differ from the backing DLL and threads beginning at that altered address."
+    ),
+}
 
 # ---------------------------------------------------------------------------
 # TTP_IMPLEMENTATIONS  -- canonical curated mapping, seeded into the DB.
@@ -107,6 +182,8 @@ TTP_IMPLEMENTATIONS: list[tuple[str, str, str, str, str]] = [
      "caffeinate LOLBin persistence (prevent sleep, stay resident)"),
     ("T1059.002", "mac-malware-persistence-11", "mac-malware-persistence-11", "macos",
      "osascript (AppleScript) LOLBin persistence"),
+    ("T1546",     "mac-malware-persistence-12", "mac-malware-persistence-12", "macos",
+     "Folder Actions event-triggered persistence"),
 
     # -- Process injection series --------------------------------------------
     ("T1055",     "malware-injection-1",  "malware-injection-1",  "windows",
@@ -238,6 +315,8 @@ TTP_IMPLEMENTATIONS: list[tuple[str, str, str, str, str]] = [
      "Payload obfuscation: PRINCE cipher"),
     ("T1027.013", "malware-cryptography-40", "malware-cryptography-40", "windows",
      "Payload obfuscation: SKINNY cipher"),
+    ("T1027.013", "malware-cryptography-45", "", "cross-platform",
+     "Split operational secrets with Shamir Secret Sharing"),
     ("T1027.013", "malware-cryptography-41", "malware-cryptography-41", "windows",
      "Payload obfuscation: SIMON cipher"),
     ("T1027.013", "malware-cryptography-42", "malware-cryptography-42", "windows",
@@ -334,6 +413,12 @@ TTP_IMPLEMENTATIONS: list[tuple[str, str, str, str, str]] = [
      "Anti-analysis: heap flags / ForceFlags check"),
     ("T1027",     "malware-tricks-58", "malware-tricks-58", "windows",
      "Anti-analysis: output debug string anti-debug"),
+    ("T1055",     "malware-tricks-59", "malware-trick-59", "windows",
+     "Function stomping in the current process"),
+    ("T1055",     "malware-tricks-60", "malware-trick-60", "windows",
+     "Function stomping in a remote process"),
+    ("T1055",     "malware-tricks-61", "malware-trick-61", "windows",
+     "Module stomping via mapped image entry-point overwrite"),
 ]
 
 
@@ -377,6 +462,7 @@ PEEKABOO_MODULES: dict[str, dict] = _build_peekaboo_modules()
 
 # slug keyword -> (category, fallback_attack_id)
 _SLUG_RULES: list[tuple[str, str, str | None]] = [
+    (r"ddos.+detection|detection",   "analysis",        None),
     (r"injection|inject",           "injection",       "T1055"),
     (r"dll.hijack|dllhijack",       "injection",       "T1574.001"),
     (r"malware.pers|pers-\d",       "persistence",     "T1547"),
@@ -442,17 +528,35 @@ def _category_from_slug(slug: str) -> tuple[str, str | None]:
     return "other", None
 
 
-def _find_meow_source(date_str: str) -> str | None:
+def category_for_attack_ids(attack_ids: list[str] | tuple[str, ...],
+                            fallback: str) -> str:
+    """Resolve the canonical library category from the first ATT&CK ID."""
+    if not attack_ids:
+        return fallback
+    attack_id = attack_ids[0]
+    return _AID_CATEGORY.get(
+        attack_id,
+        _AID_CATEGORY.get(attack_id.split(".")[0], fallback),
+    )
+
+
+def _find_meow_source(date_str: str, slug: str = "") -> str | None:
+    external_parts = BLOG_SOURCE_OVERRIDES.get(slug)
+    if external_parts:
+        external = _RESEARCH_ROOT.joinpath(*external_parts)
+        if external.is_file():
+            return str(external)
+
     if not _MEOW.exists():
         return None
     for d in _MEOW.iterdir():
         if not (d.is_dir() and d.name.startswith(date_str)):
             continue
         preferred_stems = {"hack", "evil", "main", "pers", "inject", "mal", "shellcode"}
-        # search order: C/C++ first, then assembly - root level before recursive
+        # search order: native sources first, then scripts - root before recursive
         for glob_fn, exts in [
-            (d.glob,  ("*.c", "*.cpp", "*.nim", "*.asm", "*.s")),
-            (d.rglob, ("*.c", "*.cpp", "*.nim", "*.asm", "*.s")),
+            (d.glob,  ("*.c", "*.cpp", "*.nim", "*.asm", "*.s", "*.py")),
+            (d.rglob, ("*.c", "*.cpp", "*.nim", "*.asm", "*.s", "*.py")),
         ]:
             for ext in exts:
                 files = sorted(glob_fn(ext))
@@ -513,6 +617,15 @@ def seed_ttp_implementations() -> int:
 
     # build STIX lookup for tech_name / tactic
     lookup = _build_tech_lookup()
+    artifact_lookup = {
+        entry["tid"]: entry
+        for entry in db.get_artifact_entries()
+    }
+
+    try:
+        from pipeline.apt_pipeline import _TACTIC_MAP
+    except Exception:
+        _TACTIC_MAP = {}
 
     # build blog_url lookup from mitre_library
     lib_rows = db.get_mitre_entries()
@@ -521,11 +634,18 @@ def seed_ttp_implementations() -> int:
     entries: list[dict] = []
     for (attack_id, blog_slug, meow_slug, platform, notes) in TTP_IMPLEMENTATIONS:
         stix     = lookup.get(attack_id)
-        tactic   = ""
-        tech_name = attack_id
+        artifact = artifact_lookup.get(attack_id, {})
+        fallback_tactic = (artifact.get("tactic") or "").split(",")[0].strip()
+        tactic = (
+            _TACTIC_MAP.get(attack_id)
+            or _TACTIC_MAP.get(attack_id.split(".")[0])
+            or fallback_tactic
+        )
+        tech_name = artifact.get("name") or attack_id
         if stix:
             phases    = stix.get("kill_chain_phases", [])
-            tactic    = phases[0]["phase_name"] if phases else ""
+            if not tactic and phases:
+                tactic = phases[0]["phase_name"]
             tech_name = stix.get("name", attack_id)
         entries.append({
             "attack_id": attack_id,
@@ -572,15 +692,16 @@ def build_library_cache() -> list[dict]:
         body_aids = sorted(set(_ATTACK_RE.findall(body)))
 
         category, slug_aid = _category_from_slug(slug)
-        attack_ids = body_aids if body_aids else ([slug_aid] if slug_aid else [])
+        curated_aids = BLOG_ATTACK_OVERRIDES.get(slug)
+        attack_ids = (
+            list(curated_aids) if curated_aids
+            else body_aids if body_aids
+            else [slug_aid] if slug_aid
+            else []
+        )
+        category = category_for_attack_ids(attack_ids, category)
 
-        # explicit ATT&CK IDs in body override slug-inferred category
-        if body_aids:
-            base_id = body_aids[0].split(".")[0]
-            category = _AID_CATEGORY.get(body_aids[0],
-                       _AID_CATEGORY.get(base_id, category))
-
-        src_path   = _find_meow_source(date_str)
+        src_path   = _find_meow_source(date_str, slug)
         blog_url   = _blog_url(fm_date or date_str, slug, fm_cats)
         peekaboo_m = next((m for aid in attack_ids for m in [PEEKABOO_MODULES.get(aid)] if m), None)
 

@@ -5,18 +5,26 @@ builds dynamic registry of all techniques
 """
 from __future__ import annotations
 import json
+import os
 import re
 from pathlib import Path
 from typing import Optional
 
-_MEOW   = Path("/home/cocomelonc/hacking/meow")
-_POSTS  = Path("/home/cocomelonc/hacking/cocomelonc.github.io/_posts")
+try:
+    from .mitre import BLOG_ATTACK_OVERRIDES, category_for_attack_ids
+except ImportError:
+    from mitre import BLOG_ATTACK_OVERRIDES, category_for_attack_ids
+
+_MEOW   = Path(os.environ.get("MEOW_ROOT") or "/home/cocomelonc/hacking/meow").expanduser()
+_POSTS  = Path(os.environ.get("BLOG_POSTS_ROOT") or
+               "/home/cocomelonc/hacking/cocomelonc.github.io/_posts").expanduser()
 _BASE   = Path(__file__).parent.parent
 _CACHE  = _BASE / "data" / "module_registry.json"
 
 ATTACK_RE = re.compile(r'\bT1\d{3}(?:\.\d{3})?\b')
 
 _SLUG_RULES: list[tuple[str, str, Optional[str]]] = [
+    (r"ddos.+detection|detection",          "analysis",      None),
     (r"malware-injection|injection-\d",   "injection",     "T1055"),
     (r"dll.hijack|dllhijack",             "injection",     "T1574.001"),
     (r"malware-pers\b|pers-\d",           "persistence",   "T1547"),
@@ -71,8 +79,15 @@ def _category_from_slug(slug: str) -> tuple[str, Optional[str]]:
     return "other", None
 
 
+def _has_windows_markers(src: str) -> bool:
+    return bool(re.search(
+        r'#include\s*[<"](windows\.h|winhttp\.h|winsock|wincrypt)[">]|WinMain\s*\(|WINAPI\b',
+        src,
+    ))
+
+
 def _detect_platform(src: str) -> str:
-    if re.search(r'#include\s*[<"](windows\.h|winhttp\.h|winsock|wincrypt)[">]|WinMain\s*\(|WINAPI\b', src):
+    if _has_windows_markers(src):
         return "windows"
     if re.search(r'#include\s*[<"](Foundation/|AppKit/|CoreFoundation)[">]', src):
         return "macos"
@@ -83,6 +98,14 @@ def _detect_platform(src: str) -> str:
     ):
         return "linux"
     return "windows"
+
+
+def _declared_platform(frontmatter_values: list[str]) -> str:
+    for value in frontmatter_values:
+        normalized = value.strip().lower()
+        if normalized in {"windows", "linux", "macos"}:
+            return normalized
+    return ""
 
 
 def _detect_compiler(path: Path, platform: str) -> str:
@@ -98,6 +121,8 @@ def _detect_compiler(path: Path, platform: str) -> str:
 
 def _detect_extra_libs(src: str) -> list[str]:
     libs: list[str] = []
+    if re.search(r'#include\s*[<"]math\.h[">]|\b(?:sin|cos|log1p|sqrt|pow|exp)\s*\(', src):
+        libs.append("-lm")
     if re.search(r'WinHttp|winhttp', src):
         libs.append("-lwinhttp")
     if re.search(r'GetAdaptersInfo|GetIpAddrTable|iphlpapi', src, re.I):
@@ -220,10 +245,22 @@ def build_registry() -> list[dict]:
             post_date = post.stem[:10]           # actual publish date from filename
             post_slug = post.stem[11:]           # actual slug from filename
 
+        # Portable C defaults to Windows in the legacy detector. When the
+        # source has no Windows-specific markers, trust the platform declared
+        # by the article front matter instead.
+        declared_platform = _declared_platform(fm_cats)
+        if declared_platform and platform == "windows" and not _has_windows_markers(src_text):
+            platform = declared_platform
+            compiler = _detect_compiler(primary, platform)
+
         if not title:
             title = slug.replace("-", " ").title()
-        if not attack_ids and slug_aid:
+        curated_aids = BLOG_ATTACK_OVERRIDES.get(post_slug)
+        if curated_aids:
+            attack_ids = list(curated_aids)
+        elif not attack_ids and slug_aid:
             attack_ids = [slug_aid]
+        category = category_for_attack_ids(attack_ids, category)
 
         has_post = post is not None
         y, m, day = post_date.split("-")
