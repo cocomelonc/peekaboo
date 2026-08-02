@@ -2,6 +2,9 @@
 *.dll
 *.exe
 *.elf
+docs/
+docs/*
+docs
 *samples/*
 dashboard/__pycache__/
 dashboard/peekaboo.db*
