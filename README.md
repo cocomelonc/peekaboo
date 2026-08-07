@@ -6,11 +6,13 @@ peekaboo is a modular framework designed to safely emulate malware behavior. It 
 
 **The goal of peekaboo is to accelerate detection engineering and operator training by providing predictable, reproducible, and safe threat artifacts.**    
 
-<picture>
-  <source media="(prefers-color-scheme: dark)" srcset="https://api.star-history.com/chart?repos=cocomelonc/peekaboo&type=date&theme=dark&legend=top-left" />
-  <source media="(prefers-color-scheme: light)" srcset="https://api.star-history.com/chart?repos=cocomelonc/peekaboo&type=date&legend=top-left" />
-  <img alt="Star History Chart" src="https://api.star-history.com/chart?repos=cocomelonc/peekaboo&type=date&legend=top-left" />
-</picture>
+<a href="https://www.star-history.com/?repos=cocomelonc%2Fpeekaboo&type=date&legend=top-left">
+ <picture>
+   <source media="(prefers-color-scheme: dark)" srcset="https://api.star-history.com/chart?repos=cocomelonc/peekaboo&type=date&theme=dark&legend=top-left&sealed_token=CKzQ1hEkj9SJiM4n4XXuLzSqwAMEA7ryi0W5kRRbZFpAtFh1N9uDYTxJK3dt4oNlSpwZrU7FZZ7PBdlLEhygy0VU6CbuXcwIZumRUnGgEpAKJQz-giG2_g" />
+   <source media="(prefers-color-scheme: light)" srcset="https://api.star-history.com/chart?repos=cocomelonc/peekaboo&type=date&legend=top-left&sealed_token=CKzQ1hEkj9SJiM4n4XXuLzSqwAMEA7ryi0W5kRRbZFpAtFh1N9uDYTxJK3dt4oNlSpwZrU7FZZ7PBdlLEhygy0VU6CbuXcwIZumRUnGgEpAKJQz-giG2_g" />
+   <img alt="Star History Chart" src="https://api.star-history.com/chart?repos=cocomelonc/peekaboo&type=date&legend=top-left&sealed_token=CKzQ1hEkj9SJiM4n4XXuLzSqwAMEA7ryi0W5kRRbZFpAtFh1N9uDYTxJK3dt4oNlSpwZrU7FZZ7PBdlLEhygy0VU6CbuXcwIZumRUnGgEpAKJQz-giG2_g" />
+ </picture>
+</a>
 
 ## key features
 
